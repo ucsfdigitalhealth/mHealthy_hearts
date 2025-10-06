@@ -4,8 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import HealthTile from '../components/HealthTile';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import CvButton from '../components/CvButton';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../App';
 
 export const LandingScreen: React.FC = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   return (
     <View style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -34,7 +38,7 @@ export const LandingScreen: React.FC = () => {
             </View>
           </View>
         </View>
-        <CvButton />
+        <CvButton onPress={() => navigation.navigate('CardioVascular')} />
         {/* Physical Activity Section */}
         <View style={styles.sectionCol}>
           <View style={styles.sectionHeader}>

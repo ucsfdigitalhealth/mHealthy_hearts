@@ -2,10 +2,12 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-export const ButtonWithArrow: React.FC = () => {
+type Props = { onPress?: () => void };
+
+const CvButton: React.FC<Props> = ({ onPress }) => {
   return (
     <View>
-      <TouchableOpacity style={styles.button}>
+      <TouchableOpacity style={styles.button} onPress={onPress} activeOpacity={0.8}>
         <View style={styles.buttonContent}>
           <Text style={styles.buttonText}>Track Cardio Vascular Health Measures</Text>
           <Icon name="arrow-forward" size={20} color="#FFFFFF" />
@@ -37,4 +39,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ButtonWithArrow;
+export default CvButton;
