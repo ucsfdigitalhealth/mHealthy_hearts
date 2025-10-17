@@ -19,6 +19,12 @@ app.use('/api/auth', authRoutes);
 
 const PORT = process.env.PORT;
 
-app.listen(PORT, () => {
-    console.log('Server is running on port 3000');
+const port = 3000;
+
+app.listen(port, '0.0.0.0', (err) => {
+  if (err) {
+    console.error('Failed to bind to port 3000:', err);
+    process.exit(1);
+  }
+  console.log(`Server is running on http://0.0.0.0:${port}`);
 });

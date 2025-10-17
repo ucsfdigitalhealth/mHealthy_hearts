@@ -1,20 +1,34 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import HealthTile from '../components/HealthTile';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import CvButton from '../components/CvButton';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
 
 export const LandingScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user, loading, fetchUserInfo } = useAuth();
+
+  useEffect(() => {
+    fetchUserInfo();
+  }, []);
+
   return (
     <View style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.row}>
-          <Text style={styles.heading}>Hi Ali</Text>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#007AFF" />
+              <Text style={styles.heading}>Loading...</Text>
+            </View>
+          ) : (
+            <Text style={styles.heading}>Hi {user?.username || 'User'}</Text>
+          )}
           <TouchableOpacity style={styles.button}>
             <Text style={styles.buttonText}>Authorize Fitbit</Text>
           </TouchableOpacity>
@@ -188,6 +202,11 @@ const styles = StyleSheet.create({
   },
   resourceIcon: {
     alignItems: 'flex-end',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });
 
