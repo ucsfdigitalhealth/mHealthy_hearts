@@ -1,9 +1,13 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser');
-const { router: authRoutes } = require('./auth');
-const cors = require('cors');
-require('dotenv').config();
+import express from "express";
+import bodyParser from "body-parser";
+import cookieParser from "cookie-parser";
+import cors from "cors";
+import dotenv from "dotenv";
+dotenv.config();
+
+import { router as authRoutes } from "./auth.js";
+import omronAuth from "./routes/omron/omronAuth.js";
+import omronCallback from "./routes/omron/omronCallback.js";
 
 const app = express();
 
@@ -15,11 +19,22 @@ app.use(cors({
     credentials: true                
   }));
 
+  // Routes
 app.use('/api/auth', authRoutes);
+app.use("/api/omronAuth", omronAuth.router);
+app.use("/api/omronCallback", omronCallback.router);
 
 const PORT = process.env.PORT;
 
 const port = 3000;
+
+app.get("/fetchdata", (req, res) => {
+  const accessToken = req.query.access_token;
+  res.json({
+    message: "Fetchdata endpoint reached successfully!",
+    received_token: accessToken || "No token provided"
+  });
+});
 
 app.listen(port, '0.0.0.0', (err) => {
   if (err) {
