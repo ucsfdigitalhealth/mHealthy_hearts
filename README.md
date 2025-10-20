@@ -80,3 +80,30 @@ CREATE TABLE user_auth_testing (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+# Omron Integration Setup
+
+## Database Scheme
+
+Add this to create `omronuser_tokens` table:
+```sql
+CREATE TABLE omronuser_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  access_token VARCHAR(512) NOT NULL,
+  refresh_token VARCHAR(512) NOT NULL,
+  expiry_time BIGINT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## .env file
+
+Add this to your .env file
+```
+CLIENT_ID=your_omron_client_id_here
+CLIENT_SECRET=your_omron_client_secret_here
+REDIRECT_URI=http://localhost:3000/api/omronCallback
+```
+
+
