@@ -83,6 +83,21 @@ CREATE TABLE user_auth_testing (
 
 # Omron Integration Setup
 
+## Data Flow Summary So Far
+
+- Frontend triggers /api/omronAuth → backend redirects to Omron authorization page.
+- Omron authenticates the user and redirects to /api/omronCallback.
+- Backend exchanges code for access_token & refresh_token.
+- Tokens are inserted into omronuser_tokens table.
+
+## Future Work (NEEDS ATTENTION)
+
+- Retrieve and use actual values for .env (shown below) from developer account
+- Implement /api/fetchdata to request real Omron device metrics
+- Add automatic token refresh handling
+- Link Omron tokens to user_auth_testing table users
+- Secure all API routes with JWT middleware
+  
 ## Database Scheme
 
 Add this to create `omronuser_tokens` table:
