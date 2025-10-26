@@ -80,3 +80,45 @@ CREATE TABLE user_auth_testing (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+# Omron Integration Setup
+
+## Data Flow Summary So Far
+
+- Frontend triggers /api/omronAuth → backend redirects to Omron authorization page.
+- Omron authenticates the user and redirects to /api/omronCallback.
+- Backend exchanges code for access_token & refresh_token.
+- Tokens are inserted into omronuser_tokens table.
+
+## Future Work (NEEDS ATTENTION)
+
+- Retrieve and use actual values for .env (shown below) from developer account
+- Implement /api/fetchdata to request real Omron device metrics
+- Add automatic token refresh handling
+- Link Omron tokens to user_auth_testing table users
+- Secure all API routes with JWT middleware
+  
+## Database Scheme
+
+Add this to create `omronuser_tokens` table:
+```sql
+CREATE TABLE omronuser_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  access_token VARCHAR(512) NOT NULL,
+  refresh_token VARCHAR(512) NOT NULL,
+  expiry_time BIGINT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## .env file
+
+Add this to your .env file
+```
+CLIENT_ID=your_omron_client_id_here
+CLIENT_SECRET=your_omron_client_secret_here
+REDIRECT_URI=http://localhost:3000/api/omronCallback
+```
+
+
