@@ -3,6 +3,9 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
+const axios = require('axios');
+const qs = require('qs');
+const crypto = require('crypto');  // For PKCE
 const {
   generateRefreshToken,
   hashRefreshToken,
@@ -270,3 +273,188 @@ router.get('/userinfo', verifyToken, async (req, res) => {
   });
   
   module.exports = { router, verifyToken, verifyTokenOrRefresh };
+
+
+// Helper: Generate PKCE values (from tutorial)
+function generatePKCE() {
+  const verifier = crypto.randomBytes(32).toString('base64url');  // 43+ chars
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  return { code_verifier: verifier, code_challenge: challenge };
+}
+
+// Helper: Generate secure state
+function generateState(userId) {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Route 1: Connect to Fitbit (protected; generates PKCE/state)
+router.get('/fitbit/connect', verifyToken, (req, res) => {
+  const { code_verifier, code_challenge } = generatePKCE();
+  const state = generateState(req.user.userId);  // Include userId for verification
+
+  // Store PKCE/state temporarily (e.g., in session or DB; for simplicity, pass via query/state)
+  // In prod, use Redis/session store; here, encode in state (base64 JSON)
+  const stateData = Buffer.from(JSON.stringify({ userId: req.user.userId, verifier: code_verifier })).toString('base64');
+  const stateParam = crypto.createHash('sha256').update(stateData).digest('base64url');  // Secure state hash
+
+  const scope = 'activity heartrate profile sleep';  // Tutorial example; match your app
+  const authUrl = `https://www.fitbit.com/oauth2/authorize?` +
+    qs.stringify({
+      response_type: 'code',
+      client_id: process.env.FITBIT_CLIENT_ID,
+      redirect_uri: `${process.env.BASE_URL}/api/auth/fitbit/callback`,
+      scope: scope,
+      state: stateParam,
+      code_challenge: code_challenge,
+      code_challenge_method: 'S256'
+    }, { format: 'RFC1738' });
+
+  // Store full stateData in session (assume you have express-session; add if needed)
+  // For now, we'll verify in callback via DB or temp store—expand as needed
+  res.redirect(authUrl);
+});
+
+// Route 2: Callback (handles code/state; exchanges for tokens)
+router.get('/fitbit/callback', async (req, res) => {
+  const { code, state } = req.query;
+  if (!code) {
+    return res.status(400).send('Authorization failed: No code provided.');
+  }
+
+  try {
+    // Verify state (from tutorial: prevent CSRF)
+    // In full impl, fetch stored stateData by hash; here, assume simple check (expand with session/DB)
+    // For demo: Decode and validate userId
+    const stateData = JSON.parse(Buffer.from(state, 'base64').toString());  // Adjust if using hash
+    const { userId, code_verifier } = stateData;  // Retrieve verifier
+
+    // Exchange code for tokens (server-side, per tutorial)
+    const basicAuth = Buffer.from(`${process.env.FITBIT_CLIENT_ID}:${process.env.FITBIT_CLIENT_SECRET}`).toString('base64');
+    const tokenResponse = await axios.post('https://api.fitbit.com/oauth2/token', qs.stringify({
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: `${process.env.BASE_URL}/api/auth/fitbit/callback`,
+      code_verifier: code_verifier  // PKCE verifier
+    }), {
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    const { access_token, refresh_token, expires_in, scope } = tokenResponse.data;
+    const expiresAt = new Date(Date.now() + (expires_in * 1000));
+
+    // Store in DB
+    await db.execute(
+      'UPDATE user_auth_testing SET fitbit_access_token = ?, fitbit_refresh_token = ?, fitbit_token_expires = ? WHERE id = ?',
+      [access_token, refresh_token, expiresAt, userId]
+    );
+
+    console.log(`Fitbit connected for user ${userId}; Granted scopes: ${scope}`);
+
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?fitbit=connected`);
+  } catch (error) {
+    console.error('Fitbit callback error:', error.response?.data || error.message);
+    // Common fixes: Check redirect_uri mismatch, invalid code_verifier
+    if (error.response?.data?.error === 'invalid_request') {
+      console.log('Troubleshoot: Verify PKCE and params');
+    }
+    res.redirect(`${process.env.FRONTEND_URL}/error?msg=fitbit_failed&details=${encodeURIComponent(error.message)}`);
+  }
+});
+
+// Route 3: Refresh Token (new; from tutorial)
+router.post('/fitbit/refresh', verifyToken, async (req, res) => {
+  try {
+    const [userRows] = await db.execute('SELECT fitbit_refresh_token FROM user_auth_testing WHERE id = ?', [req.user.userId]);
+    const { fitbit_refresh_token } = userRows[0];
+    if (!fitbit_refresh_token) {
+      return res.status(400).json({ message: 'No refresh token' });
+    }
+
+    const basicAuth = Buffer.from(`${process.env.FITBIT_CLIENT_ID}:${process.env.FITBIT_CLIENT_SECRET}`).toString('base64');
+    const refreshResponse = await axios.post('https://api.fitbit.com/oauth2/token', qs.stringify({
+      grant_type: 'refresh_token',
+      refresh_token: fitbit_refresh_token
+    }), {
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    const { access_token, refresh_token, expires_in } = refreshResponse.data;
+    const expiresAt = new Date(Date.now() + (expires_in * 1000));
+
+    await db.execute(
+      'UPDATE user_auth_testing SET fitbit_access_token = ?, fitbit_refresh_token = ?, fitbit_token_expires = ? WHERE id = ?',
+      [access_token, refresh_token || fitbit_refresh_token, expiresAt, req.user.userId]  // Update refresh if rotated
+    );
+
+    res.json({ message: 'Token refreshed', access_token });
+  } catch (error) {
+    console.error('Refresh error:', error.response?.data || error.message);
+    if (error.response?.status === 401) {
+      res.status(401).json({ message: 'Refresh token invalid - reconnect' });
+    } else {
+      res.status(500).json({ message: 'Server Error' });
+    }
+  }
+});
+
+// Route 4: Fetch Data (updated with expiry check + refresh call)
+router.get('/fitbit/data', verifyToken, async (req, res) => {
+  try {
+    const [userRows] = await db.execute('SELECT fitbit_access_token, fitbit_refresh_token, fitbit_token_expires FROM user_auth_testing WHERE id = ?', [req.user.userId]);
+    let { fitbit_access_token, fitbit_refresh_token, fitbit_token_expires } = userRows[0];
+
+    if (!fitbit_access_token) {
+      return res.status(400).json({ message: 'Fitbit not connected' });
+    }
+
+    // Check expiry (tutorial best practice)
+    if (new Date() > new Date(fitbit_token_expires)) {
+      // Auto-refresh
+      const refreshRes = await axios.post('https://api.fitbit.com/oauth2/token', qs.stringify({
+        grant_type: 'refresh_token',
+        refresh_token: fitbit_refresh_token
+      }), {
+        headers: {
+          'Authorization': `Basic ${Buffer.from(`${process.env.FITBIT_CLIENT_ID}:${process.env.FITBIT_CLIENT_SECRET}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      const { access_token, refresh_token, expires_in } = refreshRes.data;
+      fitbit_access_token = access_token;
+      const newExpires = new Date(Date.now() + (expires_in * 1000));
+      await db.execute('UPDATE user_auth_testing SET fitbit_access_token = ?, fitbit_refresh_token = ?, fitbit_token_expires = ? WHERE id = ?', [access_token, refresh_token || fitbit_refresh_token, newExpires, req.user.userId]);
+    }
+
+    // Fetch heart rate (tutorial endpoint example)
+    const today = new Date().toISOString().split('T')[0];
+    const dataResponse = await axios.get(
+      `https://api.fitbit.com/1/user/-/activities/heart/date/${today}/1d/1sec.json`,
+      { headers: { Authorization: `Bearer ${fitbit_access_token}` } }
+    );
+
+    const heartData = dataResponse.data['activities-heart-intraday'].dataset || [];
+    const latestRate = heartData.length > 0 ? heartData[heartData.length - 1].value : null;
+
+    res.json({
+      message: 'Data fetched',
+      latestHeartRate: latestRate,  // BPM
+      dataset: heartData.slice(-10),  // Last 10 secs
+      grantedScopes: dataResponse.data  // From token; verify access
+    });
+  } catch (error) {
+    console.error('Data fetch error:', error.response?.data || error.message);
+    if (error.response?.status === 401) {
+      res.status(401).json({ message: 'Token invalid - reconnect or refresh' });  // Triggers re-auth
+    } else if (error.response?.status === 403) {
+      res.status(403).json({ message: 'Insufficient scopes - re-authorize with more permissions' });
+    } else {
+      res.status(500).json({ message: 'Server Error' });
+    }
+  }
+});
