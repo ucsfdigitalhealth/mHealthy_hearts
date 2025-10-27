@@ -43,8 +43,19 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid Credentials' });
     }
     
+    // Debug: Check user object - log everything
+    console.log('Login - Full user object:', JSON.stringify(user, null, 2));
+    console.log('Login - user.id:', user.id);
+    console.log('Login - typeof user.id:', typeof user.id);
+    console.log('Login - All user keys:', Object.keys(user));
+    
+    // Try case-insensitive lookup
+    const userId = user.id || user.ID || user.Id;
+    console.log('Login - userId (case-insensitive):', userId);
+    
     // Generate access token (short-lived)
-    const accessToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    const accessToken = jwt.sign({ userId: userId }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    console.log('Login - JWT created successfully');
     
     // Generate refresh token (long-lived)
     const refreshToken = generateRefreshToken();
@@ -54,7 +65,7 @@ router.post('/login', async (req, res) => {
     // Store refresh token in database
     await db.execute(
       'UPDATE user_auth_testing SET refresh_token = ?, refresh_token_expires = ? WHERE id = ?',
-      [hashedRefreshToken, refreshTokenExpiration, user.id]
+      [hashedRefreshToken, refreshTokenExpiration, userId]
     );
     
     // Set refresh token as HTTP-only cookie
@@ -197,6 +208,7 @@ function verifyToken(req, res, next) {
     }
     
     const decoded = jwt.verify(tokenParts[1], process.env.JWT_SECRET);
+    console.log('JWT Decoded:', decoded); // Debug
     req.user = decoded;
     next();
   } catch (error) {
@@ -288,30 +300,42 @@ function generateState(userId) {
 }
 
 // Route 1: Connect to Fitbit (protected; generates PKCE/state)
-router.get('/fitbit/connect', verifyToken, (req, res) => {
-  const { code_verifier, code_challenge } = generatePKCE();
-  const state = generateState(req.user.userId);  // Include userId for verification
+router.get('/fitbit/connect', verifyToken, async (req, res) => {
+  try {
+    // Debug: Check if req.user exists
+    console.log('req.user:', req.user);
+    console.log('req.user.userId:', req.user?.userId);
+    
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ message: 'Invalid token: userId not found' });
+    }
 
-  // Store PKCE/state temporarily (e.g., in session or DB; for simplicity, pass via query/state)
-  // In prod, use Redis/session store; here, encode in state (base64 JSON)
-  const stateData = Buffer.from(JSON.stringify({ userId: req.user.userId, verifier: code_verifier })).toString('base64');
-  const stateParam = crypto.createHash('sha256').update(stateData).digest('base64url');  // Secure state hash
+    const { code_verifier, code_challenge } = generatePKCE();
+    const state = generateState(req.user.userId);  // Random state for CSRF protection
 
-  const scope = 'activity heartrate profile sleep';  // Tutorial example; match your app
-  const authUrl = `https://www.fitbit.com/oauth2/authorize?` +
-    qs.stringify({
-      response_type: 'code',
-      client_id: process.env.FITBIT_CLIENT_ID,
-      redirect_uri: `${process.env.BASE_URL}/api/auth/fitbit/callback`,
-      scope: scope,
-      state: stateParam,
-      code_challenge: code_challenge,
-      code_challenge_method: 'S256'
-    }, { format: 'RFC1738' });
+    // Store PKCE verifier and state in database
+    await db.execute(
+      'UPDATE user_auth_testing SET fitbit_pkce_verifier = ?, fitbit_oauth_state = ? WHERE id = ?',
+      [code_verifier, state, req.user.userId]
+    );
 
-  // Store full stateData in session (assume you have express-session; add if needed)
-  // For now, we'll verify in callback via DB or temp store—expand as needed
-  res.redirect(authUrl);
+    const scope = 'activity heartrate profile sleep';  // Tutorial example; match your app
+    const authUrl = `https://www.fitbit.com/oauth2/authorize?` +
+      qs.stringify({
+        response_type: 'code',
+        client_id: process.env.FITBIT_CLIENT_ID,
+        redirect_uri: `${process.env.BASE_URL}/api/auth/fitbit/callback`,
+        scope: scope,
+        state: state,  // Send plain state, NOT hashed
+        code_challenge: code_challenge,
+        code_challenge_method: 'S256'
+      }, { format: 'RFC1738' });
+
+    res.redirect(authUrl);
+  } catch (error) {
+    console.error('Error in fitbit/connect:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
 });
 
 // Route 2: Callback (handles code/state; exchanges for tokens)
@@ -322,11 +346,22 @@ router.get('/fitbit/callback', async (req, res) => {
   }
 
   try {
-    // Verify state (from tutorial: prevent CSRF)
-    // In full impl, fetch stored stateData by hash; here, assume simple check (expand with session/DB)
-    // For demo: Decode and validate userId
-    const stateData = JSON.parse(Buffer.from(state, 'base64').toString());  // Adjust if using hash
-    const { userId, code_verifier } = stateData;  // Retrieve verifier
+    // Look up the user and PKCE verifier by state from database
+    const [userRows] = await db.execute(
+      'SELECT id, fitbit_pkce_verifier FROM user_auth_testing WHERE fitbit_oauth_state = ?',
+      [state]
+    );
+
+    if (userRows.length === 0) {
+      return res.status(400).send('Authorization failed: Invalid state.');
+    }
+
+    const userId = userRows[0].id;
+    const code_verifier = userRows[0].fitbit_pkce_verifier;
+
+    if (!code_verifier) {
+      return res.status(400).send('Authorization failed: PKCE verifier not found.');
+    }
 
     // Exchange code for tokens (server-side, per tutorial)
     const basicAuth = Buffer.from(`${process.env.FITBIT_CLIENT_ID}:${process.env.FITBIT_CLIENT_SECRET}`).toString('base64');
@@ -345,9 +380,9 @@ router.get('/fitbit/callback', async (req, res) => {
     const { access_token, refresh_token, expires_in, scope } = tokenResponse.data;
     const expiresAt = new Date(Date.now() + (expires_in * 1000));
 
-    // Store in DB
+    // Store in DB and clear temporary PKCE data
     await db.execute(
-      'UPDATE user_auth_testing SET fitbit_access_token = ?, fitbit_refresh_token = ?, fitbit_token_expires = ? WHERE id = ?',
+      'UPDATE user_auth_testing SET fitbit_access_token = ?, fitbit_refresh_token = ?, fitbit_token_expires = ?, fitbit_pkce_verifier = NULL, fitbit_oauth_state = NULL WHERE id = ?',
       [access_token, refresh_token, expiresAt, userId]
     );
 
@@ -438,14 +473,16 @@ router.get('/fitbit/data', verifyToken, async (req, res) => {
       { headers: { Authorization: `Bearer ${fitbit_access_token}` } }
     );
 
-    const heartData = dataResponse.data['activities-heart-intraday'].dataset || [];
+    console.log('Fitbit API Response:', JSON.stringify(dataResponse.data, null, 2));
+
+    const heartData = dataResponse.data?.['activities-heart-intraday']?.dataset || [];
     const latestRate = heartData.length > 0 ? heartData[heartData.length - 1].value : null;
 
     res.json({
       message: 'Data fetched',
       latestHeartRate: latestRate,  // BPM
       dataset: heartData.slice(-10),  // Last 10 secs
-      grantedScopes: dataResponse.data  // From token; verify access
+      rawResponse: dataResponse.data  // Debugging
     });
   } catch (error) {
     console.error('Data fetch error:', error.response?.data || error.message);

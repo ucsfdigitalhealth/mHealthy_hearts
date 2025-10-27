@@ -20,6 +20,10 @@ A health tracking application with user authentication and cardiovascular health
    Create `.env` file in backend directory:
    ```
    JWT_SECRET=your_secret_key_here
+   FITBIT_CLIENT_ID=your_fitbit_client_id
+   FITBIT_CLIENT_SECRET=your_fitbit_client_secret
+   BASE_URL=http://localhost:3001
+   FRONTEND_URL=http://localhost:19006
    ```
 
 3. **Start MySQL server** on port 8889
@@ -38,7 +42,15 @@ A health tracking application with user authentication and cardiovascular health
 ### Authentication
 - `POST /api/auth/register` - User registration
 - `POST /api/auth/login` - User login
+- `POST /api/auth/refresh` - Refresh access token
+- `POST /api/auth/logout` - User logout
 - `GET /api/auth/userinfo` - Get user info (requires JWT token)
+
+### Fitbit Integration
+- `GET /api/auth/fitbit/connect` - Initiate Fitbit OAuth flow (requires JWT)
+- `GET /api/auth/fitbit/callback` - Fitbit OAuth callback
+- `POST /api/auth/fitbit/refresh` - Refresh Fitbit tokens (requires JWT)
+- `GET /api/auth/fitbit/data` - Fetch Fitbit health data (requires JWT)
 
 ### Request/Response Examples
 
@@ -73,11 +85,18 @@ POST /api/auth/login
 Create the `user_auth_testing` table:
 ```sql
 CREATE TABLE user_auth_testing (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id VARCHAR(36) PRIMARY KEY DEFAULT (uuid()),
   username VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  refresh_token VARCHAR(255),
+  refresh_token_expires DATETIME,
+  fitbit_access_token TEXT,
+  fitbit_refresh_token TEXT,
+  fitbit_token_expires TIMESTAMP,
+  fitbit_pkce_verifier VARCHAR(512),
+  fitbit_oauth_state VARCHAR(128)
 );
 ```
 
