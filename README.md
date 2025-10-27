@@ -24,6 +24,9 @@ A health tracking application with user authentication and cardiovascular health
    FITBIT_CLIENT_SECRET=your_fitbit_client_secret
    BASE_URL=http://localhost:3001
    FRONTEND_URL=http://localhost:19006
+   OMRON_CLIENT_ID=your_omron_client_id_here
+   OMRON_CLIENT_SECRET=your_omron_client_secret_here
+   REDIRECT_URI=http://localhost:3000/api/omronCallback
    ```
 
 3. **Start MySQL server** on port 8889
@@ -51,6 +54,11 @@ A health tracking application with user authentication and cardiovascular health
 - `GET /api/auth/fitbit/callback` - Fitbit OAuth callback
 - `POST /api/auth/fitbit/refresh` - Refresh Fitbit tokens (requires JWT)
 - `GET /api/auth/fitbit/data` - Fetch Fitbit health data (requires JWT)
+
+### Omron Integration
+- `GET /api/omronAuth` - Initiate Omron OAuth flow with PKCE (requires JWT)
+- `GET /api/omronCallback` - Omron OAuth callback (exchanges code for tokens)
+- `GET /fetchdata` - Fetch data endpoint (temporary endpoint for testing)
 
 ### Request/Response Examples
 
@@ -96,48 +104,31 @@ CREATE TABLE user_auth_testing (
   fitbit_refresh_token TEXT,
   fitbit_token_expires TIMESTAMP,
   fitbit_pkce_verifier VARCHAR(512),
-  fitbit_oauth_state VARCHAR(128)
+  fitbit_oauth_state VARCHAR(128),
+  omron_access_token TEXT,
+  omron_refresh_token TEXT,
+  omron_token_expires TIMESTAMP,
+  omron_pkce_verifier VARCHAR(512),
+  omron_oauth_state VARCHAR(128)
 );
 ```
 
-# Omron Integration Setup
+## Omron Integration Details
 
-## Data Flow Summary So Far
+### Data Flow
+- Frontend triggers `/api/omronAuth` → backend redirects to Omron authorization page
+- Omron authenticates the user and redirects to `/api/omronCallback`
+- Backend exchanges authorization code for access_token & refresh_token using PKCE
+- Tokens are stored in the `user_auth_testing` table linked to the user
+- PKCE verifier and OAuth state are temporarily stored during the flow for security
 
-- Frontend triggers /api/omronAuth → backend redirects to Omron authorization page.
-- Omron authenticates the user and redirects to /api/omronCallback.
-- Backend exchanges code for access_token & refresh_token.
-- Tokens are inserted into omronuser_tokens table.
+### Security Features
+- PKCE (Proof Key for Code Exchange) flow for enhanced OAuth security
+- State parameter for CSRF protection
+- JWT authentication required to initiate the Omron OAuth flow
 
-## Future Work (NEEDS ATTENTION)
-
-- Retrieve and use actual values for .env (shown below) from developer account
-- Implement /api/fetchdata to request real Omron device metrics
-- Add automatic token refresh handling
-- Link Omron tokens to user_auth_testing table users
-- Secure all API routes with JWT middleware
-  
-## Database Scheme
-
-Add this to create `omronuser_tokens` table:
-```sql
-CREATE TABLE omronuser_tokens (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  access_token VARCHAR(512) NOT NULL,
-  refresh_token VARCHAR(512) NOT NULL,
-  expiry_time BIGINT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-## .env file
-
-Add this to your .env file
-```
-CLIENT_ID=your_omron_client_id_here
-CLIENT_SECRET=your_omron_client_secret_here
-REDIRECT_URI=http://localhost:3000/api/omronCallback
-```
-
+### Future Work
+- Implement automatic token refresh handling
+- Implement `/api/fetchdata` to request real Omron device metrics
+- Add endpoints for retrieving blood pressure, activity, weight, temperature, and oxygen data
 
