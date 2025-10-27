@@ -1,67 +1,69 @@
-import express from "express";
+const express = require("express");
 const router = express.Router();
-
-import axios from "axios";
-import dotenv from "dotenv";
-dotenv.config();
-import myDatabase from "../../db.js";
-
-// Function to exchange the authorization code for an access token
-async function getAccessToken(code) {
-  try {
-    const tokenResponse = await axios.post(
-      "https://prd-oauth.ohiomron.com/prd/connect/token",
-      new URLSearchParams({
-        client_id: process.env.CLIENT_ID,
-        client_secret: process.env.CLIENT_SECRET,
-        grant_type: "authorization_code",
-        code: code,
-        redirect_uri: process.env.REDIRECT_URI,
-      }),
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-    );
-    return tokenResponse.data; // Return the entire response data
-  } catch (error) {
-    throw new Error(
-      `Error exchanging authorization code for token: ${error.message}`
-    );
-  }
-}
+const axios = require("axios");
+const qs = require("qs");
+const db = require("../../db.js");
+require("dotenv").config();
 
 // Callback route to handle the response from Omron's OAuth service
 router.get("/", async (req, res) => {
-  const code = req.query.code;
-  //console.log(code);
-  const userId = decodeURIComponent(req.query.state); // Decode and retrieve the user_id
+  const { code, state } = req.query;
+  console.log('Omron Callback - code:', code);
+  console.log('Omron Callback - state:', state);
+  
   if (!code) {
-    return res.status(400).send("Authorization code is missing.");
+    return res.status(400).send('Authorization failed: No code provided.');
   }
-
-  const re_userId = userId;
-  console.log("This is the user ID: ", re_userId);
-  const tokenData = await getAccessToken(code); // Get the entire token data
-  console.log(tokenData);
-  const accessToken = tokenData.access_token;
-  const refreshToken = tokenData.refresh_token;
-  const expiresIn = tokenData.expires_in;
-  //console.log("Expires In:", expiresIn);
-  const expiryTime = Date.now() + expiresIn * 1000; // Convert to milliseconds
-  console.log("This is the expiry time: ", expiryTime);
 
   try {
-    await myDatabase.pool.query(
-      "INSERT INTO omronuser_tokens (user_id, access_token, refresh_token, expiry_time) VALUES (?, ?, ?, ?)",
-      [re_userId, accessToken, refreshToken, expiryTime],
-      function (err, result) {
-        if (err) throw err;
-        console.log("Number of records inserted: " + result.affectedRows);
-      }
+    // Look up the user and PKCE verifier by state from database
+    const [userRows] = await db.execute(
+      'SELECT id, omron_pkce_verifier FROM user_auth_testing WHERE omron_oauth_state = ?',
+      [state]
     );
+
+    if (userRows.length === 0) {
+      return res.status(400).send('Authorization failed: Invalid state.');
+    }
+
+    const userId = userRows[0].id;
+    const code_verifier = userRows[0].omron_pkce_verifier;
+
+    if (!code_verifier) {
+      return res.status(400).send('Authorization failed: PKCE verifier not found.');
+    }
+
+    // Exchange code for tokens with Omron's token endpoint
+    const basicAuth = Buffer.from(`${process.env.OMRON_CLIENT_ID}:${process.env.OMRON_CLIENT_SECRET}`).toString('base64');
+    const tokenResponse = await axios.post('https://prd-oauth.ohiomron.com/prd/connect/token', qs.stringify({
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: process.env.REDIRECT_URI,
+      code_verifier: code_verifier,
+      client_id: process.env.OMRON_CLIENT_ID,
+      client_secret: process.env.OMRON_CLIENT_SECRET
+    }), {
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    const { access_token, refresh_token, expires_in } = tokenResponse.data;
+    const expiresAt = new Date(Date.now() + (expires_in * 1000));
+
+    // Store in DB and clear temporary PKCE data
+    await db.execute(
+      'UPDATE user_auth_testing SET omron_access_token = ?, omron_refresh_token = ?, omron_token_expires = ?, omron_pkce_verifier = NULL, omron_oauth_state = NULL WHERE id = ?',
+      [access_token, refresh_token, expiresAt, userId]
+    );
+
+    console.log(`Omron connected for user ${userId}`);
+    res.redirect(`/fetchdata?access_token=${access_token}`);
   } catch (error) {
-    // Handle any errors that occurred during password hashing or database insertion
-    console.error("Error:", error);
+    console.error('Omron callback error:', error.response?.data || error.message);
+    res.status(500).send(`Authorization failed: ${error.message}`);
   }
-  res.redirect(`/fetchdata?access_token=${accessToken}`);
 });
 
-export default { router };
+module.exports = { router };

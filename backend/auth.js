@@ -495,3 +495,102 @@ router.get('/fitbit/data', verifyToken, async (req, res) => {
     }
   }
 });
+
+/*
+router.get('/omron/connect', verifyToken, async (req, res) => {
+  try {
+    // Debug: Check if req.user exists
+    console.log('req.user:', req.user);
+    console.log('req.user.userId:', req.user?.userId);
+    
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ message: 'Invalid token: userId not found' });
+    }
+
+    const { code_verifier, code_challenge } = generatePKCE();
+    const state = generateState(req.user.userId);  // Random state for CSRF protection
+
+    // Store PKCE verifier and state in database
+    await db.execute(
+      'UPDATE user_auth_testing SET omron_pkce_verifier = ?, omron_oauth_state = ? WHERE id = ?',
+      [code_verifier, state, req.user.userId]
+    );
+
+    const scope = 'bloodpressure activity';  // Match what you registered
+    const authUrl = `https://stg-oauth-website.ohiomron.com/connect/authorize?` +
+      qs.stringify({
+        response_type: 'code',
+        client_id: process.env.OMRON_CLIENT_ID,
+        redirect_uri: `${process.env.BASE_URL}/api/auth/omron/callback`,
+        scope: scope,
+        state: state,
+        code_challenge: code_challenge,
+        code_challenge_method: 'S256'
+      }, { format: 'RFC1738' });
+
+    res.redirect(authUrl);
+  } catch (error) {
+    console.error('Error in omron/connect:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+router.get('/omron/callback', async (req, res) => {
+  const { code, state } = req.query;
+  if (!code) {
+    return res.status(400).send('Authorization failed: No code provided.');
+  }
+
+  try {
+    // Look up the user and PKCE verifier by state from database
+    const [userRows] = await db.execute(
+      'SELECT id, omron_pkce_verifier FROM user_auth_testing WHERE omron_oauth_state = ?',
+      [state]
+    );
+
+    if (userRows.length === 0) {
+      return res.status(400).send('Authorization failed: Invalid state.');
+    }
+
+    const userId = userRows[0].id;
+    const code_verifier = userRows[0]?.omron_pkce_verifier || null;
+
+    if (!code_verifier) {
+      return res.status(400).send('Authorization failed: PKCE verifier not found.');
+    }
+
+    // Exchange code for tokens with Omron's token endpoint
+    const basicAuth = Buffer.from(`${process.env.OMRON_CLIENT_ID}:${process.env.OMRON_CLIENT_SECRET}`).toString('base64');
+    const tokenResponse = await axios.post('https://stg-oauth-website.ohiomron.com/connect/token', qs.stringify({
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: `${process.env.BASE_URL}/api/auth/omron/callback`,
+      code_verifier: code_verifier  // PKCE verifier
+    }), {
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    const { access_token, refresh_token, expires_in, scope } = tokenResponse.data;
+    const expiresAt = new Date(Date.now() + (expires_in * 1000));
+
+    // Store in DB and clear temporary PKCE data
+    await db.execute(
+      'UPDATE user_auth_testing SET omron_access_token = ?, omron_refresh_token = ?, omron_token_expires = ?, omron_pkce_verifier = NULL, omron_oauth_state = NULL WHERE id = ?',
+      [access_token, refresh_token, expiresAt, userId]
+    );
+
+    console.log(`Omron connected for user ${userId}; Granted scopes: ${scope}`);
+
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard?omron=connected`);
+  } catch (error) {
+    console.error('Omron callback error:', error.response?.data || error.message);
+    // Common fixes: Check redirect_uri mismatch, invalid code_verifier
+    if (error.response?.data?.error === 'invalid_request') {
+      console.log('Troubleshoot: Verify PKCE and params');
+    }
+    res.redirect(`${process.env.FRONTEND_URL}/error?msg=omron_failed&details=${encodeURIComponent(error.message)}`);
+  }
+});*/
