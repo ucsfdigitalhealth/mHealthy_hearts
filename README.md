@@ -22,8 +22,8 @@ A health tracking application with user authentication and cardiovascular health
    JWT_SECRET=your_secret_key_here
    FITBIT_CLIENT_ID=your_fitbit_client_id
    FITBIT_CLIENT_SECRET=your_fitbit_client_secret
-   BASE_URL=http://localhost:3001
-   FRONTEND_URL=http://localhost:19006
+   BASE_URL=http://localhost:3000
+   FRONTEND_URL=http://localhost:8081
    OMRON_CLIENT_ID=your_omron_client_id_here
    OMRON_CLIENT_SECRET=your_omron_client_secret_here
    REDIRECT_URI=http://localhost:3000/api/omronCallback
@@ -50,10 +50,12 @@ A health tracking application with user authentication and cardiovascular health
 - `GET /api/auth/userinfo` - Get user info (requires JWT token)
 
 ### Fitbit Integration
-- `GET /api/auth/fitbit/connect` - Initiate Fitbit OAuth flow (requires JWT)
-- `GET /api/auth/fitbit/callback` - Fitbit OAuth callback
-- `POST /api/auth/fitbit/refresh` - Refresh Fitbit tokens (requires JWT)
-- `GET /api/auth/fitbit/data` - Fetch Fitbit health data (requires JWT)
+- `GET /api/fitbitAuth/fitbit/connect` - Initiate Fitbit OAuth flow (requires JWT)
+- `GET /api/fitbitAuth/fitbit/callback` - Fitbit OAuth callback
+- `POST /api/fitbitAuth/fitbit/refresh` - Refresh Fitbit tokens (requires JWT)
+- `GET /api/fitbitAuth/fitbit/data` - Fetch heart rate data (requires JWT)
+- `GET /api/fitbitAuth/fitbit/steps` - Fetch steps data for last 7 days (requires JWT)
+- `GET /api/fitbitAuth/fitbit/activitySummary` - Fetch activity summary for last 7 days including lightly active, fairly active, and very active minutes (requires JWT)
 
 ### Omron Integration
 - `GET /api/omronAuth` - Initiate Omron OAuth flow with PKCE (requires JWT)
@@ -112,6 +114,30 @@ CREATE TABLE user_auth_testing (
   omron_oauth_state VARCHAR(128)
 );
 ```
+
+## Fitbit Integration Details
+
+### Data Flow
+- Frontend triggers `/api/fitbitAuth/fitbit/connect` → backend redirects to Fitbit authorization page
+- Fitbit authenticates the user and redirects to `/api/fitbitAuth/fitbit/callback`
+- Backend exchanges authorization code for access_token & refresh_token using PKCE
+- Tokens are stored in the `user_auth_testing` table linked to the user
+- PKCE verifier and OAuth state are temporarily stored during the flow for security
+
+### Security Features
+- PKCE (Proof Key for Code Exchange) flow for enhanced OAuth security
+- State parameter for CSRF protection
+- JWT authentication required to initiate the Fitbit OAuth flow
+- Automatic token refresh using the `ensureValidAccessToken()` helper function
+
+### Available Data Endpoints
+- **Heart Rate**: `/api/fitbitAuth/fitbit/data` - Returns latest heart rate and intraday data
+- **Steps**: `/api/fitbitAuth/fitbit/steps` - Returns 7 days of steps data
+- **Activity Summary**: `/api/fitbitAuth/fitbit/activitySummary` - Returns 7 days of activity metrics including:
+  - `minutesLightlyActive` - Light activity minutes
+  - `minutesFairlyActive` - Fairly active minutes
+  - `minutesVeryActive` - Very active minutes
+  - `steps` - Total steps per day
 
 ## Omron Integration Details
 
