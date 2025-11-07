@@ -55,7 +55,7 @@ A health tracking application with user authentication and cardiovascular health
 - `POST /api/fitbitAuth/fitbit/refresh` - Refresh Fitbit tokens (requires JWT)
 - `GET /api/fitbitAuth/fitbit/data` - Fetch heart rate data (requires JWT)
 - `GET /api/fitbitAuth/fitbit/steps` - Fetch steps data for last 7 days (requires JWT)
-- `GET /api/fitbitAuth/fitbit/activitySummary` - Fetch activity summary for last 7 days including lightly active, fairly active, and very active minutes (requires JWT)
+- `GET /api/fitbitAuth/fitbit/activitySummary` - Fetch activity and sleep summary for last 7 days including lightly active, fairly active, very active minutes, steps, total minutes asleep, time in bed, and sleep efficiency (requires JWT)
 
 ### Omron Integration
 - `GET /api/omronAuth` - Initiate Omron OAuth flow with PKCE (requires JWT)

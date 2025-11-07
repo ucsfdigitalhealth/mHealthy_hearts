@@ -297,7 +297,7 @@ router.get('/fitbit/steps', verifyTokenOrRefresh, async (req, res) => {
   }
 });
 
-// Route 6: Fetch Activity Summary (includes lightlyActive, fairlyActive, veryActive)
+// Route 6: Fetch Activity Summary (includes lightlyActive, fairlyActive, veryActive, and sleep)
 router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => {
   try {
     // Use helper function to ensure we have a valid access token
@@ -311,8 +311,14 @@ router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => 
     const startDateStr = startDate.toISOString().split('T')[0];
     const endDateStr = endDate.toISOString().split('T')[0];
 
+    // Generate array of dates for sleep data fetching
+    const dates = [];
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      dates.push(d.toISOString().split('T')[0]);
+    }
+
     // Fetch all activity metrics for the date range
-    const [lightlyActiveRes, fairlyActiveRes, veryActiveRes, stepsRes] = await Promise.all([
+    const [lightlyActiveRes, fairlyActiveRes, veryActiveRes, stepsRes, ...sleepResArray] = await Promise.all([
       axios.get(`https://api.fitbit.com/1/user/-/activities/minutesLightlyActive/date/${startDateStr}/${endDateStr}.json`,
         { headers: { Authorization: `Bearer ${fitbit_access_token}` } }),
       axios.get(`https://api.fitbit.com/1/user/-/activities/minutesFairlyActive/date/${startDateStr}/${endDateStr}.json`,
@@ -320,7 +326,22 @@ router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => 
       axios.get(`https://api.fitbit.com/1/user/-/activities/minutesVeryActive/date/${startDateStr}/${endDateStr}.json`,
         { headers: { Authorization: `Bearer ${fitbit_access_token}` } }),
       axios.get(`https://api.fitbit.com/1/user/-/activities/steps/date/${startDateStr}/${endDateStr}.json`,
-        { headers: { Authorization: `Bearer ${fitbit_access_token}` } })
+        { headers: { Authorization: `Bearer ${fitbit_access_token}` } }),
+      // Fetch sleep data for each date in parallel
+      ...dates.map(date => 
+        axios.get(`https://api.fitbit.com/1.2/user/-/sleep/date/${date}.json`,
+          { headers: { Authorization: `Bearer ${fitbit_access_token}` } })
+          .catch(err => {
+            // If sleep data is not available for a date (404 or other errors), return empty data structure
+            if (err.response?.status === 404 || err.response?.status === 204) {
+              // No sleep data available for this date
+              return { data: { sleep: [], summary: { totalMinutesAsleep: 0, totalTimeInBed: 0 } } };
+            }
+            // For other errors, log and return empty structure
+            console.log(`Error fetching sleep data for ${date}:`, err.response?.status || err.message);
+            return { data: { sleep: [], summary: { totalMinutesAsleep: 0, totalTimeInBed: 0 } } };
+          })
+      )
     ]);
 
     // Extract data from responses
@@ -332,7 +353,7 @@ router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => 
     // Combine data by date
     const activityData = {};
     
-    // Process each metric
+    // Process activity metrics
     [lightlyActive, fairlyActive, veryActive, steps].forEach((metricData, index) => {
       metricData.forEach(entry => {
         const date = entry.dateTime;
@@ -348,6 +369,24 @@ router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => 
         }
       });
     });
+
+    // Process sleep data
+    sleepResArray.forEach((sleepRes, index) => {
+      const date = dates[index];
+      if (!activityData[date]) {
+        activityData[date] = { date };
+      }
+      
+      const sleepData = sleepRes.data || sleepRes;
+      const summary = sleepData.summary || {};
+      
+      // Extract sleep metrics from summary
+      activityData[date].totalMinutesAsleep = summary.totalMinutesAsleep || 0;
+      activityData[date].totalTimeInBed = summary.totalTimeInBed || 0;
+      activityData[date].sleepEfficiency = summary.totalTimeInBed > 0 
+        ? Math.round((summary.totalMinutesAsleep / summary.totalTimeInBed) * 100) 
+        : 0;
+    });
     
     // Convert object to array sorted by date
     const activityArray = Object.values(activityData).sort((a, b) => 
@@ -355,7 +394,7 @@ router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => 
     );
     
     res.json({
-      message: 'Activity summary fetched (7 days)',
+      message: 'Activity and sleep summary fetched (7 days)',
       dateRange: { start: startDateStr, end: endDateStr },
       data: activityArray,
       totalDays: activityArray.length
