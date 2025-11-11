@@ -14,10 +14,12 @@ const app = express();
 
 app.use(bodyParser.json());
 app.use(cookieParser());
+// Reflect the request origin and avoid needing browser cookies
+// May want to lock this down to a specific origin and re-enable credentials if using cookies
 app.use(cors({
-    origin: 'http://localhost:3000', 
-    methods: ['GET', 'POST'],       
-    credentials: true                
+    origin: true, // reflect request origin
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: false // don't rely on cookies for native clients
   }));
 
   // Routes
