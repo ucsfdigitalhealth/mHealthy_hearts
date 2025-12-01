@@ -137,9 +137,9 @@ CREATE TABLE fitbit_daily_data (
 );
 ```
 
-Create the `fitbit_goals` table:
+Create the `user_goals` table:
 ```sql
-CREATE TABLE fitbit_goals (
+CREATE TABLE user_goals (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
 
