@@ -115,6 +115,44 @@ CREATE TABLE user_auth_testing (
 );
 ```
 
+Create the `fitbit_daily_data` table:
+```sql
+CREATE TABLE fitbit_daily_data (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  date DATE NOT NULL,
+
+  -- Activity
+  steps INT,
+  active_minutes INT,
+  calories_burned INT,
+
+  -- Sleep
+  sleep_duration INT,
+  sleep_efficiency INT,
+  sleep_score INT,
+
+  -- Timestamp that this data was retrieved
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+Create the `user_goals` table:
+```sql
+CREATE TABLE user_goals (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+
+  -- These goals should be calculated according to goals
+  step_goal INT,
+  active_minutes_goal INT,
+  sleep_goal INT,
+
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+```
+
 ## Fitbit Integration Details
 
 ### Data Flow
