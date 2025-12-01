@@ -27,6 +27,7 @@ app.use('/api/auth', authRoutes);
 app.use("/api/omronAuth", omronAuth.router);
 app.use("/api/omronCallback", omronCallback.router);
 app.use('/api/fitbitAuth', fitbitRoutes);
+app.use('/api/fitbit', require('./routes/fitbitGoals'));
 
 const PORT = process.env.PORT || 3000;
 
