@@ -118,22 +118,16 @@ CREATE TABLE user_auth_testing (
 Create the `fitbit_daily_data` table:
 ```sql
 CREATE TABLE fitbit_daily_data (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  date DATE NOT NULL,
-
-  -- Activity
-  steps INT,
-  active_minutes INT,
-  calories_burned INT,
-
-  -- Sleep
-  sleep_duration INT,
-  sleep_efficiency INT,
-  sleep_score INT,
-
-  -- Timestamp that this data was retrieved
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    user_id VARCHAR(255) NOT NULL,
+    date DATE NOT NULL,
+    steps INT,
+    minutes_lightly_active INT,
+    minutes_fairly_active INT,
+    minutes_very_active INT,
+    total_minutes_asleep INT,
+    total_time_in_bed INT,
+    sleep_efficiency DECIMAL(5, 2), -- DECIMAL for a percentage or ratio, e.g., 90.50
+    PRIMARY KEY (user_id, date)
 );
 ```
 
