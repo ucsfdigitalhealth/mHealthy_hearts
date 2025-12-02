@@ -218,13 +218,17 @@ router.get('/fitbit/callback', async (req, res) => {
 
     console.log(`Fitbit connected for user ${userId}; Granted scopes: ${scope}`);
 
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard?fitbit=connected`);
+    // Redirect to mobile app deep link - React Native will intercept this URL
+    // The app will handle this deep link and update the UI accordingly
+    res.redirect(`mhealthyhearts://fitbit/callback?success=true&userId=${userId}`);
   } catch (error) {
     console.error('Fitbit callback error:', error.response?.data || error.message);
     if (error.response?.data?.error === 'invalid_request') {
       console.log('Troubleshoot: Verify PKCE and params');
     }
-    res.redirect(`${process.env.FRONTEND_URL}/error?msg=fitbit_failed&details=${encodeURIComponent(error.message)}`);
+    
+    // Redirect to mobile app deep link with error information
+    res.redirect(`mhealthyhearts://fitbit/callback?success=false&error=${encodeURIComponent(error.message)}`);
   }
 });
 

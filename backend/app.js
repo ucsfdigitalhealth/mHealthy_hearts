@@ -13,11 +13,12 @@ import fitbitRoutes from "./fitbit.js";
 const app = express();
 
 app.use(bodyParser.json());
-app.use(cookieParser());
+// cookieParser removed - not needed for mobile token-based auth
+// app.use(cookieParser());
 // Reflect the request origin and avoid needing browser cookies
-// May want to lock this down to a specific origin and re-enable credentials if using cookies
+// Mobile apps don't use cookies, so credentials is false
 app.use(cors({
-    origin: true, // reflect request origin
+    origin: true, // reflect request origin (works for both web and mobile)
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: false // don't rely on cookies for native clients
   }));
