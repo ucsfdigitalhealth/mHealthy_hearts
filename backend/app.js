@@ -8,6 +8,7 @@ dotenv.config();
 import { router as authRoutes } from "./auth.js";
 import omronAuth from "./routes/omron/omronAuth.js";
 import omronCallback from "./routes/omron/omronCallback.js";
+import fitbitRoutes from "./fitbit.js";
 
 const app = express();
 
@@ -23,10 +24,11 @@ app.use(cors({
 app.use('/api/auth', authRoutes);
 app.use("/api/omronAuth", omronAuth.router);
 app.use("/api/omronCallback", omronCallback.router);
+app.use('/api/fitbitAuth', fitbitRoutes);
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 3000;
 
-const port = 3000;
+const port = PORT;
 
 app.get("/fetchdata", (req, res) => {
   const accessToken = req.query.access_token;
