@@ -202,3 +202,4 @@ These Terms are effective as of the date listed above and will remain in effect 
 **By using mHealthy Hearts, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.**
 
 *For questions or concerns, please contact us at legal@mhealthyhearts.com*
+

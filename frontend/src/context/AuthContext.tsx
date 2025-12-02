@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface User {
@@ -41,7 +41,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await AsyncStorage.removeItem('accessToken');
       await AsyncStorage.removeItem('userData');
@@ -50,13 +50,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Error clearing auth data:', error);
     }
-  };
+  }, []);
 
-  const fetchUserInfo = async () => {
-    if (!accessToken) return;
+  const fetchUserInfo = useCallback(async (): Promise<void> => {
+    if (!accessToken) {
+      console.log('No access token available to fetch user info');
+      return;
+    }
 
     try {
-      setLoading(true);
+      // Don't set loading state when refreshing user info to avoid unmounting NavigationContainer
       console.log('Fetching user info with token:', accessToken.substring(0, 20) + '...');
       
       const response = await fetch(`${API_BASE_URL}/userinfo`, {
@@ -78,39 +81,89 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.error('Failed to fetch user info:', response.status);
         // If token is invalid, logout
         if (response.status === 401) {
-          logout();
+          await logout();
         }
       }
     } catch (error) {
       console.error('Error fetching user info:', error);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [accessToken, logout]);
 
   // Load stored auth data on app start
   useEffect(() => {
+    let isMounted = true;
+    
     const loadStoredAuth = async () => {
       try {
+        setLoading(true);
         const [storedToken, storedUserData] = await Promise.all([
           AsyncStorage.getItem('accessToken'),
           AsyncStorage.getItem('userData')
         ]);
 
-        if (storedToken && storedUserData) {
-          setAccessToken(storedToken);
-          setUser(JSON.parse(storedUserData));
-          // Fetch fresh user data
-          await fetchUserInfo();
+        if (!isMounted) return;
+
+        if (storedToken) {
+          // Validate token by fetching user info directly (don't use fetchUserInfo to avoid dependencies)
+          try {
+            console.log('Validating stored token on app start...');
+            const response = await fetch(`${API_BASE_URL}/userinfo`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${storedToken}`,
+              },
+            });
+
+            if (!isMounted) return;
+
+            if (response.ok) {
+              const data = await response.json();
+              console.log('Token is valid, restoring session');
+              // Token is valid, restore session
+              setAccessToken(storedToken);
+              setUser(data.user);
+              // Update stored user data with fresh data
+              await AsyncStorage.setItem('userData', JSON.stringify(data.user));
+            } else {
+              console.log('Token is invalid, clearing stored data');
+              // Token is invalid, clear stored data
+              await AsyncStorage.removeItem('accessToken');
+              await AsyncStorage.removeItem('userData');
+              setAccessToken(null);
+              setUser(null);
+            }
+          } catch (error) {
+            console.error('Error validating token:', error);
+            if (!isMounted) return;
+            // On error, clear auth state to be safe
+            await AsyncStorage.removeItem('accessToken');
+            await AsyncStorage.removeItem('userData');
+            setAccessToken(null);
+            setUser(null);
+          }
+        } else {
+          // No stored token, ensure state is clear
+          setAccessToken(null);
+          setUser(null);
         }
       } catch (error) {
         console.error('Error loading stored auth data:', error);
+        if (!isMounted) return;
+        // On error, clear auth state to be safe
+        setAccessToken(null);
+        setUser(null);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     loadStoredAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const value: AuthContextType = {
