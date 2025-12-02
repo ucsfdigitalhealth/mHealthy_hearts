@@ -13,11 +13,14 @@ import fitbitRoutes from "./fitbit.js";
 const app = express();
 
 app.use(bodyParser.json());
-app.use(cookieParser());
+// cookieParser removed - not needed for mobile token-based auth
+// app.use(cookieParser());
+// Reflect the request origin and avoid needing browser cookies
+// Mobile apps don't use cookies, so credentials is false
 app.use(cors({
-    origin: 'http://localhost:3000', 
-    methods: ['GET', 'POST'],       
-    credentials: true                
+    origin: true, // reflect request origin (works for both web and mobile)
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: false // don't rely on cookies for native clients
   }));
 
   // Routes
@@ -25,6 +28,7 @@ app.use('/api/auth', authRoutes);
 app.use("/api/omronAuth", omronAuth.router);
 app.use("/api/omronCallback", omronCallback.router);
 app.use('/api/fitbitAuth', fitbitRoutes);
+//app.use('/api/fitbit', require('./routes/fitbitGoals'));
 
 const PORT = process.env.PORT || 3000;
 

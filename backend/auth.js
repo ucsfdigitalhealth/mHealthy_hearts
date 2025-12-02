@@ -68,16 +68,10 @@ router.post('/login', async (req, res) => {
       [hashedRefreshToken, refreshTokenExpiration, userId]
     );
     
-    // Set refresh token as HTTP-only cookie
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: false, // Use secure cookies in production
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
-    });
-    
+    // For mobile clients return refresh token in response body. Server stores only hashed version.
     res.json({ 
       accessToken,
+      refreshToken,
       message: 'Login successful'
     });
   } catch (error) {
@@ -89,7 +83,8 @@ router.post('/login', async (req, res) => {
 // Refresh token endpoint
 router.post('/refresh', async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
+    // Accept refresh token in body or x-refresh-token header (for RN clients)
+    const refreshToken = req.body.refreshToken || req.header('x-refresh-token');
     
     if (!refreshToken) {
       return res.status(401).json({ message: 'Refresh token not provided' });
@@ -123,7 +118,6 @@ router.post('/refresh', async (req, res) => {
         'UPDATE user_auth_testing SET refresh_token = NULL, refresh_token_expires = NULL WHERE id = ?',
         [user.id]
       );
-      res.clearCookie('refreshToken');
       return res.status(401).json({ message: 'Refresh token expired' });
     }
     
@@ -141,16 +135,10 @@ router.post('/refresh', async (req, res) => {
       [hashedNewRefreshToken, newRefreshTokenExpiration, user.id]
     );
     
-    // Set new refresh token cookie
-    res.cookie('refreshToken', newRefreshToken, {
-      httpOnly: true,
-      secure: false, // Set to true in production, false for local development
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
-    
+    // Return new refresh token in response body for RN client
     res.json({ 
       accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
       message: 'Token refreshed successfully'
     });
     
@@ -163,7 +151,7 @@ router.post('/refresh', async (req, res) => {
 // Logout endpoint
 router.post('/logout', async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
+    const refreshToken = req.body.refreshToken || req.header('x-refresh-token');
     
     if (refreshToken) {
       // Find and invalidate the refresh token - no authentication required
@@ -182,10 +170,7 @@ router.post('/logout', async (req, res) => {
         }
       }
     }
-    
-    // Clear the refresh token cookie
-    res.clearCookie('refreshToken');
-    
+
     res.json({ message: 'Logout successful' });
   } catch (error) {
     console.error('Error during logout:', error);
@@ -247,16 +232,16 @@ function verifyTokenOrRefresh(req, res, next) {
         return next();
       }
     } catch (error) {
-      // If access token is expired, check for refresh token
+      // If access token is expired, check for refresh token in body/header for RN clients
       if (error.name === 'TokenExpiredError') {
-        const refreshToken = req.cookies.refreshToken;
+        const refreshToken = req.body.refreshToken || req.header('x-refresh-token');
         if (!refreshToken) {
           return res.status(401).json({ 
             message: "Access token expired and no refresh token available",
             code: "TOKEN_EXPIRED_NO_REFRESH"
           });
         }
-        
+
         // Let the client know they should refresh their token
         return res.status(401).json({ 
           message: "Access token expired, please refresh",
