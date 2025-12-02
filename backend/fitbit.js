@@ -158,7 +158,10 @@ router.get('/fitbit/connect', verifyTokenOrRefresh, async (req, res) => {
       }, { format: 'RFC1738' });
 
     console.log('Full Auth URL:', authUrl);
-    res.redirect(authUrl);
+    res.json({
+      message: 'Authorization URL generated',
+      authUrl: authUrl // Send the generated URL to the React Native app
+    });
   } catch (error) {
     console.error('Error in fitbit/connect:', error);
     res.status(500).json({ message: 'Server Error' });
