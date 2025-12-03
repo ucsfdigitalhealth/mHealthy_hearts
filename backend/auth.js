@@ -24,6 +24,39 @@ router.post('/register', async (req, res) => {
     const [rows, fields] = await db.execute('INSERT INTO user_auth_testing (username, email, password) VALUES (?, ?, ?)', [username, email, hashedPassword]);
     res.status(201).json({ message: 'User registered successfully' });
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      // Get username and email from req.body in case they weren't destructured
+      const { username, email } = req.body;
+      
+      try {
+        const [existingRows] = await db.execute(
+          'SELECT username, email FROM user_auth_testing WHERE username = ? OR email = ?',
+          [username, email]
+        );
+
+        if (existingRows.length > 0) {
+          const existingUser = existingRows[0];
+          
+          if (existingUser.username === username) {
+            return res.status(409).json({ 
+              success: false,
+              message: 'Username already taken.' 
+            });
+          }
+          
+          else if (existingUser.email === email) {
+            return res.status(409).json({ 
+              success: false,
+              message: 'Email already registered.' 
+            });
+          }
+        }
+      } catch (dbError) {
+        console.error('Error checking existing user:', dbError);
+        // Fall through to generic error response
+      }
+    }
+    
     console.error('Error registering user:', error);
     res.status(500).json({ message: 'Server Error' });
   }
