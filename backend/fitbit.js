@@ -73,6 +73,49 @@ async function ensureValidAccessToken(userId) {
   }
 }
 
+// Insert daily Fitbit data into the database according to scheme in README
+async function saveDailyFitbitData(userId, daily) {
+  const {
+    date,
+    steps,
+    minutesLightlyActive,
+    minutesFairlyActive,
+    minutesVeryActive,
+    totalMinutesAsleep,
+    totalTimeInBed,
+    sleepEfficiency
+  } = daily;
+
+  await db.execute(
+    `INSERT INTO fitbit_daily_data
+      (user_id, date, steps, minutes_lightly_active, minutes_fairly_active, minutes_very_active,
+       total_minutes_asleep, total_time_in_bed, sleep_efficiency)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+        steps = VALUES(steps),
+        minutes_lightly_active = VALUES(minutes_lightly_active),
+        minutes_fairly_active = VALUES(minutes_fairly_active),
+        minutes_very_active = VALUES(minutes_very_active),
+        total_minutes_asleep = VALUES(total_minutes_asleep),
+        total_time_in_bed = VALUES(total_time_in_bed),
+        sleep_efficiency = VALUES(sleep_efficiency)
+    `,
+    [
+      userId,
+      date,
+      steps,
+      minutesLightlyActive,
+      minutesFairlyActive,
+      minutesVeryActive,
+      totalMinutesAsleep,
+      totalTimeInBed,
+      sleepEfficiency
+    ]
+  );
+
+  console.log(`Saved daily Fitbit data for ${date}`);
+}
+
 // Route 1: Connect to Fitbit (protected; generates PKCE/state)
 router.get('/fitbit/connect', verifyTokenOrRefresh, async (req, res) => {
   try {
@@ -115,7 +158,10 @@ router.get('/fitbit/connect', verifyTokenOrRefresh, async (req, res) => {
       }, { format: 'RFC1738' });
 
     console.log('Full Auth URL:', authUrl);
-    res.redirect(authUrl);
+    res.json({
+      message: 'Authorization URL generated',
+      authUrl: authUrl // Send the generated URL to the React Native app
+    });
   } catch (error) {
     console.error('Error in fitbit/connect:', error);
     res.status(500).json({ message: 'Server Error' });
@@ -172,13 +218,17 @@ router.get('/fitbit/callback', async (req, res) => {
 
     console.log(`Fitbit connected for user ${userId}; Granted scopes: ${scope}`);
 
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard?fitbit=connected`);
+    // Redirect to mobile app deep link - React Native will intercept this URL
+    // The app will handle this deep link and update the UI accordingly
+    res.redirect(`mhealthyhearts://fitbit/callback?success=true&userId=${userId}`);
   } catch (error) {
     console.error('Fitbit callback error:', error.response?.data || error.message);
     if (error.response?.data?.error === 'invalid_request') {
       console.log('Troubleshoot: Verify PKCE and params');
     }
-    res.redirect(`${process.env.FRONTEND_URL}/error?msg=fitbit_failed&details=${encodeURIComponent(error.message)}`);
+    
+    // Redirect to mobile app deep link with error information
+    res.redirect(`mhealthyhearts://fitbit/callback?success=false&error=${encodeURIComponent(error.message)}`);
   }
 });
 
@@ -392,13 +442,31 @@ router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => 
     const activityArray = Object.values(activityData).sort((a, b) => 
       new Date(a.date) - new Date(b.date)
     );
-    
-    res.json({
-      message: 'Activity and sleep summary fetched (7 days)',
-      dateRange: { start: startDateStr, end: endDateStr },
-      data: activityArray,
-      totalDays: activityArray.length
-    });
+
+    // After computing activityArray (your final 7-day array)
+
+// SAVE EACH DAY TO DB
+for (const day of activityArray) {
+  await saveDailyFitbitData(req.user.userId, {
+    date: day.date,
+    steps: parseInt(day.steps || 0),
+    minutesLightlyActive: parseInt(day.minutesLightlyActive || 0),
+    minutesFairlyActive: parseInt(day.minutesFairlyActive || 0),
+    minutesVeryActive: parseInt(day.minutesVeryActive || 0),
+    totalMinutesAsleep: parseInt(day.totalMinutesAsleep || 0),
+    totalTimeInBed: parseInt(day.totalTimeInBed || 0),
+    sleepEfficiency: parseInt(day.sleepEfficiency || 0)
+  });
+}
+
+return res.json({
+  message: 'Activity + sleep summary fetched and stored (7 days)',
+  dateRange: { start: startDateStr, end: endDateStr },
+  data: activityArray,
+  totalDays: activityArray.length
+});
+
+   
   } catch (error) {
     console.error('Activity summary fetch error:', error.response?.data || error.message);
     
