@@ -10,6 +10,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App'; // Update path as needed
+import Settings from '../components/Settings';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -85,7 +86,10 @@ const CardioVascularScreen: React.FC = () => {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>Life Essential 8</Text>
+      <View style={styles.headerContainer}>
+        <Text style={styles.heading}>Life Essential 8</Text>
+        <Settings />
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.subdued}>Today</Text>
@@ -174,11 +178,17 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#ffffff'
   },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   heading: {
     fontSize: 20,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 12
+    flex: 1,
   },
   card: {
     backgroundColor: '#ffffff',

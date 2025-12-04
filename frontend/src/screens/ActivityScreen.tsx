@@ -1,12 +1,16 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Settings from '../components/Settings';
 
 const ActivityScreen: React.FC = () => {
   return (
     <ScrollView style={styles.container}>
       {/* Header with Date */}
-      <Text style={styles.header}>Activity</Text>
+      <View style={styles.headerContainer}>
+        <Text style={styles.header}>Activity</Text>
+        <Settings />
+      </View>
       
       {/* Steps Progress */}
       <View style={styles.progressCard}>
@@ -109,13 +113,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F2F2F7',
   },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginLeft: 20,
+    marginRight: 8,
+    marginTop: 16,
+    marginBottom: 16,
+  },
   header: {
     fontSize: 34,
     fontWeight: '700',
     color: '#000',
-    marginLeft: 20,
-    marginTop: 16,
-    marginBottom: 16,
+    flex: 1,
   },
   progressCard: {
     backgroundColor: '#FFF',

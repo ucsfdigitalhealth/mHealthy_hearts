@@ -45,10 +45,10 @@ export const LoginScreen: React.FC = () => {
     password: '',
   });
 
-  // Redirect to Landing if already logged in
+  // Redirect to FitbitConnect if already logged in
   useEffect(() => {
     if (!authLoading && user && accessToken) {
-      navigation.replace('HomeTabs');
+      navigation.replace('FitbitConnect');
     }
   }, [authLoading, user, accessToken, navigation]);
 
@@ -140,7 +140,7 @@ export const LoginScreen: React.FC = () => {
         if (userInfo) {
           // Use the AuthContext to store the login data
           login(data.accessToken, userInfo);
-          navigation.navigate('HomeTabs');
+          navigation.replace('FitbitConnect');
         }
       } else {
         Alert.alert('Error', data.message || 'Login failed');
