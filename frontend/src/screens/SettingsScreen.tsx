@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
@@ -17,6 +18,10 @@ type SettingsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList
 const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<SettingsScreenNavigationProp>();
   const { logout, user } = useAuth();
+
+  const handleBack = () => {
+    navigation.goBack();
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -42,7 +47,17 @@ const SettingsScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Settings</Text>
+        <View style={styles.headerContainer}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handleBack}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color="#007AFF" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Settings</Text>
+          <View style={styles.backButtonPlaceholder} />
+        </View>
         
         {user && (
           <View style={styles.userInfo}>
@@ -73,11 +88,25 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
   },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 32,
+  },
+  backButton: {
+    padding: 8,
+    marginLeft: -8,
+  },
+  backButtonPlaceholder: {
+    width: 40,
+  },
   title: {
     fontSize: 34,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 32,
+    flex: 1,
+    textAlign: 'center',
   },
   userInfo: {
     marginBottom: 32,
