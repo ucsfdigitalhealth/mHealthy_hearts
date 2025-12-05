@@ -168,6 +168,23 @@ router.get('/fitbit/connect', verifyTokenOrRefresh, async (req, res) => {
   }
 });
 
+// POST /api/fitbitAuth/fitbit/disconnect
+router.post('/fitbit/disconnect', verifyTokenOrRefresh, async (req, res) => {
+  try {
+    // Clear Fitbit tokens/expiry for the authenticated user
+    await db.execute(
+      'UPDATE user_auth_testing SET fitbit_access_token = NULL, fitbit_refresh_token = NULL, fitbit_token_expires = NULL WHERE id = ?',
+      [req.user.userId]
+    );
+
+    console.log(`Fitbit disconnected for user ${req.user.userId}`);
+    res.json({ message: 'Fitbit disconnected' });
+  } catch (error) {
+    console.error('Error disconnecting Fitbit:', error.response?.data || error.message);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
 // Route 2: Callback (handles code/state; exchanges for tokens)
 router.get('/fitbit/callback', async (req, res) => {
   const { code, state } = req.query;
