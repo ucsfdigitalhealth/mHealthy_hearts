@@ -26,9 +26,9 @@ const FitbitConnectScreen: React.FC = () => {
   // Debug: Log state changes
   useEffect(() => {
     console.log('[FitbitConnectScreen] State update:', {
-      isConnected,
-      isLoading,
-      isConnecting,
+      isConnected,     // true if Fitbit account is connected (user authorized successfully)
+      isLoading,       // true while connection check or authorization is in progress (from context)
+      isConnecting,    // true while the user is actively going through the Fitbit connect flow (local UI flag)
     });
   }, [isConnected, isLoading, isConnecting]);
 
@@ -38,7 +38,7 @@ const FitbitConnectScreen: React.FC = () => {
     React.useCallback(() => {
       console.log('[FitbitConnectScreen] Screen focused, checking connection status...');
       if (!isConnecting) {
-        checkConnectionStatus();
+        checkConnectionStatus(); // Check if Fitbit is connected (checks fitbit/steps endpoint)
       }
     }, [isConnecting, checkConnectionStatus])
   );
