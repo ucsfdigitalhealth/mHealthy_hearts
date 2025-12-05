@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useFitbitAuth } from '../context/FitbitAuthContext';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
 
@@ -18,6 +19,7 @@ type SettingsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList
 const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<SettingsScreenNavigationProp>();
   const { logout, user } = useAuth();
+  const { disconnect, isConnected, loading: fitbitLoading } = useFitbitAuth();
 
   const handleBack = () => {
     navigation.goBack();
@@ -74,6 +76,39 @@ const SettingsScreen: React.FC = () => {
         >
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
+
+        {isConnected && (
+          <TouchableOpacity
+            style={[styles.logoutButton, styles.disconnectButton]}
+            onPress={() => {
+              Alert.alert(
+                'Disconnect Fitbit',
+                'Are you sure you want to disconnect your Fitbit account?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Disconnect',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await disconnect();
+                        Alert.alert('Disconnected', 'Your Fitbit has been disconnected.');
+                      } catch (err) {
+                        // disconnect already alerts on error
+                      }
+                    },
+                  },
+                ]
+              );
+            }}
+            activeOpacity={0.8}
+            disabled={fitbitLoading}
+          >
+            <Text style={styles.logoutButtonText}>
+              {fitbitLoading ? 'Disconnecting…' : 'Disconnect Fitbit'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -135,6 +170,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 24,
     alignItems: 'center',
+  },
+  disconnectButton: {
+    marginTop: 12,
   },
   logoutButtonText: {
     color: '#FFFFFF',
