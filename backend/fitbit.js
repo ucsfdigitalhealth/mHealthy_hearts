@@ -171,26 +171,75 @@ router.get('/fitbit/connect', verifyTokenOrRefresh, async (req, res) => {
 // Route 2: Callback (handles code/state; exchanges for tokens)
 router.get('/fitbit/callback', async (req, res) => {
   const { code, state } = req.query;
+  console.log('=== Fitbit Callback Received ===');
+  console.log('Code:', code ? 'present' : 'missing');
+  console.log('State:', state);
+  
   if (!code) {
     return res.status(400).send('Authorization failed: No code provided.');
   }
 
+  if (!state) {
+    console.error('No state parameter received');
+    return res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Connection Error</title>
+        </head>
+        <body>
+          <h2>Connection Error</h2>
+          <p>Missing state parameter. You can close this browser now.</p>
+        </body>
+      </html>
+    `);
+  }
+
   try {
     // Look up the user and PKCE verifier by state from database
+    console.log('Looking up state in database:', state);
     const [userRows] = await db.execute(
       'SELECT id, fitbit_pkce_verifier FROM user_auth_testing WHERE fitbit_oauth_state = ?',
       [state]
     );
+    
+    console.log('Database query result:', userRows.length > 0 ? 'Found' : 'Not found');
 
     if (userRows.length === 0) {
-      return res.status(400).send('Authorization failed: Invalid state.');
+      console.error('Invalid state error - state not found in database:', state);
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Connection Error</title>
+          </head>
+          <body>
+            <h2>Connection Error</h2>
+            <p>Invalid state. You can close this browser now and try connecting again from the app.</p>
+          </body>
+        </html>
+      `);
     }
 
     const userId = userRows[0].id;
     const code_verifier = userRows[0].fitbit_pkce_verifier;
 
     if (!code_verifier) {
-      return res.status(400).send('Authorization failed: PKCE verifier not found.');
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Connection Error</title>
+          </head>
+          <body>
+            <h2>Connection Error</h2>
+            <p>PKCE verifier not found. You can close this browser now.</p>
+          </body>
+        </html>
+      `);
     }
 
     // Exchange code for tokens
@@ -210,7 +259,7 @@ router.get('/fitbit/callback', async (req, res) => {
     const { access_token, refresh_token, expires_in, scope } = tokenResponse.data;
     const expiresAt = new Date(Date.now() + (expires_in * 1000));
 
-    // Store in DB and clear temporary PKCE data
+    // Store in DB and clear temporary PKCE data (keep deep link URL for potential future use)
     await db.execute(
       'UPDATE user_auth_testing SET fitbit_access_token = ?, fitbit_refresh_token = ?, fitbit_token_expires = ?, fitbit_pkce_verifier = NULL, fitbit_oauth_state = NULL WHERE id = ?',
       [access_token, refresh_token, expiresAt, userId]
@@ -218,17 +267,42 @@ router.get('/fitbit/callback', async (req, res) => {
 
     console.log(`Fitbit connected for user ${userId}; Granted scopes: ${scope}`);
 
-    // Redirect to mobile app deep link - React Native will intercept this URL
-    // The app will handle this deep link and update the UI accordingly
-    res.redirect(`mhealthyhearts://fitbit/callback?success=true&userId=${userId}`);
+    // Simple HTML response - user will close browser manually
+    const htmlResponse = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Fitbit Connected</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+        </head>
+        <body>
+          <h2>Fitbit successfully connected. You can close this browser now.</h2>
+        </body>
+      </html>
+    `;
+    res.send(htmlResponse);
   } catch (error) {
     console.error('Fitbit callback error:', error.response?.data || error.message);
     if (error.response?.data?.error === 'invalid_request') {
       console.log('Troubleshoot: Verify PKCE and params');
     }
     
-    // Redirect to mobile app deep link with error information
-    res.redirect(`mhealthyhearts://fitbit/callback?success=false&error=${encodeURIComponent(error.message)}`);
+    // Simple error response - user will close browser manually
+    const htmlError = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Connection Error</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+        </head>
+        <body>
+          <h2>Fitbit connection failed. You can close this browser now.</h2>
+        </body>
+      </html>
+    `;
+    res.send(htmlError);
   }
 });
 
@@ -271,6 +345,7 @@ router.post('/fitbit/refresh', verifyTokenOrRefresh, async (req, res) => {
   }
 });
 
+// Route: Check Fitbit Connection
 // Route 4: Fetch Heart Rate Data
 router.get('/fitbit/data', verifyTokenOrRefresh, async (req, res) => {
   try {

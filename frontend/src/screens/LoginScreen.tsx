@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { useFitbitAuth } from '../context/FitbitAuthContext';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
 import ApiTester from '../components/ApiTester';
@@ -37,6 +38,7 @@ interface UserInfoResponse {
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { login, user, accessToken, loading: authLoading } = useAuth();
+  const { isConnected: fitbitConnected, checkConnectionStatus, isLoading: fitbitLoading } = useFitbitAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -44,19 +46,48 @@ export const LoginScreen: React.FC = () => {
     email: '',
     password: '',
   });
+  const [hasCheckedFitbit, setHasCheckedFitbit] = useState(false);
+  const [isFreshLogin, setIsFreshLogin] = useState(false);
 
-  // Redirect to FitbitConnect if already logged in (with 1/3 probability)
+  // Redirect logic for already logged-in users (app refresh/restart)
   useEffect(() => {
-    if (!authLoading && user && accessToken) {
-      // Randomly decide: 1/3 chance to show FitbitConnect, 2/3 chance to go to HomeTabs
-      const shouldShowFitbitConnect = Math.random() < 1/3;
-      if (shouldShowFitbitConnect) {
-        navigation.replace('FitbitConnect');
+    const handleNavigation = async () => {
+      if (!authLoading && user && accessToken && !hasCheckedFitbit) {
+        // Check Fitbit connection status first
+        await checkConnectionStatus();
+        setHasCheckedFitbit(true);
+      }
+    };
+
+    handleNavigation();
+  }, [authLoading, user, accessToken, checkConnectionStatus, hasCheckedFitbit]);
+
+  // Navigate after Fitbit status is checked
+  useEffect(() => {
+    if (!authLoading && user && accessToken && hasCheckedFitbit && !fitbitLoading) {
+      if (isFreshLogin) {
+        // Fresh login (user typed credentials) - always show FitbitConnect if not connected
+        if (fitbitConnected) {
+          navigation.replace('HomeTabs');
+        } else {
+          navigation.replace('FitbitConnect');
+        }
+        setIsFreshLogin(false); // Reset flag
       } else {
-        navigation.replace('HomeTabs');
+        // Already logged in (app refresh) - use 1/3 probability if not connected
+        if (fitbitConnected) {
+          navigation.replace('HomeTabs');
+        } else {
+          const shouldShowFitbitConnect = Math.random() < 1/3;
+          if (shouldShowFitbitConnect) {
+            navigation.replace('FitbitConnect');
+          } else {
+            navigation.replace('HomeTabs');
+          }
+        }
       }
     }
-  }, [authLoading, user, accessToken, navigation]);
+  }, [authLoading, user, accessToken, hasCheckedFitbit, fitbitConnected, fitbitLoading, isFreshLogin, navigation]);
 
   // Try this if localhost doesn't work: replace with your computer's IP address
   const API_BASE_URL = 'http://localhost:3000/api/auth';
@@ -146,13 +177,12 @@ export const LoginScreen: React.FC = () => {
         if (userInfo) {
           // Use the AuthContext to store the login data
           login(data.accessToken, userInfo);
-          // Randomly decide: 1/3 chance to show FitbitConnect, 2/3 chance to go to HomeTabs
-          const shouldShowFitbitConnect = Math.random() < 1/3;
-          if (shouldShowFitbitConnect) {
-            navigation.replace('FitbitConnect');
-          } else {
-            navigation.replace('HomeTabs');
-          }
+          
+          // Mark as fresh login and check Fitbit connection status
+          setIsFreshLogin(true);
+          setHasCheckedFitbit(false); // Reset to trigger check
+          await checkConnectionStatus();
+          setHasCheckedFitbit(true);
         }
       } else {
         Alert.alert('Error', data.message || 'Login failed');

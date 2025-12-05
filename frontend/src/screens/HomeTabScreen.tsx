@@ -1,15 +1,37 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import type { RootStackParamList } from '../../App';
 import TodayScreen from './TodayScreen';
 import CardioVascularScreen from './CardioVascularScreen';
 import ActivityScreen from './ActivityScreen';
 
 type TabType = 'today' | 'activity' | 'health';
+type HomeTabsRouteProp = RouteProp<RootStackParamList, 'HomeTabs'>;
 
 const HomeTabsScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('today');
+  const route = useRoute<HomeTabsRouteProp>();
+
+  // Show alert based on Fitbit connection result
+  useEffect(() => {
+    const connectionResult = route.params?.fitbitConnectionResult;
+    if (connectionResult === 'success') {
+      Alert.alert(
+        'Fitbit Connected!',
+        'Your Fitbit device has been successfully connected.',
+        [{ text: 'OK' }]
+      );
+    } else if (connectionResult === 'failed') {
+      Alert.alert(
+        'Fitbit Connection Unsuccessful',
+        'Failed to connect your Fitbit device. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  }, [route.params?.fitbitConnectionResult]);
 
   const renderContent = () => {
     switch (activeTab) {
