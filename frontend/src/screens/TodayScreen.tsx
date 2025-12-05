@@ -1,9 +1,38 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Settings from '../components/Settings';
+import { useAuth } from '../context/AuthContext';
 
 const TodayScreen: React.FC = () => {
+  const { accessToken } = useAuth();
+  const [steps, setSteps] = useState<string>('—');
+
+  useEffect(() => {
+    const fetchSteps = async () => {
+      if (!accessToken) return;
+      try {
+        const res = await fetch('http://localhost:3000/api/fitbitAuth/fitbit/activitySummary', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        if (!res.ok) {
+          console.error('[TodayScreen] Failed to fetch activity summary. Status:', res.status);
+          return;
+        }
+        const data = await res.json();
+        const lastDay = Array.isArray(data.data) && data.data.length > 0 ? data.data[data.data.length - 1] : null;
+        const latestSteps = lastDay?.steps ?? 0;
+        setSteps(Number(latestSteps).toLocaleString());
+      } catch (err) {
+        console.error('[TodayScreen] Error fetching steps:', err);
+      }
+    };
+
+    fetchSteps();
+  }, [accessToken]);
+
   return (
     <ScrollView style={styles.container}>
       {/* Header */}
@@ -16,7 +45,7 @@ const TodayScreen: React.FC = () => {
       <View style={styles.progressCard}>
         <View style={styles.progressCircle}>
           <Ionicons name="walk" size={32} color="#34C759" />
-          <Text style={styles.progressNumber}>5,360</Text>
+          <Text style={styles.progressNumber}>{steps}</Text>
           <Text style={styles.progressGoal}>of 6,000 steps</Text>
         </View>
       </View>
