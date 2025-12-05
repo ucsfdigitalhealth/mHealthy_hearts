@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -36,7 +36,7 @@ interface UserInfoResponse {
 
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { login } = useAuth();
+  const { login, user, accessToken, loading: authLoading } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -44,6 +44,19 @@ export const LoginScreen: React.FC = () => {
     email: '',
     password: '',
   });
+
+  // Redirect to FitbitConnect if already logged in (with 1/3 probability)
+  useEffect(() => {
+    if (!authLoading && user && accessToken) {
+      // Randomly decide: 1/3 chance to show FitbitConnect, 2/3 chance to go to HomeTabs
+      const shouldShowFitbitConnect = Math.random() < 1/3;
+      if (shouldShowFitbitConnect) {
+        navigation.replace('FitbitConnect');
+      } else {
+        navigation.replace('HomeTabs');
+      }
+    }
+  }, [authLoading, user, accessToken, navigation]);
 
   // Try this if localhost doesn't work: replace with your computer's IP address
   const API_BASE_URL = 'http://localhost:3000/api/auth';
@@ -133,7 +146,13 @@ export const LoginScreen: React.FC = () => {
         if (userInfo) {
           // Use the AuthContext to store the login data
           login(data.accessToken, userInfo);
-          navigation.navigate('Landing');
+          // Randomly decide: 1/3 chance to show FitbitConnect, 2/3 chance to go to HomeTabs
+          const shouldShowFitbitConnect = Math.random() < 1/3;
+          if (shouldShowFitbitConnect) {
+            navigation.replace('FitbitConnect');
+          } else {
+            navigation.replace('HomeTabs');
+          }
         }
       } else {
         Alert.alert('Error', data.message || 'Login failed');
@@ -193,6 +212,17 @@ export const LoginScreen: React.FC = () => {
     setIsLogin(!isLogin);
     setFormData({ username: '', email: '', password: '' });
   };
+
+  // Don't render login form if auth is still loading or user is already logged in
+  if (authLoading || (user && accessToken)) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -345,6 +375,11 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontSize: 14,
     fontWeight: '500',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

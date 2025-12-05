@@ -17,9 +17,9 @@ app.use(cookieParser());
 // Reflect the request origin and avoid needing browser cookies
 // May want to lock this down to a specific origin and re-enable credentials if using cookies
 app.use(cors({
-    origin: true, // reflect request origin
+    origin: true, // reflect request origin (suitable for native clients)
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: false // don't rely on cookies for native clients
+    credentials: false
   }));
 
   // Routes

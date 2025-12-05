@@ -1,6 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  TouchableOpacity 
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../App'; // Update path as needed
+import Settings from '../components/Settings';
+
+// Define the navigation prop type
+type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const GradientBar: React.FC = () => {
   return (
@@ -12,9 +25,14 @@ const GradientBar: React.FC = () => {
   );
 };
 
-const MetricTile: React.FC<{ title: string; value?: string | number; unit?: string; badge?: string }>
-= ({ title, value, unit, badge }) => {
-  return (
+const MetricTile: React.FC<{ 
+  title: string; 
+  value?: string | number; 
+  unit?: string; 
+  badge?: string;
+  onPress?: () => void;
+}> = ({ title, value, unit, badge, onPress }) => {
+  const content = (
     <View style={styles.metricTile}>
       <View style={styles.metricHeaderRow}>
         <Text style={styles.metricTitle}>{title}</Text>
@@ -30,6 +48,16 @@ const MetricTile: React.FC<{ title: string; value?: string | number; unit?: stri
       ) : null}
     </View>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+        {content}
+      </TouchableOpacity>
+    );
+  }
+
+  return content;
 };
 
 const ChoiceButton: React.FC<{ label: string; selected?: boolean; onPress?: () => void }>
@@ -44,12 +72,24 @@ const ChoiceButton: React.FC<{ label: string; selected?: boolean; onPress?: () =
 };
 
 const CardioVascularScreen: React.FC = () => {
+  const navigation = useNavigation<CardioNavigationProp>();
   const [hasSmoked, setHasSmoked] = useState<'Yes' | 'No'>('Yes');
   const [lastSmoked, setLastSmoked] = useState<'More than 5 years ago' | '1–5 years ago' | 'Within the past year' | 'I currently smoke/use'>('More than 5 years ago');
 
+  const handleBloodSugarPress = () => {
+    navigation.navigate('BloodSugar');
+  };
+
+  const handleBloodLipidsPress = () => {
+    navigation.navigate('BloodLipids');
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>Life Essential 8</Text>
+      <View style={styles.headerContainer}>
+        <Text style={styles.heading}>Life Essential 8</Text>
+        <Settings />
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.subdued}>Today</Text>
@@ -61,8 +101,23 @@ const CardioVascularScreen: React.FC = () => {
       <MetricTile title="Physical Activity" value={148} unit="min of MVPA" />
       <MetricTile title="Sleep" value={6.5} unit="hrs" />
       <MetricTile title="Blood Pressure" value={"120/80"} unit="mmHg" />
-      <MetricTile title="Blood Sugar" value={97} unit="mg/dL" badge="100 Point" />
-      <MetricTile title="Blood Lipids" value={128} unit="mg/dL" badge="100 Point" />
+      
+      {/* Updated Blood Sugar MetricTile with navigation */}
+      <MetricTile 
+        title="Blood Sugar" 
+        value={97} 
+        unit="mg/dL" 
+        badge="100 Point"
+        onPress={handleBloodSugarPress}
+      />
+      
+      <MetricTile 
+        title="Blood Lipids" 
+        value={128} 
+        unit="mg/dL" 
+        badge="100 Point" 
+        onPress={handleBloodLipidsPress}
+      />
 
       <View style={styles.metricTile}>
         <View style={styles.metricHeaderRow}>
@@ -123,11 +178,17 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#ffffff'
   },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   heading: {
     fontSize: 20,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 12
+    flex: 1,
   },
   card: {
     backgroundColor: '#ffffff',
