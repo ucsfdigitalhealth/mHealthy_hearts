@@ -45,16 +45,10 @@ export const LoginScreen: React.FC = () => {
     password: '',
   });
 
-  // Redirect to FitbitConnect if already logged in (with 1/3 probability)
+  // Redirect to FitbitConnect if already logged in
   useEffect(() => {
     if (!authLoading && user && accessToken) {
-      // Randomly decide: 1/3 chance to show FitbitConnect, 2/3 chance to go to HomeTabs
-      const shouldShowFitbitConnect = Math.random() < 1/3;
-      if (shouldShowFitbitConnect) {
-        navigation.replace('FitbitConnect');
-      } else {
-        navigation.replace('HomeTabs');
-      }
+      navigation.replace('FitbitConnect');
     }
   }, [authLoading, user, accessToken, navigation]);
 
@@ -146,13 +140,7 @@ export const LoginScreen: React.FC = () => {
         if (userInfo) {
           // Use the AuthContext to store the login data
           login(data.accessToken, userInfo);
-          // Randomly decide: 1/3 chance to show FitbitConnect, 2/3 chance to go to HomeTabs
-          const shouldShowFitbitConnect = Math.random() < 1/3;
-          if (shouldShowFitbitConnect) {
-            navigation.replace('FitbitConnect');
-          } else {
-            navigation.replace('HomeTabs');
-          }
+          navigation.replace('FitbitConnect');
         }
       } else {
         Alert.alert('Error', data.message || 'Login failed');
