@@ -46,6 +46,31 @@ const SettingsScreen: React.FC = () => {
     );
   };
 
+  const handleDisconnectFitbit = () => {
+    Alert.alert(
+      'Disconnect Fitbit',
+      'Are you sure you want to disconnect your Fitbit account?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await disconnectFitbit();
+              Alert.alert('Disconnected', 'Your Fitbit has been disconnected.');
+            } catch (err) {
+              // disconnectFitbit already prints errors to console
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -80,28 +105,7 @@ const SettingsScreen: React.FC = () => {
         {isConnected && (
           <TouchableOpacity
             style={[styles.logoutButton, styles.disconnectButton]}
-            onPress={() => {
-              Alert.alert(
-                'Disconnect Fitbit',
-                'Are you sure you want to disconnect your Fitbit account?',
-                [
-                  { text: 'Cancel', 
-                    style: 'cancel' },
-                  {
-                    text: 'Disconnect',
-                    style: 'destructive',
-                    onPress: async () => {
-                      try {
-                        await disconnectFitbit();
-                        Alert.alert('Disconnected', 'Your Fitbit has been disconnected.');
-                      } catch (err) {
-                        // disconnectFitbit already prints errors to console
-                      }
-                    },
-                  },
-                ]
-              );
-            }}
+            onPress={handleDisconnectFitbit}
             activeOpacity={0.8}
             disabled={fitbitLoading}
           >
