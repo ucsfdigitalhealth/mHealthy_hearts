@@ -276,6 +276,9 @@ export const LoginScreen: React.FC = () => {
                   onChangeText={(value) => handleInputChange('username', value)}
                   placeholder="Enter your username"
                   autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
                 />
               </View>
             )}
@@ -289,6 +292,9 @@ export const LoginScreen: React.FC = () => {
                 placeholder="Enter your email"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="off"
               />
             </View>
 
@@ -300,6 +306,9 @@ export const LoginScreen: React.FC = () => {
                 onChangeText={(value) => handleInputChange('password', value)}
                 placeholder="Enter your password"
                 secureTextEntry
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="off"
               />
             </View>
 
