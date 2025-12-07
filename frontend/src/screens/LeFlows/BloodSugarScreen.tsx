@@ -10,19 +10,29 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
 const BloodSugarFlowScreen: React.FC = () => {
+  const navigation = useNavigation();
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [fastingGlucose, setFastingGlucose] = useState<string>('100');
   const [hba1cValue, setHba1cValue] = useState<string>('5.7');
+  
+  // Map to store all user selections
+  const [selections, setSelections] = useState<Record<number, any>>({
+    1: null, // Step 1: 'Yes' or 'No'
+    2: 'Fasting Blood Glucose', // Step 2: Test type selection
+    3: '100', // Step 3: Input value
+    4: null, // Step 4: 'Yes' or 'No'
+  });
 
-  // Steps from the image
   const steps = [
     {
       id: 1,
       title: "Do you know your most recent blood sugar result?",
       type: 'choice',
-      choices: ['Yes', 'No']
+      choices: ['Yes', 'No'],
+      key: 'knowsResult'
     },
     {
       id: 2,
@@ -31,13 +41,16 @@ const BloodSugarFlowScreen: React.FC = () => {
       options: [
         {
           title: "Fasting Blood Glucose",
-          subtitle: "Usually taken after 8+ hours of fasting"
+          subtitle: "Usually taken after 8+ hours of fasting",
+          value: 'Fasting Blood Glucose'
         },
         {
           title: "HbA1c",
-          subtitle: "Average blood sugar over 2-3 months"
+          subtitle: "Average blood sugar over 2-3 months",
+          value: 'HbA1c'
         }
-      ]
+      ],
+      key: 'testType'
     },
     {
       id: 3,
@@ -46,20 +59,23 @@ const BloodSugarFlowScreen: React.FC = () => {
       unit: "mg/dL",
       value: fastingGlucose,
       onChange: setFastingGlucose,
-      placeholder: "100"
+      placeholder: "100",
+      key: 'fastingGlucose'
     },
     {
       id: 4,
       title: "Have you ever been told by a healthcare professional that you have diabetes?",
       type: 'choice',
-      choices: ['Yes', 'No']
+      choices: ['Yes', 'No'],
+      key: 'hasDiabetes'
     },
     {
       id: 5,
       title: "Blood Sugar Summary",
       subtitle: "Here's your Blood Sugar score:",
       type: 'summary',
-      score: 60
+      score: 60,
+      key: 'summary'
     }
   ];
 
@@ -72,7 +88,43 @@ const BloodSugarFlowScreen: React.FC = () => {
   const handleBack = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
+    } else {
+      navigation.goBack();
     }
+  };
+
+  const handleChoiceSelection = (stepId: number, choice: string) => {
+    setSelections(prev => ({
+      ...prev,
+      [stepId]: choice
+    }));
+    handleNext();
+  };
+
+  const handleTestTypeSelection = (stepId: number, testType: string) => {
+    setSelections(prev => ({
+      ...prev,
+      [stepId]: testType
+    }));
+  };
+
+  const handleInputChange = (stepId: number, value: string) => {
+    setSelections(prev => ({
+      ...prev,
+      [stepId]: value
+    }));
+    setFastingGlucose(value);
+  };
+
+  const handleDone = () => {
+    // Log all selections for debugging/API calls
+    console.log('All user selections:', selections);
+    
+    // Navigate back to previous screen
+    navigation.goBack();
+    
+    // You can also make an API call here with the selections
+    // makeApiCall(selections);
   };
 
   const renderStep = (step: typeof steps[0]) => {
@@ -87,11 +139,20 @@ const BloodSugarFlowScreen: React.FC = () => {
                   key={index}
                   style={[
                     styles.largeButton,
-                    index === 0 ? styles.primaryButton : styles.secondaryButton
+                    selections[step.id] === choice 
+                      ? styles.primaryButton 
+                      : styles.secondaryButton
                   ]}
-                  onPress={handleNext}
+                  onPress={() => handleChoiceSelection(step.id, choice)}
                 >
-                  <Text style={styles.largeButtonText}>{choice}</Text>
+                  <Text style={[
+                    styles.largeButtonText,
+                    selections[step.id] === choice 
+                      ? styles.primaryButtonText 
+                      : styles.secondaryButtonText
+                  ]}>
+                    {choice}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -108,16 +169,18 @@ const BloodSugarFlowScreen: React.FC = () => {
                   key={index}
                   style={[
                     styles.choiceButton,
-                    index === 0 && styles.choiceButtonSelected
+                    selections[step.id] === option.value && styles.choiceButtonSelected
                   ]}
-                  onPress={handleNext}
+                  onPress={() => {
+                    handleTestTypeSelection(step.id, option.value);
+                  }}
                 >
                   <View style={styles.choiceContent}>
                     <View style={[
                       styles.radio,
-                      index === 0 && styles.radioSelected
+                      selections[step.id] === option.value && styles.radioSelected
                     ]}>
-                      {index === 0 && <View style={styles.radioInner} />}
+                      {selections[step.id] === option.value && <View style={styles.radioInner} />}
                     </View>
                     <View style={styles.choiceTextContainer}>
                       <Text style={styles.choiceTitle}>{option.title}</Text>
@@ -129,8 +192,12 @@ const BloodSugarFlowScreen: React.FC = () => {
             </View>
             
             <TouchableOpacity 
-              style={styles.nextButton}
+              style={[
+                styles.nextButton,
+                !selections[step.id] && styles.nextButtonDisabled
+              ]}
               onPress={handleNext}
+              disabled={!selections[step.id]}
             >
               <Text style={styles.nextButtonText}>Next</Text>
             </TouchableOpacity>
@@ -144,8 +211,8 @@ const BloodSugarFlowScreen: React.FC = () => {
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.input}
-                value={step.value}
-                onChangeText={step.onChange}
+                value={selections[step.id] || ''}
+                onChangeText={(value) => handleInputChange(step.id, value)}
                 placeholder={step.placeholder}
                 keyboardType="numeric"
               />
@@ -153,8 +220,12 @@ const BloodSugarFlowScreen: React.FC = () => {
             </View>
             
             <TouchableOpacity 
-              style={styles.nextButton}
+              style={[
+                styles.nextButton,
+                !selections[step.id] && styles.nextButtonDisabled
+              ]}
               onPress={handleNext}
+              disabled={!selections[step.id]}
             >
               <Text style={styles.nextButtonText}>Next</Text>
             </TouchableOpacity>
@@ -175,21 +246,27 @@ const BloodSugarFlowScreen: React.FC = () => {
             <View style={styles.resultDetails}>
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Test Type:</Text>
-                <Text style={styles.resultValue}>Fasting Blood Glucose</Text>
+                <Text style={styles.resultValue}>
+                  {selections[2] || 'Fasting Blood Glucose'}
+                </Text>
               </View>
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Result:</Text>
-                <Text style={styles.resultValue}>100 mg/dL</Text>
+                <Text style={styles.resultValue}>
+                  {selections[3] || '100'} {selections[2] === 'HbA1c' ? '%' : 'mg/dL'}
+                </Text>
               </View>
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Diabetes Diagnosis:</Text>
-                <Text style={styles.resultValue}>No</Text>
+                <Text style={styles.resultValue}>
+                  {selections[4] || 'No'}
+                </Text>
               </View>
             </View>
             
             <TouchableOpacity 
               style={styles.submitButton}
-              onPress={handleNext}
+              onPress={handleDone}
             >
               <Text style={styles.submitButtonText}>Done</Text>
             </TouchableOpacity>
@@ -209,7 +286,9 @@ const BloodSugarFlowScreen: React.FC = () => {
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#007AFF" />
-          <Text style={styles.backText}>Back</Text>
+          <Text style={styles.backText}>
+            {currentStep === 1 ? 'Cancel' : 'Back'}
+          </Text>
         </TouchableOpacity>
         
         {/* Progress Indicators */}
@@ -357,7 +436,12 @@ const styles = StyleSheet.create({
   largeButtonText: {
     fontSize: 18,
     fontWeight: '600',
+  },
+  primaryButtonText: {
     color: '#FFFFFF',
+  },
+  secondaryButtonText: {
+    color: '#212529',
   },
   choiceGroup: {
     gap: 16,
@@ -426,6 +510,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  nextButtonDisabled: {
+    backgroundColor: '#CED4DA',
+    opacity: 0.6,
   },
   nextButtonText: {
     color: '#FFFFFF',

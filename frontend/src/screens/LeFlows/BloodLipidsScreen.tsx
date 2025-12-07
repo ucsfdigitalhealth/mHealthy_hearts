@@ -7,16 +7,22 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
 const BloodLipidsFlowScreen: React.FC = () => {
+  const navigation = useNavigation();
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [measureType, setMeasureType] = useState<string>('total-cholesterol');
-  const [totalCholesterol, setTotalCholesterol] = useState<string>('130');
-  const [nonHDLCholesterol, setNonHDLCholesterol] = useState<string>('120');
+  
+  // Map to store all user selections
+  const [selections, setSelections] = useState<Record<number, any>>({
+    1: null, // Step 1: Intro (always starts)
+    2: null, // Step 2: Measure type selection
+    3: null, // Step 3: Input value
+    4: null, // Step 4: Thank you (always ends)
+  });
 
   // Steps from the image
   const steps = [
@@ -25,7 +31,8 @@ const BloodLipidsFlowScreen: React.FC = () => {
       title: "Let's assess your blood lipids",
       type: 'intro',
       image: '🩺',
-      subtitle: "LOOP LIPIDS"
+      subtitle: "LOOP LIPIDS",
+      key: 'intro'
     },
     {
       id: 2,
@@ -35,35 +42,40 @@ const BloodLipidsFlowScreen: React.FC = () => {
         {
           id: 'total-cholesterol',
           title: "Total cholesterol",
-          subtitle: "mg/dL"
+          subtitle: "mg/dL",
+          value: 'total-cholesterol'
         },
         {
           id: 'non-hdl-cholesterol',
           title: "Non-HDL cholesterol",
-          subtitle: "mg/dL"
+          subtitle: "mg/dL",
+          value: 'non-hdl-cholesterol'
         },
         {
           id: 'no-results',
           title: "I don't have recent results",
-          subtitle: null
+          subtitle: null,
+          value: 'no-results'
         }
-      ]
+      ],
+      key: 'measureType'
     },
     {
       id: 3,
       title: "Enter your most recent total cholesterol result",
       type: 'input',
       subtitle: "mg/dL",
-      value: totalCholesterol,
-      onChange: setTotalCholesterol,
-      placeholder: "130"
+      value: selections[3] || '130',
+      placeholder: "130",
+      key: 'cholesterolValue'
     },
     {
       id: 4,
       title: "Thank you for sharing!",
       type: 'thank-you',
       subtitle: "This can lower your risk for heart disease by eating more fiber-rich foods, choosing healthy fats, and trying stress reduction techniques.",
-      image: '📊'
+      image: '📊',
+      key: 'thankYou'
     }
   ];
 
@@ -76,11 +88,17 @@ const BloodLipidsFlowScreen: React.FC = () => {
   const handleBack = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
+    } else {
+      // Navigate back to previous screen on first step
+      navigation.goBack();
     }
   };
 
   const handleMeasureSelect = (measureId: string) => {
-    setMeasureType(measureId);
+    setSelections(prev => ({
+      ...prev,
+      [2]: measureId
+    }));
     
     // If user selects "no results", skip to step 4 (thank you)
     if (measureId === 'no-results') {
@@ -88,6 +106,24 @@ const BloodLipidsFlowScreen: React.FC = () => {
     } else {
       handleNext();
     }
+  };
+
+  const handleInputChange = (value: string) => {
+    setSelections(prev => ({
+      ...prev,
+      [3]: value
+    }));
+  };
+
+  const handleDone = () => {
+    // Log all selections for debugging/API calls
+    console.log('Blood Lipids User Selections:', selections);
+    
+    // Navigate back to previous screen
+    navigation.goBack();
+    
+    // You can also make an API call here with the selections
+    // makeBloodLipidsApiCall(selections);
   };
 
   const renderStep = (step: typeof steps[0]) => {
@@ -111,6 +147,8 @@ const BloodLipidsFlowScreen: React.FC = () => {
         );
 
       case 'measure-type':
+        const selectedMeasureId = selections[2];
+        
         return (
           <View style={styles.stepContainer}>
             <Text style={styles.stepTitle}>{step.title}</Text>
@@ -121,7 +159,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
                   key={option.id}
                   style={[
                     styles.measureOption,
-                    measureType === option.id && styles.measureOptionSelected
+                    selectedMeasureId === option.id && styles.measureOptionSelected
                   ]}
                   onPress={() => handleMeasureSelect(option.id)}
                 >
@@ -129,16 +167,21 @@ const BloodLipidsFlowScreen: React.FC = () => {
                     <View style={styles.measureOptionTextContainer}>
                       <Text style={[
                         styles.measureOptionTitle,
-                        measureType === option.id && styles.measureOptionTitleSelected
+                        selectedMeasureId === option.id && styles.measureOptionTitleSelected
                       ]}>
                         {option.title}
                       </Text>
                       {option.subtitle && (
-                        <Text style={styles.measureOptionSubtitle}>{option.subtitle}</Text>
+                        <Text style={[
+                          styles.measureOptionSubtitle,
+                          selectedMeasureId === option.id && styles.measureOptionSubtitleSelected
+                        ]}>
+                          {option.subtitle}
+                        </Text>
                       )}
                     </View>
                     
-                    {measureType === option.id && (
+                    {selectedMeasureId === option.id && (
                       <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
                     )}
                   </View>
@@ -146,7 +189,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
               ))}
             </View>
             
-            {measureType !== 'no-results' && (
+            {selectedMeasureId && selectedMeasureId !== 'no-results' && (
               <TouchableOpacity 
                 style={styles.nextButton}
                 onPress={handleNext}
@@ -158,21 +201,33 @@ const BloodLipidsFlowScreen: React.FC = () => {
         );
 
       case 'input':
+        const inputValue = selections[3] || '';
+        const measureType = selections[2];
+        
+        let title = step.title;
+        let subtitle = step.subtitle;
+        
+        // Update title and subtitle based on selected measure type
+        if (measureType === 'non-hdl-cholesterol') {
+          title = "Enter your most recent non-HDL cholesterol result";
+          subtitle = "mg/dL";
+        }
+        
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>{step.title}</Text>
-            <Text style={styles.measureUnit}>{step.subtitle}</Text>
+            <Text style={styles.stepTitle}>{title}</Text>
+            <Text style={styles.measureUnit}>{subtitle}</Text>
             
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.input}
-                value={step.value}
-                onChangeText={step.onChange}
+                value={inputValue}
+                onChangeText={handleInputChange}
                 placeholder={step.placeholder}
                 keyboardType="numeric"
                 maxLength={3}
               />
-              <Text style={styles.inputUnitLabel}>{step.subtitle}</Text>
+              <Text style={styles.inputUnitLabel}>{subtitle}</Text>
             </View>
             
             <View style={styles.referenceContainer}>
@@ -198,8 +253,12 @@ const BloodLipidsFlowScreen: React.FC = () => {
             </View>
             
             <TouchableOpacity 
-              style={styles.nextButton}
+              style={[
+                styles.nextButton,
+                !inputValue && styles.nextButtonDisabled
+              ]}
               onPress={handleNext}
+              disabled={!inputValue}
             >
               <Text style={styles.nextButtonText}>Continue</Text>
             </TouchableOpacity>
@@ -221,14 +280,21 @@ const BloodLipidsFlowScreen: React.FC = () => {
               <Text style={styles.healthTipText}>
                 This can lower your risk for heart disease by eating more fiber-rich foods, choosing healthy fats, and trying stress reduction techniques.
               </Text>
+              
+              {/* Show user's selection if they provided data */}
+              {selections[2] && selections[2] !== 'no-results' && selections[3] && (
+                <View style={styles.resultSummary}>
+                  <Text style={styles.resultSummaryTitle}>Your Result:</Text>
+                  <Text style={styles.resultSummaryText}>
+                    {selections[2] === 'total-cholesterol' ? 'Total Cholesterol' : 'Non-HDL Cholesterol'}: {selections[3]} mg/dL
+                  </Text>
+                </View>
+              )}
             </View>
             
             <TouchableOpacity 
               style={styles.doneButton}
-              onPress={() => {
-                // Navigate back or to main screen
-                // navigation.goBack();
-              }}
+              onPress={handleDone}
             >
               <Text style={styles.doneButtonText}>Done</Text>
             </TouchableOpacity>
@@ -248,7 +314,9 @@ const BloodLipidsFlowScreen: React.FC = () => {
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#007AFF" />
-          <Text style={styles.backText}>Back</Text>
+          <Text style={styles.backText}>
+            {currentStep === 1 ? 'Cancel' : 'Back'}
+          </Text>
         </TouchableOpacity>
         
         {/* Progress Bar */}
@@ -418,6 +486,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6C757D',
   },
+  measureOptionSubtitleSelected: {
+    color: '#0056B3',
+  },
   nextButton: {
     backgroundColor: '#007AFF',
     borderRadius: 16,
@@ -428,6 +499,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  nextButtonDisabled: {
+    backgroundColor: '#CED4DA',
+    opacity: 0.6,
   },
   nextButtonText: {
     color: '#FFFFFF',
@@ -556,6 +631,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#495057',
     lineHeight: 24,
+    marginBottom: 16,
+  },
+  resultSummary: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  resultSummaryTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#007AFF',
+    marginBottom: 8,
+  },
+  resultSummaryText: {
+    fontSize: 16,
+    color: '#212529',
+    fontWeight: '600',
   },
   doneButton: {
     backgroundColor: '#34C759',

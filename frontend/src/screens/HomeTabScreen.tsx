@@ -5,7 +5,7 @@ import { useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import type { RootStackParamList } from '../../App';
 import TodayScreen from './TodayScreen';
-import CardioVascularScreen from './CardioVascularScreen';
+import CardioVascularScreen from './LeFlows/CardioVascularScreen';
 import ActivityScreen from './ActivityScreen';
 
 type TabType = 'today' | 'activity' | 'health';

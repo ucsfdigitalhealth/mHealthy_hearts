@@ -6,9 +6,10 @@ import { FitbitAuthProvider } from './src/context/FitbitAuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import FitbitConnectScreen from './src/screens/FitbitConnectScreen';
 import HomeTabsScreen from './src/screens/HomeTabScreen';
-import BloodSugarScreen from './src/screens/BloodSugarScreen';
-import BloodLipidsScreen from './src/screens/BloodLipidsScreen';
+import BloodSugarScreen from './src/screens/LeFlows/BloodSugarScreen';
+import BloodLipidsScreen from './src/screens/LeFlows/BloodLipidsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import BmiScreen from './src/screens/LeFlows/BmiScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -16,6 +17,7 @@ export type RootStackParamList = {
   HomeTabs: { fitbitConnectionResult?: 'success' | 'failed' } | undefined;
   BloodSugar: undefined;
   BloodLipids: undefined;
+  Bmi: undefined;
   Settings: undefined;
 };
 
@@ -37,6 +39,7 @@ export default function App() {
             <Stack.Screen name="HomeTabs" component={HomeTabsScreen} />
             <Stack.Screen name="BloodSugar" component={BloodSugarScreen} />
             <Stack.Screen name="BloodLipids" component={BloodLipidsScreen} />
+            <Stack.Screen name="Bmi" component={BmiScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
           </Stack.Navigator>
         </NavigationContainer>
