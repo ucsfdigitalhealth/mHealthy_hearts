@@ -73,6 +73,14 @@ const CardioVascularScreen: React.FC = () => {
   const handleBmiPress = () => {
     navigation.navigate('Bmi');
   };
+
+  const handleDietPress = () => {
+    navigation.navigate('Diet');
+  };
+
+  const handleSmokingPress = () => {
+    navigation.navigate('Smoking');
+  };
   
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -164,12 +172,14 @@ const CardioVascularScreen: React.FC = () => {
             title="Diet" 
             score={80} 
             badge="100"
+            onPress={handleDietPress}
           />
           
           <MetricItem 
             title="Smoking" 
             score={75} 
             badge="100"
+            onPress={handleSmokingPress}
           />
         </View>
 

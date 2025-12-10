@@ -10,6 +10,8 @@ import BloodSugarScreen from './src/screens/LeFlows/BloodSugarScreen';
 import BloodLipidsScreen from './src/screens/LeFlows/BloodLipidsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import BmiScreen from './src/screens/LeFlows/BmiScreen';
+import DietAssessmentScreen from './src/screens/LeFlows/DietAssessmentScreen';
+import SmokingAssessmentScreen from './src/screens/LeFlows/SmokingAssessmentScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -18,6 +20,8 @@ export type RootStackParamList = {
   BloodSugar: undefined;
   BloodLipids: undefined;
   Bmi: undefined;
+  Diet: undefined;
+  Smoking: undefined;
   Settings: undefined;
 };
 
@@ -41,6 +45,8 @@ export default function App() {
             <Stack.Screen name="BloodLipids" component={BloodLipidsScreen} />
             <Stack.Screen name="Bmi" component={BmiScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="Diet" component={DietAssessmentScreen} />
+            <Stack.Screen name="Smoking" component={SmokingAssessmentScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </FitbitAuthProvider>
