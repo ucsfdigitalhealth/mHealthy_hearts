@@ -12,6 +12,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import BmiScreen from './src/screens/LeFlows/BmiScreen';
 import DietAssessmentScreen from './src/screens/LeFlows/DietAssessmentScreen';
 import SmokingAssessmentScreen from './src/screens/LeFlows/SmokingAssessmentScreen';
+import SymptomAssessmentScreen from './src/screens/SymptomsScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -23,6 +24,7 @@ export type RootStackParamList = {
   Diet: undefined;
   Smoking: undefined;
   Settings: undefined;
+  Symptoms: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -47,6 +49,7 @@ export default function App() {
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="Diet" component={DietAssessmentScreen} />
             <Stack.Screen name="Smoking" component={SmokingAssessmentScreen} />
+            <Stack.Screen name="Symptoms" component={SymptomAssessmentScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </FitbitAuthProvider>

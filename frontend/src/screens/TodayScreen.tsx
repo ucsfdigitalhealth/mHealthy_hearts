@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Settings from '../components/Settings';
 import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 const TodayScreen: React.FC = () => {
   const { accessToken } = useAuth();
+  const navigation = useNavigation();
   const [steps, setSteps] = useState<string>('—');
 
   useEffect(() => {
@@ -32,6 +34,11 @@ const TodayScreen: React.FC = () => {
 
     fetchSteps();
   }, [accessToken]);
+
+  const handleSymptomCheckIn = () => {
+    // Navigate to Symptom Assessment screen
+    navigation.navigate('Symptoms');
+  };
 
   return (
     <ScrollView style={styles.container}>
@@ -99,21 +106,28 @@ const TodayScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Symptom Check-In */}
-      <View style={styles.card}>
+      {/* Symptom Check-In Card - Updated with navigation */}
+      <TouchableOpacity 
+        style={styles.card}
+        onPress={handleSymptomCheckIn}
+        activeOpacity={0.7}
+      >
         <View style={styles.cardRow}>
-          <View style={styles.iconCircle}>
+          <View style={[styles.iconCircle, styles.symptomIcon]}>
             <Ionicons name="clipboard" size={24} color="#007AFF" />
           </View>
           <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>Symptom Check-In</Text>
+            <Text style={[styles.cardTitle, styles.symptomTitle]}>Symptom Check-In</Text>
             <Text style={styles.metricSubtext}>Anything you want to report</Text>
           </View>
-          <TouchableOpacity style={styles.checkInButton}>
+          <TouchableOpacity 
+            style={styles.checkInButton}
+            onPress={handleSymptomCheckIn}
+          >
             <Text style={styles.checkInButtonText}>Check In</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
 
       {/* Today's Movement */}
       <View style={styles.card}>
@@ -214,6 +228,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  symptomIcon: {
+    backgroundColor: '#E3F2FD', // Light blue background for symptom icon
+  },
   cardContent: {
     flex: 1,
   },
@@ -222,6 +239,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000',
     marginBottom: 4,
+  },
+  symptomTitle: {
+    color: '#007AFF', // Blue color for symptom title
   },
   cardDescription: {
     fontSize: 15,
@@ -257,7 +277,7 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   checkInButton: {
-    backgroundColor: '#E5E5EA',
+    backgroundColor: '#007AFF',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -265,7 +285,7 @@ const styles = StyleSheet.create({
   checkInButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#000',
+    color: '#FFF',
   },
   workoutCard: {
     flexDirection: 'row',
