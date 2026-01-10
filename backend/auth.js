@@ -87,7 +87,7 @@ router.post('/login', async (req, res) => {
     console.log('Login - userId (case-insensitive):', userId);
     
     // Generate access token (short-lived)
-    const accessToken = jwt.sign({ userId: userId }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    const accessToken = jwt.sign({ userId: userId }, process.env.JWT_SECRET, { expiresIn: '60m' });
     console.log('Login - JWT created successfully');
     
     // Generate refresh token (long-lived)

@@ -108,6 +108,7 @@ const CardioVascularScreen: React.FC = () => {
   const [bmiScore, setBmiScore] = useState<number | null>(null);
   const [bmiValue, setBmiValue] = useState<number | null>(null);
   const [dietScore, setDietScore] = useState<number | null>(null);
+  const [smokingScore, setSmokingScore] = useState<number | null>(null);
   const [heartScore, setHeartScore] = useState<number | null>(null);
   
   // Calculate heart score as average of all LE8 scores
@@ -123,7 +124,7 @@ const CardioVascularScreen: React.FC = () => {
     if (bloodLipidScore !== null) scores.push(bloodLipidScore);
     if (bmiScore !== null) scores.push(bmiScore);
     if (dietScore !== null) scores.push(dietScore);
-    // Smoking (placeholder - will be fetched from API later)
+    if (smokingScore !== null) scores.push(smokingScore);
     
     if (scores.length > 0) {
       const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
@@ -131,7 +132,7 @@ const CardioVascularScreen: React.FC = () => {
     } else {
       setHeartScore(null);
     }
-  }, [bloodSugarScore, bloodLipidScore, bmiScore, dietScore]);
+  }, [bloodSugarScore, bloodLipidScore, bmiScore, dietScore, smokingScore]);
   
   // Recalculate heart score whenever any score changes
   useEffect(() => {
@@ -186,6 +187,8 @@ const CardioVascularScreen: React.FC = () => {
         setBmiValue(data.bmi?.value ?? null);
         // Diet
         setDietScore(data.diet?.score ?? null);
+        // Smoking
+        setSmokingScore(data.smoking?.score ?? null);
         // Heart score will be recalculated by useEffect
       } else {
         const errorText = await response.text();
@@ -198,6 +201,7 @@ const CardioVascularScreen: React.FC = () => {
         setBmiScore(null);
         setBmiValue(null);
         setDietScore(null);
+        setSmokingScore(null);
       }
     } catch (error) {
       console.error('Error fetching health scores:', error);
@@ -209,6 +213,7 @@ const CardioVascularScreen: React.FC = () => {
       setBmiScore(null);
       setBmiValue(null);
       setDietScore(null);
+      setSmokingScore(null);
     }
   }, [accessToken]);
 
@@ -340,8 +345,9 @@ const CardioVascularScreen: React.FC = () => {
           
           <MetricItem 
             title="Smoking" 
-            score={null}
-            showNotCalculated={true}
+            score={smokingScore}
+            badge={smokingScore !== null ? String(smokingScore) : undefined}
+            showNotCalculated={smokingScore === null}
             onPress={handleSmokingPress}
           />
         </View>

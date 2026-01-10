@@ -14,6 +14,8 @@ function calculateBloodSugarScore(value) {
   return 0; // >= 241
 }
 
+
+
 // Helper function to calculate BMI score
 function calculateBMIScore(bmi) {
   if (bmi < 25) return 100;
@@ -21,6 +23,42 @@ function calculateBMIScore(bmi) {
   if (bmi >= 30.0 && bmi <= 34.9) return 30;
   if (bmi >= 35.0 && bmi <= 39.9) return 15;
   return 0; // >= 40.0
+}
+
+// Helper function to calculate smoking score
+function calculateSmokingScore(smokingData) {
+  if (!smokingData) return null;
+
+  const { category, frequency, time_quit } = smokingData;
+
+  // Never smokers: score 100
+  if (category === 'never') {
+    return 100;
+  }
+
+  // Former smokers: score based on time since quitting
+  if (category === 'former') {
+    if (time_quit === '5+') {
+      return 100;
+    } else if (time_quit === '1+') {
+      return 75;
+    } else {
+      // '<1' or any other value
+      return 50;
+    }
+  }
+
+  // Current smokers: score based on frequency
+  if (category === 'current') {
+    if (frequency === 'rarely') {
+      return 25;
+    } else {
+      // 'somedays' or 'everyday' or any other value
+      return 0;
+    }
+  }
+
+  return null;
 }
 
 // Helper function to calculate diet score based on MEPA criteria
@@ -81,7 +119,7 @@ function calculateDietScore(dietData) {
 }
 
 // GET /api/health-scores
-// Gets all health scores (blood lipids, blood sugar, BMI, diet) for the authenticated user
+// Gets all health scores (blood lipids, blood sugar, BMI, diet, smoking) for the authenticated user
 router.get("/", verifyToken, async (req, res) => {
   try {
     const userId = req.user?.userId || null;
@@ -160,6 +198,19 @@ router.get("/", verifyToken, async (req, res) => {
       }
     }
 
+    // Get latest smoking assessment
+    const [smokingRows] = await db.execute(
+      "SELECT * FROM smoking_assessments WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+      [userId]
+    );
+
+    let smokingScore = null;
+    let smokingCategory = null;
+    if (smokingRows && smokingRows.length > 0) {
+      smokingCategory = smokingRows[0].category;
+      smokingScore = calculateSmokingScore(smokingRows[0]);
+    }
+
     return res.status(200).json({
       bloodLipids: {
         score: bloodLipidScore,
@@ -177,6 +228,10 @@ router.get("/", verifyToken, async (req, res) => {
       diet: {
         score: dietScore,
         mepaScore: dietMepaScore, // Raw MEPA score (0-10)
+      },
+      smoking: {
+        score: smokingScore,
+        category: smokingCategory,
       },
     });
   } catch (error) {

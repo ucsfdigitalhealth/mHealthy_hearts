@@ -13,6 +13,7 @@ import bloodLipids from "./routes/bloodLipids.js";
 import bloodSugar from "./routes/bloodSugar.js";
 import bmi from "./routes/bmi.js";
 import diet from "./routes/diet.js";
+import smoking from "./routes/smoking.js";
 import healthScores from "./routes/healthScores.js";
 
 const app = express();
@@ -34,6 +35,7 @@ app.use('/api/blood-lipids', bloodLipids.router);
 app.use('/api/blood-sugar', bloodSugar.router);
 app.use('/api/bmi', bmi.router);
 app.use('/api/diet', diet.router);
+app.use('/api/smoking', smoking.router);
 app.use('/api/health-scores', healthScores.router);
 
 const PORT = process.env.PORT || 3000;

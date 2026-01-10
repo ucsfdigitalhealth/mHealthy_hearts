@@ -67,7 +67,8 @@ A health tracking application with user authentication and cardiovascular health
 - `POST /api/blood-sugar` - Store blood sugar assessment data (requires JWT)
 - `POST /api/bmi` - Store BMI assessment data (requires JWT)
 - `POST /api/diet` - Store diet assessment data (requires JWT)
-- `GET /api/health-scores` - Get all health scores (blood lipids, blood sugar, BMI, diet) for authenticated user (requires JWT)
+- `POST /api/smoking` - Store smoking assessment data (requires JWT)
+- `GET /api/health-scores` - Get all health scores (blood lipids, blood sugar, BMI, diet, smoking) for authenticated user (requires JWT)
 
 ### Request/Response Examples
 
@@ -219,6 +220,24 @@ CREATE TABLE diet_assessments (
   FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
   INDEX idx_user_id (user_id),
   INDEX idx_created_at (created_at)
+);
+```
+
+Create the `smoking_assessments` table:
+```sql
+CREATE TABLE smoking_assessments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id VARCHAR(36) NULL,
+  category VARCHAR(20) NOT NULL,
+  frequency VARCHAR(20) NULL,
+  time_quit VARCHAR(20) NULL,
+  interest_in_quitting VARCHAR(20) NULL,
+  score INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
+  INDEX idx_user_id (user_id),
+  INDEX idx_created_at (created_at),
+  INDEX idx_category (category)
 );
 ```
 

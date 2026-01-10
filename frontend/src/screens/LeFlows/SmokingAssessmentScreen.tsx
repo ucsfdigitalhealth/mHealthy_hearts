@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 
 type Question = {
   id: number;
@@ -92,6 +93,7 @@ type ScoreResult = {
 
 const SmokingAssessmentScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { accessToken } = useAuth();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<{ [key: number]: string | number }>({});
   const [selectedOption, setSelectedOption] = useState<string | number | null>(null);
@@ -222,7 +224,35 @@ const SmokingAssessmentScreen: React.FC = () => {
     }
   };
 
-  const handleDone = () => {
+  const handleDone = async () => {
+    try {
+      // Map userPath and answers to the data format expected by the API
+      const category = userPath; // 'current', 'former', or 'never'
+      const frequency = userPath === 'current' ? (answers[3] as string) || null : null;
+      const timeQuit = userPath === 'former' ? (answers[6] as string) || null : null;
+      const interestInQuitting = userPath === 'current' ? (answers[4] as string) || null : null;
+
+      // Only send to API if we have a category
+      if (category) {
+        await fetch('http://localhost:3000/api/smoking', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({
+            category,
+            frequency,
+            timeQuit,
+            interestInQuitting,
+          }),
+        });
+      }
+    } catch (error) {
+      console.error('Error saving smoking assessment:', error);
+    }
+
+    // Navigate back to previous screen
     navigation.goBack();
   };
 
