@@ -18,15 +18,45 @@ import { useAuth } from '../../context/AuthContext';
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
+// Helper function to get status based on score
+const getStatusFromScore = (score: number | null): string | null => {
+  if (score === null) return null;
+  if (score >= 75) return 'Excellent';
+  if (score >= 50) return 'Good';
+  if (score >= 25) return 'Fair';
+  return 'Poor';
+};
+
+// Helper function to get status color
+const getStatusColor = (status: string | null): string => {
+  if (!status) return '#6B7280';
+  switch (status) {
+    case 'Excellent':
+      return '#059669';
+    case 'Good':
+      return '#3B82F6';
+    case 'Fair':
+      return '#F59E0B';
+    case 'Poor':
+      return '#DC2626';
+    default:
+      return '#6B7280';
+  }
+};
+
 const MetricItem: React.FC<{
   title: string;
-  score: number;
+  score: number | null;
   unit?: string;
   badge?: string;
   onPress?: () => void;
   status?: string;
   isFirstInSection?: boolean;
-}> = ({ title, score, unit, badge, onPress, status, isFirstInSection }) => {
+  showNotCalculated?: boolean;
+}> = ({ title, score, unit, badge, onPress, status, isFirstInSection, showNotCalculated }) => {
+  const calculatedStatus = status || getStatusFromScore(score !== null && score !== undefined ? score : null);
+  const statusColor = getStatusColor(calculatedStatus || null);
+  
   const content = (
     <View style={[styles.metricItem, isFirstInSection && styles.firstMetricItem]}>
       <View style={styles.metricHeader}>
@@ -38,10 +68,18 @@ const MetricItem: React.FC<{
         )}
       </View>
       <View style={styles.metricContent}>
-        <Text style={styles.metricValue}>{score}</Text>
-        {unit && <Text style={styles.metricUnit}> {unit}</Text>}
-        {status && (
-          <Text style={styles.metricStatus}>{status}</Text>
+        {score !== null && score !== undefined ? (
+          <>
+            <Text style={styles.metricValue}>{score}</Text>
+            {unit && <Text style={styles.metricUnit}> {unit}</Text>}
+          </>
+        ) : (
+          showNotCalculated && (
+            <Text style={styles.notCalculatedText}>Calculate your score</Text>
+          )
+        )}
+        {calculatedStatus && (
+          <Text style={[styles.metricStatus, { color: statusColor }]}>{calculatedStatus}</Text>
         )}
       </View>
     </View>
@@ -70,6 +108,35 @@ const CardioVascularScreen: React.FC = () => {
   const [bmiScore, setBmiScore] = useState<number | null>(null);
   const [bmiValue, setBmiValue] = useState<number | null>(null);
   const [dietScore, setDietScore] = useState<number | null>(null);
+  const [heartScore, setHeartScore] = useState<number | null>(null);
+  
+  // Calculate heart score as average of all LE8 scores
+  const calculateHeartScore = useCallback(() => {
+    const scores: number[] = [];
+    
+    // Physical Activity (placeholder - will be fetched from API later)
+    // Sleep (placeholder - will be fetched from API later)
+    // Blood Pressure (placeholder - will be fetched from API later)
+    
+    // Add scores that we have
+    if (bloodSugarScore !== null) scores.push(bloodSugarScore);
+    if (bloodLipidScore !== null) scores.push(bloodLipidScore);
+    if (bmiScore !== null) scores.push(bmiScore);
+    if (dietScore !== null) scores.push(dietScore);
+    // Smoking (placeholder - will be fetched from API later)
+    
+    if (scores.length > 0) {
+      const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+      setHeartScore(Math.round(average));
+    } else {
+      setHeartScore(null);
+    }
+  }, [bloodSugarScore, bloodLipidScore, bmiScore, dietScore]);
+  
+  // Recalculate heart score whenever any score changes
+  useEffect(() => {
+    calculateHeartScore();
+  }, [calculateHeartScore]);
 
   const handleBloodSugarPress = () => {
     navigation.navigate('BloodSugar');
@@ -119,6 +186,7 @@ const CardioVascularScreen: React.FC = () => {
         setBmiValue(data.bmi?.value ?? null);
         // Diet
         setDietScore(data.diet?.score ?? null);
+        // Heart score will be recalculated by useEffect
       } else {
         const errorText = await response.text();
         console.error('Error fetching health scores:', response.status, errorText);
@@ -174,11 +242,34 @@ const CardioVascularScreen: React.FC = () => {
           <Text style={styles.heartScoreLabel}>Heart Score</Text>
           <View style={styles.heartScoreMain}>
             <View style={styles.heartScoreCircle}>
-              <Text style={styles.heartScoreNumber}>82</Text>
+              <Text style={styles.heartScoreNumber}>
+                {heartScore !== null ? heartScore : '—'}
+              </Text>
             </View>
-            <View style={styles.heartScoreStatus}>
-              <Text style={styles.heartScoreStatusText}>Ideal</Text>
-            </View>
+            {heartScore !== null ? (
+              (() => {
+                const status = getStatusFromScore(heartScore);
+                const statusColor = getStatusColor(status);
+                let bgColor = '#D1FAE5';
+                if (status === 'Good') bgColor = '#DBEAFE';
+                else if (status === 'Fair') bgColor = '#FEF3C7';
+                else if (status === 'Poor') bgColor = '#FEE2E2';
+                
+                return (
+                  <View style={[styles.heartScoreStatus, { backgroundColor: bgColor }]}>
+                    <Text style={[styles.heartScoreStatusText, { color: statusColor }]}>
+                      {status}
+                    </Text>
+                  </View>
+                );
+              })()
+            ) : (
+              <View style={[styles.heartScoreStatus, { backgroundColor: '#F3F4F6' }]}>
+                <Text style={[styles.heartScoreStatusText, { color: '#6B7280' }]}>
+                  Calculate your score
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -189,65 +280,68 @@ const CardioVascularScreen: React.FC = () => {
         <View style={styles.metricsList}>
           <MetricItem 
             title="Physical Activity" 
-            score={90} 
+            score={null}
             unit="min"
-            badge="100"
-            status="Excellent"
+            showNotCalculated={true}
             isFirstInSection={true}
+            onPress={handleBloodSugarPress}
           />
           
           <MetricItem 
             title="Sleep" 
-            score={70} 
+            score={null}
             unit="hrs"
-            badge="100"
-            status="Good"
+            showNotCalculated={true}
+            onPress={handleBloodSugarPress}
           />
           
           <MetricItem 
             title="Blood Pressure" 
-            score={75} 
+            score={null}
             unit="mmHg"
-            badge="100"
-            status="Good"
+            showNotCalculated={true}
+            onPress={handleBloodSugarPress}
           />
           
           <MetricItem 
             title="Blood Sugar" 
-            score={bloodSugarValue !== null ? bloodSugarValue : 0} 
+            score={bloodSugarValue !== null ? bloodSugarValue : null} 
             unit="mg/dL"
             badge={bloodSugarScore !== null ? String(bloodSugarScore) : undefined}
-            status={bloodSugarScore !== null ? (bloodSugarScore >= 80 ? 'Excellent' : bloodSugarScore >= 50 ? 'Good' : 'Fair') : undefined}
+            showNotCalculated={bloodSugarScore === null}
             onPress={handleBloodSugarPress}
           />
           
           <MetricItem 
             title="Blood Lipids" 
-            score={bloodLipidValue !== null ? bloodLipidValue : 0} 
+            score={bloodLipidValue !== null ? bloodLipidValue : null} 
             unit="mg/dL"
             badge={bloodLipidScore !== null ? String(bloodLipidScore) : undefined}
+            showNotCalculated={bloodLipidScore === null}
             onPress={handleBloodLipidsPress}
           />
           
           <MetricItem 
             title="Body Mass Index" 
-            score={bmiValue !== null ? Math.round(bmiValue * 10) / 10 : 0} 
+            score={bmiValue !== null ? Math.round(bmiValue * 10) / 10 : null} 
             unit="BMI"
             badge={bmiScore !== null ? String(bmiScore) : undefined}
+            showNotCalculated={bmiScore === null}
             onPress={handleBmiPress}
           />
           
           <MetricItem 
             title="Diet" 
-            score={dietScore !== null ? dietScore : 0} 
+            score={dietScore}
             badge={dietScore !== null ? String(dietScore) : undefined}
+            showNotCalculated={dietScore === null}
             onPress={handleDietPress}
           />
           
           <MetricItem 
             title="Smoking" 
-            score={75} 
-            badge="100"
+            score={null}
+            showNotCalculated={true}
             onPress={handleSmokingPress}
           />
         </View>
@@ -400,7 +494,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   heartScoreStatus: {
-    backgroundColor: '#D1FAE5',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
@@ -408,7 +501,6 @@ const styles = StyleSheet.create({
   heartScoreStatusText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#059669',
   },
   metricsList: {
     marginBottom: 24,
@@ -455,8 +547,12 @@ const styles = StyleSheet.create({
   metricStatus: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#059669',
     textTransform: 'uppercase',
+  },
+  notCalculatedText: {
+    fontSize: 16,
+    color: '#6B7280',
+    fontStyle: 'italic',
   },
   badge: {
     backgroundColor: '#059669',
