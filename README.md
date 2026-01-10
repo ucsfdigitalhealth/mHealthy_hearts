@@ -62,6 +62,9 @@ A health tracking application with user authentication and cardiovascular health
 - `GET /api/omronCallback` - Omron OAuth callback (exchanges code for tokens)
 - `GET /fetchdata` - Fetch data endpoint (temporary endpoint for testing)
 
+### Blood Lipids Assessment
+- `POST /api/blood-lipids` - Store blood lipids assessment data (requires JWT)
+
 ### Request/Response Examples
 
 **Register:**
@@ -150,8 +153,20 @@ CREATE TABLE user_goals (
 
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
 ```
+
+Create the `blood_lipids_assessments` table:
+```sql
+CREATE TABLE blood_lipids_assessments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id VARCHAR(36) NULL,
+  measure_type VARCHAR(64) NOT NULL,
+  value DECIMAL(10,2) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE
+);
+```
+
 
 ## Fitbit Integration Details
 

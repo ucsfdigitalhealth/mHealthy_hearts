@@ -11,9 +11,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 
 const BloodLipidsFlowScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { accessToken } = useAuth();
   const [currentStep, setCurrentStep] = useState<number>(1);
   
   // Map to store all user selections
@@ -115,15 +117,41 @@ const BloodLipidsFlowScreen: React.FC = () => {
     }));
   };
 
-  const handleDone = () => {
+  const handleDone = async () => {
     // Log all selections for debugging/API calls
     console.log('Blood Lipids User Selections:', selections);
-    
+
+    try {
+      const measureType = selections[2]; // 'total-cholesterol' | 'non-hdl-cholesterol' | 'no-results' | null
+      const value = selections[3];       // numeric string or null
+
+      // Only send to API if user completed measure selection
+      if (measureType) {
+        const payload: {
+          measureType: string;
+          value?: string;
+        } = { measureType };
+
+        // Don't send value if user chose "no results"
+        if (measureType !== 'no-results' && value) {
+          payload.value = String(value);
+        }
+
+        await fetch('http://localhost:3000/api/blood-lipids', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        });
+      }
+    } catch (error) {
+      console.error('Error saving blood lipids selection:', error);
+    }
+
     // Navigate back to previous screen
     navigation.goBack();
-    
-    // You can also make an API call here with the selections
-    // makeBloodLipidsApiCall(selections);
   };
 
   const renderStep = (step: typeof steps[0]) => {

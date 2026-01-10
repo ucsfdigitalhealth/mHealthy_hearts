@@ -9,6 +9,7 @@ import { router as authRoutes } from "./auth.js";
 import omronAuth from "./routes/omron/omronAuth.js";
 import omronCallback from "./routes/omron/omronCallback.js";
 import fitbitRoutes from "./fitbit.js";
+import bloodLipids from "./routes/bloodLipids.js";
 
 const app = express();
 
@@ -20,11 +21,12 @@ app.use(cors({
     credentials: false                
   }));
 
-  // Routes
+// Routes
 app.use('/api/auth', authRoutes);
 app.use("/api/omronAuth", omronAuth.router);
 app.use("/api/omronCallback", omronCallback.router);
 app.use('/api/fitbitAuth', fitbitRoutes);
+app.use('/api/blood-lipids', bloodLipids.router);
 
 const PORT = process.env.PORT || 3000;
 

@@ -37,7 +37,7 @@ const TodayScreen: React.FC = () => {
 
   const handleSymptomCheckIn = () => {
     // Navigate to Symptom Assessment screen
-    navigation.navigate('Symptoms');
+    navigation.navigate('Symptoms' as never);
   };
 
   return (

@@ -1,5 +1,5 @@
 // CardioVascularScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -8,11 +8,12 @@ import {
   TouchableOpacity,
   SafeAreaView
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App'; // Update path as needed
 import Settings from '../../components/Settings';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useAuth } from '../../context/AuthContext';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -59,8 +60,11 @@ const MetricItem: React.FC<{
 
 const CardioVascularScreen: React.FC = () => {
   const navigation = useNavigation<CardioNavigationProp>();
+  const { accessToken } = useAuth();
   const [hasSmoked, setHasSmoked] = useState<'Yes' | 'No'>('Yes');
   const [lastSmoked, setLastSmoked] = useState<'More than 5 years ago' | '1–5 years ago' | 'Within the past year' | 'I currently smoke/use'>('More than 5 years ago');
+  const [bloodLipidScore, setBloodLipidScore] = useState<number | null>(null);
+  const [bloodLipidValue, setBloodLipidValue] = useState<number | null>(null);
 
   const handleBloodSugarPress = () => {
     navigation.navigate('BloodSugar');
@@ -81,6 +85,47 @@ const CardioVascularScreen: React.FC = () => {
   const handleSmokingPress = () => {
     navigation.navigate('Smoking');
   };
+
+  // Fetch blood lipid score function
+  const fetchBloodLipidScore = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:3000/api/blood-lipids/score', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBloodLipidScore(data.score);
+        setBloodLipidValue(data.value);
+      } else {
+        const errorText = await response.text();
+        console.error('Error fetching blood lipid score:', response.status, errorText);
+        // Reset values on error
+        setBloodLipidScore(null);
+        setBloodLipidValue(null);
+      }
+    } catch (error) {
+      console.error('Error fetching blood lipid score:', error);
+      // Reset values on error
+      setBloodLipidScore(null);
+      setBloodLipidValue(null);
+    }
+  }, [accessToken]);
+
+  // Fetch blood lipid score on mount and when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchBloodLipidScore();
+    }, [fetchBloodLipidScore])
+  );
   
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -154,9 +199,9 @@ const CardioVascularScreen: React.FC = () => {
           
           <MetricItem 
             title="Blood Lipids" 
-            score={60} 
+            score={bloodLipidValue !== null ? bloodLipidValue : 0} 
             unit="mg/dL"
-            badge="100"
+            badge={bloodLipidScore !== null ? String(bloodLipidScore) : undefined}
             onPress={handleBloodLipidsPress}
           />
           
