@@ -10,6 +10,10 @@ import omronAuth from "./routes/omron/omronAuth.js";
 import omronCallback from "./routes/omron/omronCallback.js";
 import fitbitRoutes from "./fitbit.js";
 import bloodLipids from "./routes/bloodLipids.js";
+import bloodSugar from "./routes/bloodSugar.js";
+import bmi from "./routes/bmi.js";
+import diet from "./routes/diet.js";
+import healthScores from "./routes/healthScores.js";
 
 const app = express();
 
@@ -27,6 +31,10 @@ app.use("/api/omronAuth", omronAuth.router);
 app.use("/api/omronCallback", omronCallback.router);
 app.use('/api/fitbitAuth', fitbitRoutes);
 app.use('/api/blood-lipids', bloodLipids.router);
+app.use('/api/blood-sugar', bloodSugar.router);
+app.use('/api/bmi', bmi.router);
+app.use('/api/diet', diet.router);
+app.use('/api/health-scores', healthScores.router);
 
 const PORT = process.env.PORT || 3000;
 

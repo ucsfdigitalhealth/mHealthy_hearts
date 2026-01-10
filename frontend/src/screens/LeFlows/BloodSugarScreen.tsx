@@ -11,9 +11,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 
 const BloodSugarFlowScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { accessToken } = useAuth();
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [fastingGlucose, setFastingGlucose] = useState<string>('100');
   const [hba1cValue, setHba1cValue] = useState<string>('5.7');
@@ -116,15 +118,34 @@ const BloodSugarFlowScreen: React.FC = () => {
     setFastingGlucose(value);
   };
 
-  const handleDone = () => {
+  const handleDone = async () => {
     // Log all selections for debugging/API calls
-    console.log('All user selections:', selections);
-    
+    console.log('Blood Sugar User Selections:', selections);
+
+    try {
+      const testType = selections[2]; // 'Fasting Blood Glucose' or 'HbA1c'
+      const value = selections[3]; // numeric string or null
+
+      // Only send to API if user completed the assessment
+      if (testType && value) {
+        await fetch('http://localhost:3000/api/blood-sugar', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({
+            testType,
+            value: String(value),
+          }),
+        });
+      }
+    } catch (error) {
+      console.error('Error saving blood sugar assessment:', error);
+    }
+
     // Navigate back to previous screen
     navigation.goBack();
-    
-    // You can also make an API call here with the selections
-    // makeApiCall(selections);
   };
 
   const renderStep = (step: typeof steps[0]) => {

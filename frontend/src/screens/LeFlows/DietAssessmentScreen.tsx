@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 
 type Question = {
   id: number;
@@ -156,6 +157,7 @@ const questions: Question[] = [
 
 const DietAssessmentScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { accessToken } = useAuth();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<{ [key: number]: number }>({});
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -216,7 +218,38 @@ const DietAssessmentScreen: React.FC = () => {
     return Math.round(score);
   };
 
-  const handleDone = () => {
+  const handleDone = async () => {
+    // Map question IDs to API fields based on user requirements
+    // Question mapping: 
+    // id 1 = whole_grains_per_day, id 2 = vegetables_per_day, id 3 = fruit_per_day,
+    // id 4 = beans_per_week (nuts/legumes), id 5 = fish_per_week, id 6 = butter_per_week,
+    // id 7 = sweets_per_week (currently refined grains - mapping to sweets),
+    // id 8 = fast_food_per_week, id 9 = red_meat_per_week, id 10 = sugary_drinks_per_week
+    
+    try {
+      await fetch('http://localhost:3000/api/diet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({
+          wholeGrainsPerDay: answers[1] ?? null,
+          vegetablesPerDay: answers[2] ?? null,
+          fruitPerDay: answers[3] ?? null,
+          beansPerWeek: answers[4] ?? null, // nuts/legumes
+          fishPerWeek: answers[5] ?? null,
+          butterPerWeek: answers[6] ? answers[6] * 7 : null, // Convert per day to per week
+          sweetsPerWeek: answers[7] ?? null, // Note: question is about refined grains, mapping to sweets
+          fastFoodPerWeek: answers[8] ?? null,
+          redMeatPerWeek: answers[9] ?? null,
+          sugaryDrinksPerWeek: answers[10] ?? null,
+        }),
+      });
+    } catch (error) {
+      console.error('Error saving diet assessment:', error);
+    }
+
     navigation.goBack();
   };
 

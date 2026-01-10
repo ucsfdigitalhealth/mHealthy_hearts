@@ -62,8 +62,12 @@ A health tracking application with user authentication and cardiovascular health
 - `GET /api/omronCallback` - Omron OAuth callback (exchanges code for tokens)
 - `GET /fetchdata` - Fetch data endpoint (temporary endpoint for testing)
 
-### Blood Lipids Assessment
+### Health Assessments
 - `POST /api/blood-lipids` - Store blood lipids assessment data (requires JWT)
+- `POST /api/blood-sugar` - Store blood sugar assessment data (requires JWT)
+- `POST /api/bmi` - Store BMI assessment data (requires JWT)
+- `POST /api/diet` - Store diet assessment data (requires JWT)
+- `GET /api/health-scores` - Get all health scores (blood lipids, blood sugar, BMI, diet) for authenticated user (requires JWT)
 
 ### Request/Response Examples
 
@@ -164,6 +168,57 @@ CREATE TABLE blood_lipids_assessments (
   value DECIMAL(10,2) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE
+);
+```
+
+Create the `blood_sugar_assessments` table:
+```sql
+CREATE TABLE blood_sugar_assessments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id VARCHAR(36) NULL,
+  test_type VARCHAR(64) NOT NULL,
+  value DECIMAL(10,2) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
+  INDEX idx_user_id (user_id),
+  INDEX idx_created_at (created_at)
+);
+```
+
+Create the `bmi_assessments` table:
+```sql
+CREATE TABLE bmi_assessments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id VARCHAR(36) NULL,
+  bmi_value DECIMAL(5,2) NOT NULL,
+  weight DECIMAL(6,2) NULL,
+  height DECIMAL(5,2) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
+  INDEX idx_user_id (user_id),
+  INDEX idx_created_at (created_at)
+);
+```
+
+Create the `diet_assessments` table:
+```sql
+CREATE TABLE diet_assessments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id VARCHAR(36) NULL,
+  vegetables_per_day DECIMAL(4,2) NULL,
+  fruit_per_day DECIMAL(4,2) NULL,
+  red_meat_per_week DECIMAL(4,2) NULL,
+  fish_per_week DECIMAL(4,2) NULL,
+  butter_per_week DECIMAL(4,2) NULL,
+  beans_per_week DECIMAL(4,2) NULL,
+  whole_grains_per_day DECIMAL(4,2) NULL,
+  sweets_per_week DECIMAL(4,2) NULL,
+  fast_food_per_week DECIMAL(4,2) NULL,
+  sugary_drinks_per_week DECIMAL(4,2) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
+  INDEX idx_user_id (user_id),
+  INDEX idx_created_at (created_at)
 );
 ```
 

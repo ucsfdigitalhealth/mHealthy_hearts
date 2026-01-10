@@ -12,11 +12,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
 const BMIFlowScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { accessToken } = useAuth();
   const [currentStep, setCurrentStep] = useState<number>(1);
   
   // Map to store all user selections
@@ -155,16 +157,38 @@ const BMIFlowScreen: React.FC = () => {
     }));
   };
 
-  const handleDone = () => {
+  const handleDone = async () => {
     // Log all selections for debugging/API calls
     console.log('BMI User Selections:', selections);
     console.log('Calculated BMI:', calculatedBMI);
-    
+
+    try {
+      // Use calculated BMI if available, otherwise use the direct input
+      const bmiValue = calculatedBMI || selections[3];
+      const weight = selections[4]?.weight;
+      const height = selections[4]?.height;
+
+      // Only send to API if we have a BMI value
+      if (bmiValue) {
+        await fetch('http://localhost:3000/api/bmi', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({
+            bmiValue: String(bmiValue),
+            weight: weight ? String(weight) : null,
+            height: height ? String(height) : null,
+          }),
+        });
+      }
+    } catch (error) {
+      console.error('Error saving BMI assessment:', error);
+    }
+
     // Navigate back to previous screen
     navigation.goBack();
-    
-    // You can also make an API call here with the selections
-    // makeBMIApiCall(selections);
   };
 
   const renderStep = (step: typeof steps[0]) => {

@@ -65,6 +65,11 @@ const CardioVascularScreen: React.FC = () => {
   const [lastSmoked, setLastSmoked] = useState<'More than 5 years ago' | '1–5 years ago' | 'Within the past year' | 'I currently smoke/use'>('More than 5 years ago');
   const [bloodLipidScore, setBloodLipidScore] = useState<number | null>(null);
   const [bloodLipidValue, setBloodLipidValue] = useState<number | null>(null);
+  const [bloodSugarScore, setBloodSugarScore] = useState<number | null>(null);
+  const [bloodSugarValue, setBloodSugarValue] = useState<number | null>(null);
+  const [bmiScore, setBmiScore] = useState<number | null>(null);
+  const [bmiValue, setBmiValue] = useState<number | null>(null);
+  const [dietScore, setDietScore] = useState<number | null>(null);
 
   const handleBloodSugarPress = () => {
     navigation.navigate('BloodSugar');
@@ -86,14 +91,14 @@ const CardioVascularScreen: React.FC = () => {
     navigation.navigate('Smoking');
   };
 
-  // Fetch blood lipid score function
-  const fetchBloodLipidScore = useCallback(async () => {
+  // Fetch all health scores function
+  const fetchAllHealthScores = useCallback(async () => {
     if (!accessToken) {
       return;
     }
 
     try {
-      const response = await fetch('http://localhost:3000/api/blood-lipids/score', {
+      const response = await fetch('http://localhost:3000/api/health-scores', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -103,28 +108,47 @@ const CardioVascularScreen: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setBloodLipidScore(data.score);
-        setBloodLipidValue(data.value);
+        // Blood Lipids
+        setBloodLipidScore(data.bloodLipids?.score ?? null);
+        setBloodLipidValue(data.bloodLipids?.value ?? null);
+        // Blood Sugar
+        setBloodSugarScore(data.bloodSugar?.score ?? null);
+        setBloodSugarValue(data.bloodSugar?.value ?? null);
+        // BMI
+        setBmiScore(data.bmi?.score ?? null);
+        setBmiValue(data.bmi?.value ?? null);
+        // Diet
+        setDietScore(data.diet?.score ?? null);
       } else {
         const errorText = await response.text();
-        console.error('Error fetching blood lipid score:', response.status, errorText);
-        // Reset values on error
+        console.error('Error fetching health scores:', response.status, errorText);
+        // Reset all values on error
         setBloodLipidScore(null);
         setBloodLipidValue(null);
+        setBloodSugarScore(null);
+        setBloodSugarValue(null);
+        setBmiScore(null);
+        setBmiValue(null);
+        setDietScore(null);
       }
     } catch (error) {
-      console.error('Error fetching blood lipid score:', error);
-      // Reset values on error
+      console.error('Error fetching health scores:', error);
+      // Reset all values on error
       setBloodLipidScore(null);
       setBloodLipidValue(null);
+      setBloodSugarScore(null);
+      setBloodSugarValue(null);
+      setBmiScore(null);
+      setBmiValue(null);
+      setDietScore(null);
     }
   }, [accessToken]);
 
-  // Fetch blood lipid score on mount and when screen comes into focus
+  // Fetch all health scores on mount and when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      fetchBloodLipidScore();
-    }, [fetchBloodLipidScore])
+      fetchAllHealthScores();
+    }, [fetchAllHealthScores])
   );
   
   return (
@@ -190,10 +214,10 @@ const CardioVascularScreen: React.FC = () => {
           
           <MetricItem 
             title="Blood Sugar" 
-            score={60} 
+            score={bloodSugarValue !== null ? bloodSugarValue : 0} 
             unit="mg/dL"
-            badge="100"
-            status="Fair"
+            badge={bloodSugarScore !== null ? String(bloodSugarScore) : undefined}
+            status={bloodSugarScore !== null ? (bloodSugarScore >= 80 ? 'Excellent' : bloodSugarScore >= 50 ? 'Good' : 'Fair') : undefined}
             onPress={handleBloodSugarPress}
           />
           
@@ -207,16 +231,16 @@ const CardioVascularScreen: React.FC = () => {
           
           <MetricItem 
             title="Body Mass Index" 
-            score={70} 
+            score={bmiValue !== null ? Math.round(bmiValue * 10) / 10 : 0} 
             unit="BMI"
-            badge="100"
+            badge={bmiScore !== null ? String(bmiScore) : undefined}
             onPress={handleBmiPress}
           />
           
           <MetricItem 
             title="Diet" 
-            score={80} 
-            badge="100"
+            score={dietScore !== null ? dietScore : 0} 
+            badge={dietScore !== null ? String(dietScore) : undefined}
             onPress={handleDietPress}
           />
           
