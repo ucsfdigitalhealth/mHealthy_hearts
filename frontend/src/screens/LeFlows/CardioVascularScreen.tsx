@@ -109,17 +109,43 @@ const CardioVascularScreen: React.FC = () => {
   const [bmiValue, setBmiValue] = useState<number | null>(null);
   const [dietScore, setDietScore] = useState<number | null>(null);
   const [smokingScore, setSmokingScore] = useState<number | null>(null);
+  const [physicalActivityScore, setPhysicalActivityScore] = useState<number>(0);
+  const [physicalActivityValue, setPhysicalActivityValue] = useState<number>(0);
+  const [sleepScore, setSleepScore] = useState<number>(0);
+  const [sleepValue, setSleepValue] = useState<number>(0);
   const [heartScore, setHeartScore] = useState<number | null>(null);
+  
+  // Helper function to calculate physical activity score
+  const calculatePhysicalActivityScore = (totalMinutes: number): number => {
+    if (totalMinutes >= 150) return 100;
+    if (totalMinutes >= 120) return 90;
+    if (totalMinutes >= 90) return 80;
+    if (totalMinutes >= 60) return 60;
+    if (totalMinutes >= 30) return 40;
+    if (totalMinutes >= 1) return 20;
+    return 0;
+  };
+
+  // Helper function to calculate sleep score
+  const calculateSleepScore = (avgHours: number): number => {
+    if (avgHours >= 7 && avgHours < 9) return 100;
+    if (avgHours >= 9 && avgHours < 10) return 90;
+    if (avgHours >= 6 && avgHours < 7) return 70;
+    if ((avgHours >= 5 && avgHours < 6) || avgHours >= 10) return 40;
+    if (avgHours >= 4 && avgHours < 5) return 20;
+    return 0;
+  };
   
   // Calculate heart score as average of all LE8 scores
   const calculateHeartScore = useCallback(() => {
     const scores: number[] = [];
     
-    // Physical Activity (placeholder - will be fetched from API later)
-    // Sleep (placeholder - will be fetched from API later)
-    // Blood Pressure (placeholder - will be fetched from API later)
+    // Always add Physical Activity and Sleep scores (they default to 0)
+    scores.push(physicalActivityScore);
+    scores.push(sleepScore);
     
-    // Add scores that we have
+    // Add other scores if available
+    // Blood Pressure (placeholder - will be fetched from API later)
     if (bloodSugarScore !== null) scores.push(bloodSugarScore);
     if (bloodLipidScore !== null) scores.push(bloodLipidScore);
     if (bmiScore !== null) scores.push(bmiScore);
@@ -132,7 +158,7 @@ const CardioVascularScreen: React.FC = () => {
     } else {
       setHeartScore(null);
     }
-  }, [bloodSugarScore, bloodLipidScore, bmiScore, dietScore, smokingScore]);
+  }, [bloodSugarScore, bloodLipidScore, bmiScore, dietScore, smokingScore, physicalActivityScore, sleepScore]);
   
   // Recalculate heart score whenever any score changes
   useEffect(() => {
@@ -158,6 +184,71 @@ const CardioVascularScreen: React.FC = () => {
   const handleSmokingPress = () => {
     navigation.navigate('Smoking');
   };
+
+  // Fetch Fitbit activity and sleep data
+  const fetchFitbitData = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:3000/api/fitbitAuth/fitbit/activitySummary', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+          // Calculate total minutes of fairly+ intensity activity per week
+          const totalFairlyActiveMinutes = data.data.reduce((sum: number, day: any) => {
+            const fairlyActive = parseInt(day.minutesFairlyActive || '0', 10);
+            const veryActive = parseInt(day.minutesVeryActive || '0', 10);
+            return sum + fairlyActive + veryActive;
+          }, 0);
+
+          // Calculate average hours of sleep per night
+          const totalSleepMinutes = data.data.reduce((sum: number, day: any) => {
+            return sum + (day.totalMinutesAsleep || 0);
+          }, 0);
+          const avgSleepHours = totalSleepMinutes > 0 ? (totalSleepMinutes / data.data.length) / 60 : 0;
+
+          // Calculate scores (always calculate, even if 0)
+          const activityScore = calculatePhysicalActivityScore(totalFairlyActiveMinutes);
+          const sleepScoreValue = avgSleepHours > 0 ? calculateSleepScore(avgSleepHours) : calculateSleepScore(0);
+
+          // Update state (always set values, default to 0 if no data)
+          setPhysicalActivityValue(totalFairlyActiveMinutes);
+          setPhysicalActivityScore(activityScore);
+          setSleepValue(Math.round(avgSleepHours * 10) / 10); // Round to 1 decimal
+          setSleepScore(sleepScoreValue);
+        } else {
+          // No data available - set to 0 with 0 scores
+          setPhysicalActivityValue(0);
+          setPhysicalActivityScore(0);
+          setSleepValue(0);
+          setSleepScore(0);
+        }
+      } else {
+        // Error fetching Fitbit data - default to 0
+        setPhysicalActivityValue(0);
+        setPhysicalActivityScore(0);
+        setSleepValue(0);
+        setSleepScore(0);
+      }
+    } catch (error) {
+      console.error('Error fetching Fitbit data:', error);
+      // Set to 0 on error (so it always shows a value)
+      setPhysicalActivityValue(0);
+      setPhysicalActivityScore(0);
+      setSleepValue(0);
+      setSleepScore(0);
+    }
+  }, [accessToken]);
 
   // Fetch all health scores function
   const fetchAllHealthScores = useCallback(async () => {
@@ -217,11 +308,12 @@ const CardioVascularScreen: React.FC = () => {
     }
   }, [accessToken]);
 
-  // Fetch all health scores on mount and when screen comes into focus
+  // Fetch all health scores and Fitbit data on mount and when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       fetchAllHealthScores();
-    }, [fetchAllHealthScores])
+      fetchFitbitData();
+    }, [fetchAllHealthScores, fetchFitbitData])
   );
   
   return (
@@ -285,19 +377,19 @@ const CardioVascularScreen: React.FC = () => {
         <View style={styles.metricsList}>
           <MetricItem 
             title="Physical Activity" 
-            score={null}
+            score={physicalActivityValue}
             unit="min"
-            showNotCalculated={true}
+            badge={String(physicalActivityScore)}
+            showNotCalculated={false}
             isFirstInSection={true}
-            onPress={handleBloodSugarPress}
           />
           
           <MetricItem 
             title="Sleep" 
-            score={null}
+            score={sleepValue}
             unit="hrs"
-            showNotCalculated={true}
-            onPress={handleBloodSugarPress}
+            badge={String(sleepScore)}
+            showNotCalculated={false}
           />
           
           <MetricItem 
