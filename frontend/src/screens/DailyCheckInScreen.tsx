@@ -1,9 +1,13 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Image } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../App';
 
 const DailyCheckInScreen: React.FC = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const handleContinue = () => {
-    // Placeholder, navigate to GoalsSettingScreen or next step
+    navigation.navigate('GoalsSetting');
   };
 
   return (
