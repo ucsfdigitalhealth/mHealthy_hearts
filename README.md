@@ -151,9 +151,8 @@ CREATE TABLE user_goals (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
 
-  -- These goals should be calculated according to goals
+  -- These goals should be according to goals set by user in GoalSetting or the like
   step_goal INT,
-  active_minutes_goal INT,
   sleep_goal INT,
 
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

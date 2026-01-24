@@ -71,6 +71,11 @@ const SettingsScreen: React.FC = () => {
     );
   };
 
+  const handleHelpPress = () => {
+    // Handle help button press - can navigate to help screen or show alert
+    Alert.alert('Help', 'Help content will be available here.');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -93,6 +98,24 @@ const SettingsScreen: React.FC = () => {
             <Text style={styles.email}>{user.email}</Text>
           </View>
         )}
+
+        <TouchableOpacity
+          style={styles.helpButton}
+          onPress={handleHelpPress}
+          activeOpacity={0.7}
+        >
+          <View style={styles.helpContent}>
+            <View style={styles.helpIconContainer}>
+              <Ionicons name="help-circle-outline" size={24} color="#007AFF" />
+            </View>
+            <View style={styles.helpTextContainer}>
+              <Text style={styles.helpLabel}>Help</Text>
+              <Text style={styles.helpTitle}>Get Support</Text>
+              <Text style={styles.helpSubtitle}>Need assistance? Tap here</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </View>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.logoutButton}
@@ -166,6 +189,45 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   email: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  helpButton: {
+    marginBottom: 24,
+    padding: 16,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  helpContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  helpIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#E0F2FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  helpTextContainer: {
+    flex: 1,
+  },
+  helpLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  helpTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  helpSubtitle: {
     fontSize: 14,
     color: '#6B7280',
   },
