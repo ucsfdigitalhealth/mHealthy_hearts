@@ -13,6 +13,7 @@ import BmiScreen from './src/screens/LeFlows/BmiScreen';
 import DietAssessmentScreen from './src/screens/LeFlows/DietAssessmentScreen';
 import SmokingAssessmentScreen from './src/screens/LeFlows/SmokingAssessmentScreen';
 import SymptomAssessmentScreen from './src/screens/SymptomsScreen';
+import CardioHistoricalDataScreen from './src/screens/LeFlows/CardioHistoricalDataScreen';
 //import GoalsSettingScreen from './src/screens/GoalsSettingScreen';
 
 export type RootStackParamList = {
@@ -27,6 +28,7 @@ export type RootStackParamList = {
   Settings: undefined;
   Symptoms: undefined;
   GoalsSetting: undefined;
+  CardioHistoricalData: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -52,6 +54,7 @@ export default function App() {
             <Stack.Screen name="Diet" component={DietAssessmentScreen} />
             <Stack.Screen name="Smoking" component={SmokingAssessmentScreen} />
             <Stack.Screen name="Symptoms" component={SymptomAssessmentScreen} />
+            <Stack.Screen name="CardioHistoricalData" component={CardioHistoricalDataScreen} />
             {/*<Stack.Screen name="GoalsSetting" component={GoalsSettingScreen} />*/}
           </Stack.Navigator>
         </NavigationContainer>
