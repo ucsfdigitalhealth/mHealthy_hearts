@@ -1,4 +1,4 @@
-# Privacy Policy for mHealthy Hearts
+# Privacy Policy for mHealthy Hearts project
 
 **Last Updated: [Date]**
 
