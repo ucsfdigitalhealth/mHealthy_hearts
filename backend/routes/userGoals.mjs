@@ -1,3 +1,4 @@
+/**
 import express from 'express';
 import db from '../db.js';
 import { authenticateToken } from '../auth.js';
@@ -25,4 +26,4 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-export { router };
+export { router }; */

@@ -7,7 +7,8 @@ import type { RootStackParamList } from '../../App';
 const DailyCheckInScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const handleContinue = () => {
-    navigation.navigate('GoalsSetting');
+    // GoalsSetting screen is temporarily disabled
+    // navigation.navigate('GoalsSetting');
   };
 
   return (

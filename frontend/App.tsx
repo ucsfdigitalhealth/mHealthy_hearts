@@ -52,7 +52,7 @@ export default function App() {
             <Stack.Screen name="Diet" component={DietAssessmentScreen} />
             <Stack.Screen name="Smoking" component={SmokingAssessmentScreen} />
             <Stack.Screen name="Symptoms" component={SymptomAssessmentScreen} />
-            <Stack.Screen name="GoalsSetting" component={GoalsSettingScreen} />
+            {/*<Stack.Screen name="GoalsSetting" component={GoalsSettingScreen} />*/}
           </Stack.Navigator>
         </NavigationContainer>
       </FitbitAuthProvider>

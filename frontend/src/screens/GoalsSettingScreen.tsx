@@ -1,3 +1,4 @@
+/**
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
 import { useAuth } from '../context/AuthContext';
@@ -183,4 +184,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default GoalsSettingScreen;
+export default GoalsSettingScreen; */

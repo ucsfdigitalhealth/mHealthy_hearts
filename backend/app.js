@@ -15,7 +15,7 @@ import bmi from "./routes/bmi.js";
 import diet from "./routes/diet.js";
 import smoking from "./routes/smoking.js";
 import healthScores from "./routes/healthScores.js";
-import { router as userGoalsRouter } from "./routes/userGoals.mjs";
+//import { router as userGoalsRouter } from "./routes/userGoals.mjs";
 
 const app = express();
 
@@ -38,7 +38,7 @@ app.use('/api/bmi', bmi.router);
 app.use('/api/diet', diet.router);
 app.use('/api/smoking', smoking.router);
 app.use('/api/health-scores', healthScores.router);
-app.use('/api/user-goals', userGoalsRouter);
+//app.use('/api/user-goals', userGoalsRouter);
 
 const PORT = process.env.PORT || 3000;
 
