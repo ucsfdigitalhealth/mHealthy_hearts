@@ -13,7 +13,7 @@ import BmiScreen from './src/screens/LeFlows/BmiScreen';
 import DietAssessmentScreen from './src/screens/LeFlows/DietAssessmentScreen';
 import SmokingAssessmentScreen from './src/screens/LeFlows/SmokingAssessmentScreen';
 import SymptomAssessmentScreen from './src/screens/SymptomsScreen';
-import GoalsSettingScreen from './src/screens/GoalsSettingScreen';
+//import GoalsSettingScreen from './src/screens/GoalsSettingScreen';
 
 export type RootStackParamList = {
   Login: undefined;
