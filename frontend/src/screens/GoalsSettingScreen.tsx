@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 
 // all placeholder data right here
 const GOAL_OPTIONS = [
@@ -20,12 +21,38 @@ const GOAL_OPTIONS = [
   },
 ];
 
+
 const GoalsSettingScreen: React.FC = () => {
   const [selected, setSelected] = useState<number>(GOAL_OPTIONS[0].value);
+  const { accessToken } = useAuth();
+  const [loading, setLoading] = useState(false);
 
-  const handleSetGoal = () => {
-    // TODO: Save goal to backend or context
-    alert(`Goal set to ${selected} steps!`);
+  const handleSetGoal = async () => {
+    if (!accessToken) {
+      Alert.alert('Not logged in', 'Please log in to set your goal.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch('http://localhost:3000/api/user-goals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ step_goal: selected, sleep_goal: 0 }), // sleep_goal can be set from another input
+      });
+      if (response.ok) {
+        Alert.alert('Success', 'Goal saved!');
+      } else {
+        const data = await response.json();
+        Alert.alert('Error', data.error || 'Failed to save goal');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Could not connect to server.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
