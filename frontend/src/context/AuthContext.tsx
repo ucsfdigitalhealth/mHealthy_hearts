@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearStepsCache } from '../utils/stepsCache';
+import { clearSleepCache } from '../utils/sleepCache';
 
 interface User {
   id: number;
@@ -36,6 +38,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await AsyncStorage.setItem('userData', JSON.stringify(userData));
       setAccessToken(token);
       setUser(userData);
+      await Promise.all([clearStepsCache(), clearSleepCache()]);
     } catch (error) {
       console.error('Error saving auth data:', error);
     }

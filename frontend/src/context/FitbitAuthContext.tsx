@@ -3,6 +3,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from './AuthContext';
+import { getDeviceTimezone } from '../utils/localDate';
 
 // Complete the auth flow when browser closes
 WebBrowser.maybeCompleteAuthSession();
@@ -40,9 +41,9 @@ export const FitbitAuthProvider: React.FC<FitbitAuthProviderProps> = ({ children
     setIsLoading(true);
 
     try {
-      // Try to fetch Fitbit steps - if it succeeds, we're connected
-      // If it fails with "Fitbit not connected", we're not connected
-      const response = await fetch(`${API_BASE_URL}/fitbit/steps`, {
+      const tz = getDeviceTimezone();
+      const stepsUrl = tz ? `${API_BASE_URL}/fitbit/steps?timezone=${encodeURIComponent(tz)}` : `${API_BASE_URL}/fitbit/steps`;
+      const response = await fetch(stepsUrl, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${accessToken}`,

@@ -23,6 +23,68 @@ function generateState(userId) {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// --- Date/time and client timezone ---
+// Routes accept timezone from frontend (query ?timezone=America/New_York or header X-Timezone).
+// If provided, all "today" / "yesterday" / bed date use that timezone; otherwise server local.
+
+// Current instant in UTC as MySQL DATETIME string (YYYY-MM-DD HH:mm:ss) — app-controlled, not MySQL CURRENT_TIMESTAMP
+function getCurrentUTCDateTime() {
+  return new Date().toISOString().slice(0, 19).replace('T', ' ');
+}
+
+// Get client timezone from request: query param timezone or header X-Timezone
+function getTimezoneFromRequest(req) {
+  const fromQuery = req.query && req.query.timezone;
+  const fromHeader = req.headers && req.headers['x-timezone'];
+  const tz = typeof fromQuery === 'string' ? fromQuery : (typeof fromHeader === 'string' ? fromHeader : null);
+  return tz && tz.trim() ? tz.trim() : null;
+}
+
+// Helper: Get YYYY-MM-DD for a given Date in server local time
+function getLocalDateString(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Helper: Get YYYY-MM-DD for a given Date in a specific IANA timezone (e.g. America/New_York)
+function getDateStringInTimezone(date, timezone) {
+  if (!timezone) return getLocalDateString(date);
+  try {
+    const s = date.toLocaleString('en-US', { timeZone: timezone });
+    const [datePart] = s.split(',');
+    const parts = datePart.trim().split('/');
+    const month = parts[0];
+    const day = parts[1];
+    const year = parts[2];
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  } catch (e) {
+    return getLocalDateString(date);
+  }
+}
+
+// Helper: Get "today" in client timezone (or server local if no timezone)
+function getTodayInTimezone(timezone) {
+  return getDateStringInTimezone(new Date(), timezone);
+}
+
+// Helper: Subtract n calendar days from a date string (YYYY-MM-DD), returns YYYY-MM-DD
+function subtractDaysLocal(dateStr, n) {
+  let [y, m, d] = dateStr.split('-').map(Number);
+  m -= 1; // 0-indexed month for Date
+  d -= n;
+  while (d < 1) {
+    m -= 1;
+    if (m < 0) {
+      m += 12;
+      y -= 1;
+    }
+    d += new Date(y, m + 1, 0).getDate();
+  }
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
 // Helper: Ensure valid access token (checks expiry and refreshes if needed)
 async function ensureValidAccessToken(userId) {
   try {
@@ -38,7 +100,7 @@ async function ensureValidAccessToken(userId) {
       throw new Error('Fitbit not connected');
     }
     
-    // Check expiry
+    // Check expiry (compare instants; no timezone)
     if (new Date() > new Date(fitbit_token_expires)) {
       console.log('Fitbit token expired, refreshing...');
       
@@ -73,32 +135,27 @@ async function ensureValidAccessToken(userId) {
   }
 }
 
-// Insert daily Fitbit data into the database according to scheme in README
+// Insert daily Fitbit data into the database (activity only; sleep is in fitbit_sleep_data)
 async function saveDailyFitbitData(userId, daily) {
   const {
     date,
     steps,
     minutesLightlyActive,
     minutesFairlyActive,
-    minutesVeryActive,
-    totalMinutesAsleep,
-    totalTimeInBed,
-    sleepEfficiency
+    minutesVeryActive
   } = daily;
+  const updatedAt = getCurrentUTCDateTime();
 
   await db.execute(
     `INSERT INTO fitbit_daily_data
-      (user_id, date, steps, minutes_lightly_active, minutes_fairly_active, minutes_very_active,
-       total_minutes_asleep, total_time_in_bed, sleep_efficiency)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (user_id, date, steps, minutes_lightly_active, minutes_fairly_active, minutes_very_active, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
         steps = VALUES(steps),
         minutes_lightly_active = VALUES(minutes_lightly_active),
         minutes_fairly_active = VALUES(minutes_fairly_active),
         minutes_very_active = VALUES(minutes_very_active),
-        total_minutes_asleep = VALUES(total_minutes_asleep),
-        total_time_in_bed = VALUES(total_time_in_bed),
-        sleep_efficiency = VALUES(sleep_efficiency)
+        updated_at = VALUES(updated_at)
     `,
     [
       userId,
@@ -107,13 +164,47 @@ async function saveDailyFitbitData(userId, daily) {
       minutesLightlyActive,
       minutesFairlyActive,
       minutesVeryActive,
-      totalMinutesAsleep,
-      totalTimeInBed,
-      sleepEfficiency
+      updatedAt
     ]
   );
 
   console.log(`Saved daily Fitbit data for ${date}`);
+}
+
+// Get YYYY-MM-DD for a Fitbit ISO timestamp (e.g. startTime) — used for "bed date".
+// Fitbit sends startTime/endTime in device-local time (no Z). We use the date part (YYYY-MM-DD)
+// as the bed date. If the string has a timezone (Z or ±HH:MM), we parse the instant and format
+// in the given timezone (or server local).
+function getBedDateInTimezone(isoString, timezone) {
+  if (!isoString) return null;
+  const hasTz = isoString.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(isoString);
+  if (hasTz) {
+    const date = new Date(isoString);
+    return getDateStringInTimezone(date, timezone);
+  }
+  // Device-local: bed date is the date part of the string
+  const datePart = isoString.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? datePart : getDateStringInTimezone(new Date(isoString), timezone);
+}
+
+// Insert or update sleep data (keyed by bed date in local time)
+async function saveSleepData(userId, row) {
+  const { date, totalMinutesAsleep, totalTimeInBed, sleepEfficiency } = row;
+  const dataId = crypto.randomUUID();
+  const updatedAt = getCurrentUTCDateTime();
+  await db.execute(
+    `INSERT INTO fitbit_sleep_data
+      (data_id, user_id, date, total_minutes_asleep, total_time_in_bed, sleep_efficiency, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+        total_minutes_asleep = VALUES(total_minutes_asleep),
+        total_time_in_bed = VALUES(total_time_in_bed),
+        sleep_efficiency = VALUES(sleep_efficiency),
+        updated_at = VALUES(updated_at)
+    `,
+    [dataId, userId, date, totalMinutesAsleep, totalTimeInBed, sleepEfficiency ?? 0, updatedAt]
+  );
+  console.log(`Saved sleep data for bed date ${date}`);
 }
 
 // Route 1: Connect to Fitbit (protected; generates PKCE/state)
@@ -349,11 +440,9 @@ router.post('/fitbit/refresh', verifyTokenOrRefresh, async (req, res) => {
 // Route 4: Fetch Heart Rate Data
 router.get('/fitbit/data', verifyTokenOrRefresh, async (req, res) => {
   try {
-    // Use helper function to ensure we have a valid access token
     const fitbit_access_token = await ensureValidAccessToken(req.user.userId);
-
-    // Fetch heart rate
-    const today = new Date().toISOString().split('T')[0];
+    const tz = getTimezoneFromRequest(req);
+    const today = getTodayInTimezone(tz);
     const dataResponse = await axios.get(
       `https://api.fitbit.com/1/user/-/activities/heart/date/${today}/1d/1sec.json`,
       { headers: { Authorization: `Bearer ${fitbit_access_token}` } }
@@ -390,16 +479,49 @@ router.get('/fitbit/data', verifyTokenOrRefresh, async (req, res) => {
 
 // Route 5: Fetch Steps
 router.get('/fitbit/steps', verifyTokenOrRefresh, async (req, res) => {
+  console.log('[DEBUG] GET /fitbit/steps called', new Date().toISOString());
   try {
-    // Use helper function to ensure we have a valid access token
     const fitbit_access_token = await ensureValidAccessToken(req.user.userId);
+    const tz = getTimezoneFromRequest(req);
+    const today = getTodayInTimezone(tz);
 
-    // Fetch steps data
-    const today = new Date().toISOString().split('T')[0];
+    // Check fitbit_daily_data for today's steps; use cache if present and < 30 minutes old
+    const [rows] = await db.execute(
+      'SELECT steps, updated_at FROM fitbit_daily_data WHERE user_id = ? AND date = ? ORDER BY updated_at DESC LIMIT 1',
+      [req.user.userId, today]
+    );
+    const cached = rows[0];
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000); // elapsed time
+    const useCache = cached && cached.updated_at != null && new Date(cached.updated_at) > thirtyMinutesAgo;
+
+    if (useCache) {
+      const data = {
+        'activities-steps': [{ dateTime: today, value: String(cached.steps) }]
+      };
+      return res.json({ message: 'Steps data fetched', data });
+    }
+
     const dataResponse = await axios.get(
-      `https://api.fitbit.com/1/user/-/activities/steps/date/${today}/7d.json`,
+      `https://api.fitbit.com/1/user/-/activities/steps/date/${today}/1d.json`,
       { headers: { Authorization: `Bearer ${fitbit_access_token}` } }
     );
+
+    // Persist steps for today so we can serve from DB next time (until > 30 minutes old)
+    const stepsValue = dataResponse.data['activities-steps']?.[0]?.value ?? 0;
+    const steps = typeof stepsValue === 'string' ? parseInt(stepsValue, 10) : (stepsValue || 0);
+    const updatedAt = getCurrentUTCDateTime();
+    const [updateResult] = await db.execute(
+      'UPDATE fitbit_daily_data SET steps = ?, updated_at = ? WHERE user_id = ? AND date = ?',
+      [steps, updatedAt, req.user.userId, today]
+    );
+    if (updateResult.affectedRows === 0) {
+      await db.execute(
+        `INSERT INTO fitbit_daily_data
+          (data_id, user_id, date, steps, minutes_lightly_active, minutes_fairly_active, minutes_very_active, updated_at)
+         VALUES (?, ?, ?, ?, 0, 0, 0, ?)`,
+        [crypto.randomUUID(), req.user.userId, today, steps, updatedAt]
+      );
+    }
 
     res.json({
       message: 'Steps data fetched',
@@ -422,28 +544,132 @@ router.get('/fitbit/steps', verifyTokenOrRefresh, async (req, res) => {
   }
 });
 
-// Route 6: Fetch Activity Summary (includes lightlyActive, fairlyActive, veryActive, and sleep)
-router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => {
+// Route 5b: Fetch Sleep (yesterday's sleep — the night that ended this morning)
+// Fitbit returns sleep by date you woke up (dateOfSleep); we store by bed date (local) from startTime.
+// We request sleep that ended today to get "last night's" sleep.
+router.get('/fitbit/sleep', verifyTokenOrRefresh, async (req, res) => {
+  console.log('[DEBUG] GET /fitbit/sleep called', new Date().toISOString());
   try {
-    // Use helper function to ensure we have a valid access token
     const fitbit_access_token = await ensureValidAccessToken(req.user.userId);
+    const tz = getTimezoneFromRequest(req);
+    const todayLocal = getTodayInTimezone(tz);
+    const yesterdayLocal = subtractDaysLocal(todayLocal, 1);
 
-    // Calculate date range for last 7 days
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 6); // 7 days total (including today)
-    
-    const startDateStr = startDate.toISOString().split('T')[0];
-    const endDateStr = endDate.toISOString().split('T')[0];
+    // Check fitbit_sleep_data for yesterday's sleep (bed date); use cache if < 30 minutes old
+    const [rows] = await db.execute(
+      'SELECT date, total_minutes_asleep, total_time_in_bed, sleep_efficiency, updated_at FROM fitbit_sleep_data WHERE user_id = ? AND date = ? ORDER BY updated_at DESC LIMIT 1',
+      [req.user.userId, yesterdayLocal]
+    );
+    const cached = rows[0];
+    const thirtyMinutesAgo = new Date(new Date().getTime() - 30 * 60 * 1000); // elapsed time
+    const useCache = cached && cached.updated_at != null && new Date(cached.updated_at) > thirtyMinutesAgo;
 
-    // Generate array of dates for sleep data fetching
-    const dates = [];
-    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-      dates.push(d.toISOString().split('T')[0]);
+    if (useCache) {
+      const payload = {
+        message: 'Sleep data fetched (cached)',
+        bedDate: yesterdayLocal,
+        data: {
+          sleep: [{
+            dateOfSleep: yesterdayLocal,
+            minutesAsleep: cached.total_minutes_asleep,
+            timeInBed: cached.total_time_in_bed,
+            efficiency: cached.sleep_efficiency
+          }],
+          summary: {
+            totalMinutesAsleep: cached.total_minutes_asleep,
+            totalTimeInBed: cached.total_time_in_bed,
+            totalSleepEfficiency: cached.sleep_efficiency ?? 0
+          }
+        }
+      };
+      return res.json(payload);
     }
 
-    // Fetch all activity metrics for the date range
-    const [lightlyActiveRes, fairlyActiveRes, veryActiveRes, stepsRes, ...sleepResArray] = await Promise.all([
+    // Request sleep for last 2 days [yesterday, today]; only return data when bed date matches yesterday (e.g. 2/1 when today is 2/2)
+    const sleepRes = await axios.get(
+      `https://api.fitbit.com/1.2/user/-/sleep/date/${yesterdayLocal}/${todayLocal}.json`,
+      { headers: { Authorization: `Bearer ${fitbit_access_token}` } }
+    ).catch(err => {
+      if (err.response?.status === 404 || err.response?.status === 204) {
+        return { data: { sleep: [] } };
+      }
+      throw err;
+    });
+
+    const sleepList = sleepRes.data?.sleep ?? [];
+    let yesterdaySleep = null;
+
+    for (const log of sleepList) {
+      const bedDateLocal = getBedDateInTimezone(log.startTime, tz);
+      if (!bedDateLocal) continue;
+
+      const totalMinutesAsleep = log.minutesAsleep ?? 0;
+      const totalTimeInBed = log.timeInBed ?? 0;
+      const sleepEfficiency = totalTimeInBed > 0
+        ? Math.round((totalMinutesAsleep / totalTimeInBed) * 100)
+        : (log.efficiency ?? 0);
+
+      await saveSleepData(req.user.userId, {
+        date: bedDateLocal,
+        totalMinutesAsleep,
+        totalTimeInBed,
+        sleepEfficiency
+      });
+
+      if (bedDateLocal === yesterdayLocal) {
+        yesterdaySleep = {
+          dateOfSleep: log.dateOfSleep,
+          startTime: log.startTime,
+          minutesAsleep: totalMinutesAsleep,
+          timeInBed: totalTimeInBed,
+          efficiency: sleepEfficiency
+        };
+      }
+    }
+
+    // Only return sleep when it matches yesterday's date (bed date === yesterdayLocal); otherwise return 0
+    const totalMinutesAsleep = yesterdaySleep?.minutesAsleep ?? 0;
+    const totalTimeInBed = yesterdaySleep?.timeInBed ?? 0;
+    const sleepEfficiency = yesterdaySleep?.efficiency ?? 0;
+
+    res.json({
+      message: 'Sleep data fetched',
+      bedDate: yesterdayLocal,
+      data: {
+        sleep: yesterdaySleep ? [yesterdaySleep] : [],
+        summary: {
+          totalMinutesAsleep,
+          totalTimeInBed,
+          totalSleepEfficiency: sleepEfficiency
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Sleep fetch error:', error.response?.data || error.message);
+
+    if (error.message === 'Fitbit not connected') {
+      return res.status(400).json({ message: error.message });
+    }
+    if (error.response?.status === 401) {
+      res.status(401).json({ message: 'Token invalid - reconnect or refresh' });
+    } else if (error.response?.status === 403) {
+      res.status(403).json({ message: 'Insufficient scopes - re-authorize with more permissions' });
+    } else {
+      res.status(500).json({ message: 'Server Error' });
+    }
+  }
+});
+
+// Route 6: Fetch Activity Summary (activity only; sleep is in /fitbit/sleep and fitbit_sleep_data)
+router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => {
+  try {
+    const fitbit_access_token = await ensureValidAccessToken(req.user.userId);
+    const tz = getTimezoneFromRequest(req);
+    const endDateStr = getTodayInTimezone(tz);
+    const startDateStr = subtractDaysLocal(endDateStr, 6);
+
+    // Fetch activity metrics only (sleep is in /fitbit/sleep and fitbit_sleep_data)
+    const [lightlyActiveRes, fairlyActiveRes, veryActiveRes, stepsRes] = await Promise.all([
       axios.get(`https://api.fitbit.com/1/user/-/activities/minutesLightlyActive/date/${startDateStr}/${endDateStr}.json`,
         { headers: { Authorization: `Bearer ${fitbit_access_token}` } }),
       axios.get(`https://api.fitbit.com/1/user/-/activities/minutesFairlyActive/date/${startDateStr}/${endDateStr}.json`,
@@ -451,22 +677,7 @@ router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => 
       axios.get(`https://api.fitbit.com/1/user/-/activities/minutesVeryActive/date/${startDateStr}/${endDateStr}.json`,
         { headers: { Authorization: `Bearer ${fitbit_access_token}` } }),
       axios.get(`https://api.fitbit.com/1/user/-/activities/steps/date/${startDateStr}/${endDateStr}.json`,
-        { headers: { Authorization: `Bearer ${fitbit_access_token}` } }),
-      // Fetch sleep data for each date in parallel
-      ...dates.map(date => 
-        axios.get(`https://api.fitbit.com/1.2/user/-/sleep/date/${date}.json`,
-          { headers: { Authorization: `Bearer ${fitbit_access_token}` } })
-          .catch(err => {
-            // If sleep data is not available for a date (404 or other errors), return empty data structure
-            if (err.response?.status === 404 || err.response?.status === 204) {
-              // No sleep data available for this date
-              return { data: { sleep: [], summary: { totalMinutesAsleep: 0, totalTimeInBed: 0 } } };
-            }
-            // For other errors, log and return empty structure
-            console.log(`Error fetching sleep data for ${date}:`, err.response?.status || err.message);
-            return { data: { sleep: [], summary: { totalMinutesAsleep: 0, totalTimeInBed: 0 } } };
-          })
-      )
+        { headers: { Authorization: `Bearer ${fitbit_access_token}` } })
     ]);
 
     // Extract data from responses
@@ -478,7 +689,6 @@ router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => 
     // Combine data by date
     const activityData = {};
     
-    // Process activity metrics
     [lightlyActive, fairlyActive, veryActive, steps].forEach((metricData, index) => {
       metricData.forEach(entry => {
         const date = entry.dateTime;
@@ -494,24 +704,6 @@ router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => 
         }
       });
     });
-
-    // Process sleep data
-    sleepResArray.forEach((sleepRes, index) => {
-      const date = dates[index];
-      if (!activityData[date]) {
-        activityData[date] = { date };
-      }
-      
-      const sleepData = sleepRes.data || sleepRes;
-      const summary = sleepData.summary || {};
-      
-      // Extract sleep metrics from summary
-      activityData[date].totalMinutesAsleep = summary.totalMinutesAsleep || 0;
-      activityData[date].totalTimeInBed = summary.totalTimeInBed || 0;
-      activityData[date].sleepEfficiency = summary.totalTimeInBed > 0 
-        ? Math.round((summary.totalMinutesAsleep / summary.totalTimeInBed) * 100) 
-        : 0;
-    });
     
     // Convert object to array sorted by date
     const activityArray = Object.values(activityData).sort((a, b) => 
@@ -520,22 +712,19 @@ router.get('/fitbit/activitySummary', verifyTokenOrRefresh, async (req, res) => 
 
     // After computing activityArray (your final 7-day array)
 
-// SAVE EACH DAY TO DB
+// SAVE EACH DAY TO DB (activity only)
 for (const day of activityArray) {
   await saveDailyFitbitData(req.user.userId, {
     date: day.date,
     steps: parseInt(day.steps || 0),
     minutesLightlyActive: parseInt(day.minutesLightlyActive || 0),
     minutesFairlyActive: parseInt(day.minutesFairlyActive || 0),
-    minutesVeryActive: parseInt(day.minutesVeryActive || 0),
-    totalMinutesAsleep: parseInt(day.totalMinutesAsleep || 0),
-    totalTimeInBed: parseInt(day.totalTimeInBed || 0),
-    sleepEfficiency: parseInt(day.sleepEfficiency || 0)
+    minutesVeryActive: parseInt(day.minutesVeryActive || 0)
   });
 }
 
 return res.json({
-  message: 'Activity + sleep summary fetched and stored (7 days)',
+  message: 'Activity summary fetched and stored (7 days)',
   dateRange: { start: startDateStr, end: endDateStr },
   data: activityArray,
   totalDays: activityArray.length

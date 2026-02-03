@@ -1,37 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Settings from '../components/Settings';
-import { useAuth } from '../context/AuthContext';
+import { useSteps } from '../hooks/useSteps';
+import { formatDateLong } from '../utils/localDate';
 
 const ActivityScreen: React.FC = () => {
-  const { accessToken } = useAuth();
-  const [steps, setSteps] = useState<string>('—');
-
-  useEffect(() => {
-    const fetchSteps = async () => {
-      if (!accessToken) return;
-      try {
-        const res = await fetch('http://localhost:3000/api/fitbitAuth/fitbit/activitySummary', {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-        if (!res.ok) {
-          console.error('[ActivityScreen] Failed to fetch activity summary. Status:', res.status);
-          return;
-        }
-        const data = await res.json();
-        const lastDay = Array.isArray(data.data) && data.data.length > 0 ? data.data[data.data.length - 1] : null;
-        const latestSteps = lastDay?.steps ?? 0;
-        setSteps(Number(latestSteps).toLocaleString());
-      } catch (err) {
-        console.error('[ActivityScreen] Error fetching steps:', err);
-      }
-    };
-
-    fetchSteps();
-  }, [accessToken]);
+  const { steps } = useSteps();
 
   return (
     <ScrollView style={styles.container}>
@@ -48,7 +23,7 @@ const ActivityScreen: React.FC = () => {
           <Text style={styles.progressNumber}>{steps}</Text>
           <Text style={styles.progressGoal}>of 6,000 steps</Text>
         </View>
-        <Text style={styles.dateText}>November 22nd, 2025</Text>
+        <Text style={styles.dateText}>{formatDateLong()}</Text>
       </View>
 
       {/* Streaks Card */}

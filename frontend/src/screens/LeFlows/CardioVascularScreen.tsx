@@ -16,6 +16,9 @@ import Settings from '../../components/Settings';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { useSteps } from '../../hooks/useSteps';
+import { useSleep } from '../../hooks/useSleep';
+import { formatDateShort } from '../../utils/localDate';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -121,18 +124,24 @@ const CardioVascularScreen: React.FC = () => {
   const [isVisualizationModalVisible, setIsVisualizationModalVisible] = useState<boolean>(false);
   const [selectedVisualizationMetric, setSelectedVisualizationMetric] = useState<string | null>(null);
   
-  // Helper function to calculate physical activity score
-  const calculatePhysicalActivityScore = (totalMinutes: number): number => {
-    if (totalMinutes >= 150) return 100;
-    if (totalMinutes >= 120) return 90;
-    if (totalMinutes >= 90) return 80;
-    if (totalMinutes >= 60) return 60;
-    if (totalMinutes >= 30) return 40;
-    if (totalMinutes >= 1) return 20;
+  // Steps from /fitbit/steps with stepsCache (same as TodayScreen/ActivityScreen)
+  const { stepsNumber } = useSteps();
+  // Sleep from /fitbit/sleep with sleepCache
+  const { sleepHours: sleepHoursFromHook, sleepScore: sleepScoreFromHook } = useSleep();
+
+  // Helper function to calculate steps-based score (goal 6000 steps)
+  const calculateStepsScore = (steps: number): number => {
+    if (steps >= 6000) return 100;
+    if (steps >= 5000) return 85;
+    if (steps >= 4000) return 70;
+    if (steps >= 3000) return 55;
+    if (steps >= 2000) return 40;
+    if (steps >= 1000) return 25;
+    if (steps >= 1) return 10;
     return 0;
   };
 
-  // Helper function to calculate sleep score
+  // Helper function to calculate sleep score (kept for heart score; sleep not from /steps)
   const calculateSleepScore = (avgHours: number): number => {
     if (avgHours >= 7 && avgHours < 9) return 100;
     if (avgHours >= 9 && avgHours < 10) return 90;
@@ -170,6 +179,18 @@ const CardioVascularScreen: React.FC = () => {
   useEffect(() => {
     calculateHeartScore();
   }, [calculateHeartScore]);
+
+  // Sync steps from useSteps (cached /fitbit/steps) into activity value and score
+  useEffect(() => {
+    setPhysicalActivityValue(stepsNumber);
+    setPhysicalActivityScore(calculateStepsScore(stepsNumber));
+  }, [stepsNumber]);
+
+  // Sync sleep from useSleep (cached /fitbit/sleep) into sleep value and score
+  useEffect(() => {
+    setSleepValue(Math.round(sleepHoursFromHook * 10) / 10);
+    setSleepScore(sleepScoreFromHook);
+  }, [sleepHoursFromHook, sleepScoreFromHook]);
 
   // Map metric titles to their navigation routes
   const metricNavigationMap: Record<string, keyof RootStackParamList> = {
@@ -220,71 +241,6 @@ const CardioVascularScreen: React.FC = () => {
     setIsVisualizationModalVisible(false);
     setSelectedVisualizationMetric(null);
   };
-
-  // Fetch Fitbit activity and sleep data
-  const fetchFitbitData = useCallback(async () => {
-    if (!accessToken) {
-      return;
-    }
-
-    try {
-      const response = await fetch('http://localhost:3000/api/fitbitAuth/fitbit/activitySummary', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        
-        if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-          // Calculate total minutes of fairly+ intensity activity per week
-          const totalFairlyActiveMinutes = data.data.reduce((sum: number, day: any) => {
-            const fairlyActive = parseInt(day.minutesFairlyActive || '0', 10);
-            const veryActive = parseInt(day.minutesVeryActive || '0', 10);
-            return sum + fairlyActive + veryActive;
-          }, 0);
-
-          // Calculate average hours of sleep per night
-          const totalSleepMinutes = data.data.reduce((sum: number, day: any) => {
-            return sum + (day.totalMinutesAsleep || 0);
-          }, 0);
-          const avgSleepHours = totalSleepMinutes > 0 ? (totalSleepMinutes / data.data.length) / 60 : 0;
-
-          // Calculate scores (always calculate, even if 0)
-          const activityScore = calculatePhysicalActivityScore(totalFairlyActiveMinutes);
-          const sleepScoreValue = avgSleepHours > 0 ? calculateSleepScore(avgSleepHours) : calculateSleepScore(0);
-
-          // Update state (always set values, default to 0 if no data)
-          setPhysicalActivityValue(totalFairlyActiveMinutes);
-          setPhysicalActivityScore(activityScore);
-          setSleepValue(Math.round(avgSleepHours * 10) / 10); // Round to 1 decimal
-          setSleepScore(sleepScoreValue);
-        } else {
-          // No data available - set to 0 with 0 scores
-          setPhysicalActivityValue(0);
-          setPhysicalActivityScore(0);
-          setSleepValue(0);
-          setSleepScore(0);
-        }
-      } else {
-        // Error fetching Fitbit data - default to 0
-        setPhysicalActivityValue(0);
-        setPhysicalActivityScore(0);
-        setSleepValue(0);
-        setSleepScore(0);
-      }
-    } catch (error) {
-      console.error('Error fetching Fitbit data:', error);
-      // Set to 0 on error (so it always shows a value)
-      setPhysicalActivityValue(0);
-      setPhysicalActivityScore(0);
-      setSleepValue(0);
-      setSleepScore(0);
-    }
-  }, [accessToken]);
 
   // Fetch all health scores function
   const fetchAllHealthScores = useCallback(async () => {
@@ -344,12 +300,11 @@ const CardioVascularScreen: React.FC = () => {
     }
   }, [accessToken]);
 
-  // Fetch all health scores and Fitbit data on mount and when screen comes into focus
+  // Fetch all health scores on mount and when screen comes into focus (steps come from useSteps + stepsCache)
   useFocusEffect(
     React.useCallback(() => {
       fetchAllHealthScores();
-      fetchFitbitData();
-    }, [fetchAllHealthScores, fetchFitbitData])
+    }, [fetchAllHealthScores])
   );
   
   return (
@@ -361,10 +316,10 @@ const CardioVascularScreen: React.FC = () => {
           <Settings />
         </View>
 
-        {/* Today's Date */}
+        {/* Today's Date (local timezone) */}
         <View style={styles.dateSection}>
           <Text style={styles.todayLabel}>Today</Text>
-          <Text style={styles.date}>Wed 1 Sep</Text>
+          <Text style={styles.date}>{formatDateShort()}</Text>
         </View>
 
         {/* Divider */}
@@ -412,13 +367,13 @@ const CardioVascularScreen: React.FC = () => {
         {/* All Metrics in List */}
         <View style={styles.metricsList}>
           <MetricItem 
-            title="Physical Activity" 
+            title="Steps" 
             score={physicalActivityValue}
-            unit="min"
+            unit="steps"
             badge={String(physicalActivityScore)}
             showNotCalculated={false}
             isFirstInSection={true}
-            onPress={() => handleVisualizationMetricPress('Physical Activity')}
+            onPress={() => handleVisualizationMetricPress('Steps')}
           />
           
           <MetricItem 
@@ -603,7 +558,7 @@ const CardioVascularScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* Visualization Only Modal (for Physical Activity and Sleep) */}
+      {/* Visualization Only Modal (for Steps and Sleep) */}
       <Modal
         visible={isVisualizationModalVisible}
         transparent={true}

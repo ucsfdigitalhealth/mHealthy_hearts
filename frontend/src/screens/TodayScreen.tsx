@@ -1,39 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Settings from '../components/Settings';
-import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import { useSteps } from '../hooks/useSteps';
+import { useSleep } from '../hooks/useSleep';
 
 const TodayScreen: React.FC = () => {
-  const { accessToken } = useAuth();
   const navigation = useNavigation();
-  const [steps, setSteps] = useState<string>('—');
-
-  useEffect(() => {
-    const fetchSteps = async () => {
-      if (!accessToken) return;
-      try {
-        const res = await fetch('http://localhost:3000/api/fitbitAuth/fitbit/activitySummary', {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-        if (!res.ok) {
-          console.error('[TodayScreen] Failed to fetch activity summary. Status:', res.status);
-          return;
-        }
-        const data = await res.json();
-        const lastDay = Array.isArray(data.data) && data.data.length > 0 ? data.data[data.data.length - 1] : null;
-        const latestSteps = lastDay?.steps ?? 0;
-        setSteps(Number(latestSteps).toLocaleString());
-      } catch (err) {
-        console.error('[TodayScreen] Error fetching steps:', err);
-      }
-    };
-
-    fetchSteps();
-  }, [accessToken]);
+  const { steps } = useSteps();
+  const { formatted: sleepFormatted, sleepScore, isLoading: sleepLoading, error: sleepError } = useSleep();
 
   const handleSymptomCheckIn = () => {
     // Navigate to Symptom Assessment screen
@@ -80,12 +56,16 @@ const TodayScreen: React.FC = () => {
           </View>
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Sleep</Text>
-            <Text style={styles.metricValue}>6 h 20 m</Text>
-            <Text style={styles.metricSubtext}>Last night's sleep</Text>
+            <Text style={styles.metricValue}>{sleepFormatted}</Text>
+            <Text style={styles.metricSubtext}>
+              {sleepError ? "Couldn't load sleep" : sleepLoading ? 'Checking…' : "Last night's sleep"}
+            </Text>
           </View>
-          <View style={styles.badgeYellow}>
-            <Text style={styles.badgeText}>Below Goal</Text>
-          </View>
+          {!sleepLoading && !sleepError && (
+            <View style={sleepScore >= 70 ? styles.badgeGreen : styles.badgeYellow}>
+              <Text style={styles.badgeText}>{sleepScore >= 70 ? 'On Goal' : 'Below Goal'}</Text>
+            </View>
+          )}
         </View>
       </View>
 
