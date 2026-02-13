@@ -12,10 +12,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App'; // Update path as needed
 import Settings from '../../components/Settings';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
-import { useSteps } from '../../hooks/useSteps';
-import { useSleep } from '../../hooks/useSleep';
-import { formatDateShort } from '../../utils/localDate';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -111,49 +109,17 @@ const CardioVascularScreen: React.FC = () => {
   const [bmiValue, setBmiValue] = useState<number | null>(null);
   const [dietScore, setDietScore] = useState<number | null>(null);
   const [smokingScore, setSmokingScore] = useState<number | null>(null);
-  const [physicalActivityScore, setPhysicalActivityScore] = useState<number>(0);
-  const [physicalActivityValue, setPhysicalActivityValue] = useState<number>(0);
-  const [sleepScore, setSleepScore] = useState<number>(0);
-  const [sleepValue, setSleepValue] = useState<number>(0);
   const [heartScore, setHeartScore] = useState<number | null>(null);
-  
-  // Steps from /fitbit/steps with stepsCache (same as TodayScreen/ActivityScreen)
-  const { stepsNumber } = useSteps();
-  // Sleep from /fitbit/sleep with sleepCache
-  const { sleepHours: sleepHoursFromHook, sleepScore: sleepScoreFromHook } = useSleep();
-
-  // Helper function to calculate steps-based score (goal 6000 steps)
-  const calculateStepsScore = (steps: number): number => {
-    if (steps >= 6000) return 100;
-    if (steps >= 5000) return 85;
-    if (steps >= 4000) return 70;
-    if (steps >= 3000) return 55;
-    if (steps >= 2000) return 40;
-    if (steps >= 1000) return 25;
-    if (steps >= 1) return 10;
-    return 0;
-  };
-
-  // Helper function to calculate sleep score (kept for heart score; sleep not from /steps)
-  const calculateSleepScore = (avgHours: number): number => {
-    if (avgHours >= 7 && avgHours < 9) return 100;
-    if (avgHours >= 9 && avgHours < 10) return 90;
-    if (avgHours >= 6 && avgHours < 7) return 70;
-    if ((avgHours >= 5 && avgHours < 6) || avgHours >= 10) return 40;
-    if (avgHours >= 4 && avgHours < 5) return 20;
-    return 0;
-  };
   
   // Calculate heart score as average of all LE8 scores
   const calculateHeartScore = useCallback(() => {
     const scores: number[] = [];
     
-    // Always add Physical Activity and Sleep scores (they default to 0)
-    scores.push(physicalActivityScore);
-    scores.push(sleepScore);
-    
-    // Add other scores if available
+    // Physical Activity (placeholder - will be fetched from API later)
+    // Sleep (placeholder - will be fetched from API later)
     // Blood Pressure (placeholder - will be fetched from API later)
+    
+    // Add scores that we have
     if (bloodSugarScore !== null) scores.push(bloodSugarScore);
     if (bloodLipidScore !== null) scores.push(bloodLipidScore);
     if (bmiScore !== null) scores.push(bmiScore);
@@ -166,40 +132,31 @@ const CardioVascularScreen: React.FC = () => {
     } else {
       setHeartScore(null);
     }
-  }, [bloodSugarScore, bloodLipidScore, bmiScore, dietScore, smokingScore, physicalActivityScore, sleepScore]);
+  }, [bloodSugarScore, bloodLipidScore, bmiScore, dietScore, smokingScore]);
   
   // Recalculate heart score whenever any score changes
   useEffect(() => {
     calculateHeartScore();
   }, [calculateHeartScore]);
 
-  // Sync steps from useSteps (cached /fitbit/steps) into activity value and score
-  useEffect(() => {
-    setPhysicalActivityValue(stepsNumber);
-    setPhysicalActivityScore(calculateStepsScore(stepsNumber));
-  }, [stepsNumber]);
-
-  // Sync sleep from useSleep (cached /fitbit/sleep) into sleep value and score
-  useEffect(() => {
-    setSleepValue(Math.round(sleepHoursFromHook * 10) / 10);
-    setSleepScore(sleepScoreFromHook);
-  }, [sleepHoursFromHook, sleepScoreFromHook]);
-
-  // Map metric titles to their navigation routes
-  const metricNavigationMap: Record<string, keyof RootStackParamList> = {
-    'Blood Pressure': 'BloodSugar', // Placeholder - update when Blood Pressure route exists
-    'Blood Sugar': 'BloodSugar',
-    'Blood Lipids': 'BloodLipids',
-    'Body Mass Index': 'Bmi',
-    'Diet': 'Diet',
-    'Smoking': 'Smoking',
+  const handleBloodSugarPress = () => {
+    navigation.navigate('BloodSugar');
   };
 
-  const handleNavigateToAssessment = (metricTitle: string) => {
-    const route = metricNavigationMap[metricTitle];
-    if (route) {
-      navigation.navigate(route);
-    }
+  const handleBloodLipidsPress = () => {
+    navigation.navigate('BloodLipids');
+  };
+
+  const handleBmiPress = () => {
+    navigation.navigate('Bmi');
+  };
+
+  const handleDietPress = () => {
+    navigation.navigate('Diet');
+  };
+
+  const handleSmokingPress = () => {
+    navigation.navigate('Smoking');
   };
 
   // Fetch all health scores function
@@ -260,7 +217,7 @@ const CardioVascularScreen: React.FC = () => {
     }
   }, [accessToken]);
 
-  // Fetch all health scores on mount and when screen comes into focus (steps come from useSteps + stepsCache)
+  // Fetch all health scores on mount and when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       fetchAllHealthScores();
@@ -276,10 +233,10 @@ const CardioVascularScreen: React.FC = () => {
           <Settings />
         </View>
 
-        {/* Today's Date (local timezone) */}
+        {/* Today's Date */}
         <View style={styles.dateSection}>
           <Text style={styles.todayLabel}>Today</Text>
-          <Text style={styles.date}>{formatDateShort()}</Text>
+          <Text style={styles.date}>Wed 1 Sep</Text>
         </View>
 
         {/* Divider */}
@@ -324,31 +281,23 @@ const CardioVascularScreen: React.FC = () => {
         {/* Divider */}
         <View style={styles.divider} />
 
-        <TouchableOpacity
-          style={styles.historicalDataButton}
-          onPress={() => navigation.navigate('CardioHistoricalData')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.historicalDataButtonText}>View historical data</Text>
-        </TouchableOpacity>
-
         {/* All Metrics in List */}
         <View style={styles.metricsList}>
           <MetricItem 
-            title="Steps" 
-            score={physicalActivityValue}
-            unit="steps"
-            badge={String(physicalActivityScore)}
-            showNotCalculated={false}
+            title="Physical Activity" 
+            score={null}
+            unit="min"
+            showNotCalculated={true}
             isFirstInSection={true}
+            onPress={handleBloodSugarPress}
           />
           
           <MetricItem 
             title="Sleep" 
-            score={sleepValue}
+            score={null}
             unit="hrs"
-            badge={String(sleepScore)}
-            showNotCalculated={false}
+            showNotCalculated={true}
+            onPress={handleBloodSugarPress}
           />
           
           <MetricItem 
@@ -356,7 +305,7 @@ const CardioVascularScreen: React.FC = () => {
             score={null}
             unit="mmHg"
             showNotCalculated={true}
-            onPress={() => handleNavigateToAssessment('Blood Pressure')}
+            onPress={handleBloodSugarPress}
           />
           
           <MetricItem 
@@ -365,7 +314,7 @@ const CardioVascularScreen: React.FC = () => {
             unit="mg/dL"
             badge={bloodSugarScore !== null ? String(bloodSugarScore) : undefined}
             showNotCalculated={bloodSugarScore === null}
-            onPress={() => handleNavigateToAssessment('Blood Sugar')}
+            onPress={handleBloodSugarPress}
           />
           
           <MetricItem 
@@ -374,7 +323,7 @@ const CardioVascularScreen: React.FC = () => {
             unit="mg/dL"
             badge={bloodLipidScore !== null ? String(bloodLipidScore) : undefined}
             showNotCalculated={bloodLipidScore === null}
-            onPress={() => handleNavigateToAssessment('Blood Lipids')}
+            onPress={handleBloodLipidsPress}
           />
           
           <MetricItem 
@@ -383,7 +332,7 @@ const CardioVascularScreen: React.FC = () => {
             unit="BMI"
             badge={bmiScore !== null ? String(bmiScore) : undefined}
             showNotCalculated={bmiScore === null}
-            onPress={() => handleNavigateToAssessment('Body Mass Index')}
+            onPress={handleBmiPress}
           />
           
           <MetricItem 
@@ -391,7 +340,7 @@ const CardioVascularScreen: React.FC = () => {
             score={dietScore}
             badge={dietScore !== null ? String(dietScore) : undefined}
             showNotCalculated={dietScore === null}
-            onPress={() => handleNavigateToAssessment('Diet')}
+            onPress={handleDietPress}
           />
           
           <MetricItem 
@@ -399,7 +348,7 @@ const CardioVascularScreen: React.FC = () => {
             score={smokingScore}
             badge={smokingScore !== null ? String(smokingScore) : undefined}
             showNotCalculated={smokingScore === null}
-            onPress={() => handleNavigateToAssessment('Smoking')}
+            onPress={handleSmokingPress}
           />
         </View>
 
@@ -520,19 +469,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#E5E7EB',
     marginVertical: 16,
-  },
-  historicalDataButton: {
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  historicalDataButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3B82F6',
   },
   heartScoreContainer: {
     alignItems: 'center',

@@ -1,44 +1,147 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../App';
 import { Ionicons } from '@expo/vector-icons';
 import Settings from '../components/Settings';
 import { useSteps } from '../hooks/useSteps';
 import { formatDateLong } from '../utils/localDate';
+import { useAuth } from '../context/AuthContext';
+import { getDeviceTimezone } from '../utils/localDate';
+
+const API_BASE = 'http://localhost:3000/api/activity';
+
+type TodayGoal = {
+  id: number;
+  goalDate: string;
+  stepTarget: number;
+  symptomRating: number | null;
+  completedYesterday: boolean;
+  goalMet: boolean;
+} | null;
 
 const ActivityScreen: React.FC = () => {
-  const { steps } = useSteps();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { steps, stepsNumber } = useSteps();
+  const { accessToken } = useAuth();
+  const [todayGoal, setTodayGoal] = useState<TodayGoal>(null);
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [longestStreak, setLongestStreak] = useState(0);
+  const { width } = useWindowDimensions();
+  const progressSize = Math.min(width - 80, 200);
+
+  const fetchGoalAndStreak = useCallback(async () => {
+    if (!accessToken) return;
+    const tz = getDeviceTimezone();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      ...(tz ? { 'X-Timezone': tz } : {}),
+    };
+    try {
+      const [goalRes, streakRes] = await Promise.all([
+        fetch(tz ? `${API_BASE}/goal-today?timezone=${encodeURIComponent(tz)}` : `${API_BASE}/goal-today`, { headers }),
+        fetch(`${API_BASE}/streak`, { headers }),
+      ]);
+      if (goalRes.ok) {
+        const data = await goalRes.json();
+        setTodayGoal(data.goal || null);
+      }
+      if (streakRes.ok) {
+        const data = await streakRes.json();
+        setCurrentStreak(data.currentStreak ?? 0);
+        setLongestStreak(data.longestStreak ?? 0);
+      }
+    } catch (e) {
+      console.error('Activity fetch error:', e);
+    }
+  }, [accessToken]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchGoalAndStreak();
+    }, [fetchGoalAndStreak])
+  );
+
+  const goalSteps = todayGoal?.stepTarget ?? 6000;
+  const progressPct = goalSteps > 0 ? Math.min(100, (stepsNumber / goalSteps) * 100) : 0;
+  const progressColor = progressPct < 33 ? '#DC2626' : progressPct < 66 ? '#F59E0B' : '#34C759';
 
   return (
     <ScrollView style={styles.container}>
-      {/* Header with Date */}
       <View style={styles.headerContainer}>
         <Text style={styles.header}>Activity</Text>
         <Settings />
       </View>
-      
-      {/* Steps Progress */}
-      <View style={styles.progressCard}>
-        <View style={styles.progressCircle}>
-          <Ionicons name="walk" size={32} color="#34C759" />
-          <Text style={styles.progressNumber}>{steps}</Text>
-          <Text style={styles.progressGoal}>of 6,000 steps</Text>
-        </View>
-        <Text style={styles.dateText}>{formatDateLong()}</Text>
+
+      {/* Goal Setting Card */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Daily Goal</Text>
+        {todayGoal ? (
+          <View style={styles.goalStatusRow}>
+            <Ionicons name="checkmark-circle" size={24} color="#34C759" />
+            <Text style={styles.goalStatusText}>Today's goal: {todayGoal.stepTarget.toLocaleString()} steps</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.setGoalButton}
+            onPress={() => navigation.navigate('GoalStep1')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.setGoalButtonText}>Set Your Daily Goal</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Streaks Card */}
+      {/* Streak Card - Duolingo style */}
       <View style={styles.card}>
-        <View style={styles.cardRow}>
-          <View style={styles.iconCircle}>
+        <View style={styles.streakRow}>
+          <View style={styles.streakIconCircle}>
             <Text style={styles.fireEmoji}>🔥</Text>
           </View>
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>Streaks</Text>
-            <Text style={styles.cardDescription}>
-              Ready to start your streak? Meet today's goal to begin
-            </Text>
+          <View style={styles.streakContent}>
+            <Text style={styles.streakNumber}>{currentStreak}</Text>
+            <Text style={styles.streakLabel}>day streak</Text>
+          </View>
+          {longestStreak > currentStreak && (
+            <Text style={styles.longestText}>Best: {longestStreak} days</Text>
+          )}
+        </View>
+      </View>
+
+      {/* Progress */}
+      <View style={styles.progressCard}>
+        <Text style={styles.progressTitle}>Steps today</Text>
+        <View style={[styles.progressCircleWrap, { width: progressSize, height: progressSize }]}>
+          <View
+            style={[
+              styles.progressCircleBg,
+              {
+                width: progressSize,
+                height: progressSize,
+                borderRadius: progressSize / 2,
+                borderWidth: 10,
+                borderColor: '#E5E7EB',
+              },
+            ]}
+          />
+          <View style={styles.progressCircleCenter}>
+            <Text style={styles.progressNumber}>{steps}</Text>
+            <Text style={styles.progressGoal}>of {goalSteps.toLocaleString()} steps</Text>
           </View>
         </View>
+        <View style={[styles.progressBar, { backgroundColor: '#E5E7EB' }]}>
+          <View
+            style={[
+              styles.progressBarFill,
+              {
+                width: `${progressPct}%`,
+                backgroundColor: progressColor,
+              },
+            ]}
+          />
+        </View>
+        <Text style={styles.dateText}>{formatDateLong()}</Text>
       </View>
 
       {/* From Your Coach */}
@@ -65,7 +168,7 @@ const ActivityScreen: React.FC = () => {
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle}>Daily Challenge</Text>
             <Text style={styles.cardDescription}>
-              Great sleep last! Try a 10-minute walk before noon to get a head start on your goal
+              Meet your step goal to keep your streak going
             </Text>
           </View>
         </View>
@@ -132,35 +235,6 @@ const styles = StyleSheet.create({
     color: '#000',
     flex: 1,
   },
-  progressCard: {
-    backgroundColor: '#FFF',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-  },
-  progressCircle: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  progressNumber: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: '#000',
-    marginTop: 8,
-  },
-  progressGoal: {
-    fontSize: 17,
-    color: '#000',
-    marginTop: 4,
-  },
-  dateText: {
-    fontSize: 13,
-    color: '#8E8E93',
-    marginTop: 8,
-  },
   card: {
     backgroundColor: '#FFF',
     marginHorizontal: 16,
@@ -172,18 +246,90 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 4,
+  },
+  cardContent: { flex: 1 },
+  cardDescription: {
+    fontSize: 15,
+    color: '#3C3C43',
+    lineHeight: 20,
+  },
+  goalStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  goalStatusText: { fontSize: 16, color: '#374151' },
+  setGoalButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  setGoalButtonText: { fontSize: 17, fontWeight: '600', color: '#FFF' },
+  streakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  streakIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#FFE5E5',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
-  fireEmoji: {
-    fontSize: 28,
+  fireEmoji: { fontSize: 32 },
+  streakContent: { flex: 1 },
+  streakNumber: { fontSize: 36, fontWeight: '800', color: '#111827' },
+  streakLabel: { fontSize: 17, color: '#6B7280', marginTop: 2 },
+  longestText: { fontSize: 14, color: '#9CA3AF' },
+  progressCard: {
+    backgroundColor: '#FFF',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
   },
+  progressTitle: { fontSize: 17, fontWeight: '600', color: '#374151', marginBottom: 16 },
+  progressCircleWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  progressCircleBg: {
+    position: 'absolute',
+  },
+  progressCircleCenter: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressNumber: {
+    fontSize: 42,
+    fontWeight: '700',
+    color: '#000',
+  },
+  progressGoal: { fontSize: 15, color: '#6B7280', marginTop: 4 },
+  progressBar: {
+    height: 8,
+    width: '100%',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  dateText: { fontSize: 13, color: '#8E8E93' },
   coachIcon: {
     width: 48,
     height: 48,
@@ -193,9 +339,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  coachEmoji: {
-    fontSize: 28,
-  },
+  coachEmoji: { fontSize: 28 },
   trophyIcon: {
     width: 48,
     height: 48,
@@ -215,33 +359,9 @@ const styles = StyleSheet.create({
     marginRight: 12,
     position: 'relative',
   },
-  bulbIcon: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-  },
-  cardContent: {
-    flex: 1,
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  cardDescription: {
-    fontSize: 15,
-    color: '#3C3C43',
-    lineHeight: 20,
-  },
-  sectionHeader: {
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
-  },
+  bulbIcon: { position: 'absolute', top: 4, right: 4 },
+  sectionHeader: { marginBottom: 12 },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
   workoutRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -259,19 +379,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  workoutInfo: {
-    flex: 1,
-  },
-  workoutTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  workoutDuration: {
-    fontSize: 13,
-    color: '#8E8E93',
-  },
+  workoutInfo: { flex: 1 },
+  workoutTitle: { fontSize: 15, fontWeight: '600', color: '#000', marginBottom: 4 },
+  workoutDuration: { fontSize: 13, color: '#8E8E93' },
   videoPreview: {
     width: 60,
     height: 45,
@@ -280,15 +390,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  seeAllButton: {
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  seeAllText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
+  seeAllButton: { alignItems: 'center', paddingVertical: 8 },
+  seeAllText: { fontSize: 15, fontWeight: '600', color: '#007AFF' },
 });
 
 export default ActivityScreen;

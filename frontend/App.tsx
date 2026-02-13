@@ -14,7 +14,10 @@ import DietAssessmentScreen from './src/screens/LeFlows/DietAssessmentScreen';
 import SmokingAssessmentScreen from './src/screens/LeFlows/SmokingAssessmentScreen';
 import SymptomAssessmentScreen from './src/screens/SymptomsScreen';
 import CardioHistoricalDataScreen from './src/screens/LeFlows/CardioHistoricalDataScreen';
-//import GoalsSettingScreen from './src/screens/GoalsSettingScreen';
+import DailyCheckInStepScreen from './src/screens/GoalFlow/DailyCheckInStepScreen';
+import YesterdayStepsStepScreen from './src/screens/GoalFlow/YesterdayStepsStepScreen';
+import SymptomBurdenStepScreen from './src/screens/GoalFlow/SymptomBurdenStepScreen';
+import GoalSelectionStepScreen from './src/screens/GoalFlow/GoalSelectionStepScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -29,6 +32,10 @@ export type RootStackParamList = {
   Symptoms: undefined;
   GoalsSetting: undefined;
   CardioHistoricalData: undefined;
+  GoalStep1: undefined;
+  GoalStep2: undefined;
+  GoalStep3: { completedYesterday: boolean };
+  GoalStep4: { completedYesterday: boolean; symptomRating: number };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -55,7 +62,10 @@ export default function App() {
             <Stack.Screen name="Smoking" component={SmokingAssessmentScreen} />
             <Stack.Screen name="Symptoms" component={SymptomAssessmentScreen} />
             <Stack.Screen name="CardioHistoricalData" component={CardioHistoricalDataScreen} />
-            {/*<Stack.Screen name="GoalsSetting" component={GoalsSettingScreen} />*/}
+            <Stack.Screen name="GoalStep1" component={DailyCheckInStepScreen} />
+            <Stack.Screen name="GoalStep2" component={YesterdayStepsStepScreen} />
+            <Stack.Screen name="GoalStep3" component={SymptomBurdenStepScreen} />
+            <Stack.Screen name="GoalStep4" component={GoalSelectionStepScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </FitbitAuthProvider>
