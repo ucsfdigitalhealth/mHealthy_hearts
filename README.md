@@ -54,9 +54,8 @@ A health tracking application with user authentication and cardiovascular health
 - `GET /api/fitbitAuth/fitbit/callback` - Fitbit OAuth callback
 - `POST /api/fitbitAuth/fitbit/refresh` - Refresh Fitbit tokens (requires JWT)
 - `GET /api/fitbitAuth/fitbit/data` - Fetch heart rate data (requires JWT)
-- `GET /api/fitbitAuth/fitbit/steps` - Fetch steps data for today (optional `?timezone=America/New_York` or `X-Timezone` header for client timezone; requires JWT)
-- `GET /api/fitbitAuth/fitbit/sleep` - Fetch yesterday's sleep (optional `?timezone=...` or `X-Timezone`; bed date and dates use client timezone; requires JWT)
-- `GET /api/fitbitAuth/fitbit/activitySummary` - Fetch activity summary for last 7 days (optional `?timezone=...` or `X-Timezone`; requires JWT)
+- `GET /api/fitbitAuth/fitbit/steps` - Fetch steps data for last 7 days (requires JWT)
+- `GET /api/fitbitAuth/fitbit/activitySummary` - Fetch activity and sleep summary for last 7 days including lightly active, fairly active, very active minutes, steps, total minutes asleep, time in bed, and sleep efficiency (requires JWT)
 
 ### Omron Integration
 - `GET /api/omronAuth` - Initiate Omron OAuth flow with PKCE (requires JWT)
@@ -70,6 +69,12 @@ A health tracking application with user authentication and cardiovascular health
 - `POST /api/diet` - Store diet assessment data (requires JWT)
 - `POST /api/smoking` - Store smoking assessment data (requires JWT)
 - `GET /api/health-scores` - Get all health scores (blood lipids, blood sugar, BMI, diet, smoking) for authenticated user (requires JWT)
+
+### Activity Goals & Streaks
+- `GET /api/activity/goal-today` - Get today's step goal (requires JWT)
+- `POST /api/activity/goal` - Set today's step goal (requires JWT)
+- `GET /api/activity/streak` - Get current + longest streak (requires JWT)
+- `GET /api/activity/yesterday-steps` - Get yesterday's step count (requires JWT)
 
 ### Request/Response Examples
 
@@ -241,6 +246,36 @@ CREATE TABLE smoking_assessments (
 );
 ```
 
+Create the `daily_goals` table:
+```sql
+CREATE TABLE IF NOT EXISTS daily_goals (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  goal_date DATE NOT NULL,
+  step_target INT NOT NULL,
+  symptom_rating INT NULL,
+  completed_yesterday TINYINT(1) NULL,
+  goal_met TINYINT(1) NULL DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_user_goal_date (user_id, goal_date),
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
+  INDEX idx_user_date (user_id, goal_date)
+);
+```
+
+Create the `activity_streaks` table:
+```sql
+CREATE TABLE IF NOT EXISTS activity_streaks (
+  user_id INT NOT NULL PRIMARY KEY,
+  current_streak INT NOT NULL DEFAULT 0,
+  longest_streak INT NOT NULL DEFAULT 0,
+  last_goal_met_date DATE NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE
+);
+```
+
 
 ## Fitbit Integration Details
 
@@ -259,9 +294,8 @@ CREATE TABLE smoking_assessments (
 
 ### Available Data Endpoints
 - **Heart Rate**: `/api/fitbitAuth/fitbit/data` - Returns latest heart rate and intraday data
-- **Steps**: `/api/fitbitAuth/fitbit/steps` - Returns today's steps (cached in `fitbit_daily_data`)
-- **Sleep**: `/api/fitbitAuth/fitbit/sleep` - Returns yesterday's sleep (bed date local; stored in `fitbit_sleep_data`)
-- **Activity Summary**: `/api/fitbitAuth/fitbit/activitySummary` - Returns 7 days of activity metrics:
+- **Steps**: `/api/fitbitAuth/fitbit/steps` - Returns 7 days of steps data
+- **Activity Summary**: `/api/fitbitAuth/fitbit/activitySummary` - Returns 7 days of activity metrics including:
   - `minutesLightlyActive` - Light activity minutes
   - `minutesFairlyActive` - Fairly active minutes
   - `minutesVeryActive` - Very active minutes

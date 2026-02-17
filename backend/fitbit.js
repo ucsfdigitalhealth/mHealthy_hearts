@@ -523,6 +523,11 @@ router.get('/fitbit/steps', verifyTokenOrRefresh, async (req, res) => {
       );
     }
 
+    const { updateGoalAndStreakForDate } = require('./routes/activityGoals');
+    updateGoalAndStreakForDate(req.user.userId, today, steps).catch(err =>
+      console.error('Activity goal/streak update error:', err)
+    );
+
     res.json({
       message: 'Steps data fetched',
       data: dataResponse.data
