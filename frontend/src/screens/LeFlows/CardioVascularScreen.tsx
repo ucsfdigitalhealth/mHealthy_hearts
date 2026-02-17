@@ -159,6 +159,10 @@ const CardioVascularScreen: React.FC = () => {
     navigation.navigate('Smoking');
   };
 
+  const handleViewHistoricalDataPress = () => {
+    navigation.navigate('CardioHistoricalData');
+  };
+
   // Fetch all health scores function
   const fetchAllHealthScores = useCallback(async () => {
     if (!accessToken) {
@@ -242,6 +246,7 @@ const CardioVascularScreen: React.FC = () => {
         {/* Divider */}
         <View style={styles.divider} />
 
+
         {/* Heart Score */}
         <View style={styles.heartScoreContainer}>
           <Text style={styles.heartScoreLabel}>Heart Score</Text>
@@ -278,8 +283,19 @@ const CardioVascularScreen: React.FC = () => {
           </View>
         </View>
 
+        
+
         {/* Divider */}
         <View style={styles.divider} />
+
+        {/* View Historical Data Button */}
+                <TouchableOpacity
+          style={styles.historicalButton}
+          onPress={handleViewHistoricalDataPress}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.historicalButtonText}>View Historical Data</Text>
+        </TouchableOpacity>
 
         {/* All Metrics in List */}
         <View style={styles.metricsList}>
@@ -510,6 +526,19 @@ const styles = StyleSheet.create({
   },
   metricsList: {
     marginBottom: 24,
+  },
+  historicalButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 14,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  historicalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   metricItem: {
     backgroundColor: '#FFFFFF',
