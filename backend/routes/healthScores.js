@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db.js");
 const { verifyToken } = require("../auth.js");
-const { getBloodGlucoseScore, getBMIScore } = require("../metricCalc.js");
+const { getBloodGlucoseScore, getBMIScore, getDietScore } = require("../metricCalc.js");
 
 
 
@@ -41,63 +41,6 @@ function calculateSmokingScore(smokingData) {
   }
 
   return null;
-}
-
-// Helper function to calculate diet score based on MEPA criteria
-function calculateDietScore(dietData) {
-  if (!dietData) return null;
-
-  let mepaScore = 0; // Total score 0-10
-
-  // Vegetables: ≥2 servings per day
-  if (dietData.vegetables_per_day >= 2) mepaScore += 1;
-
-  // Fruit: ≥1 serving per day
-  if (dietData.fruit_per_day >= 1) mepaScore += 1;
-
-  // Red meat / processed meat: ≤3 servings per week
-  if (dietData.red_meat_per_week !== null && dietData.red_meat_per_week <= 3) mepaScore += 1;
-
-  // Fish / seafood: ≥1 serving per week
-  if (dietData.fish_per_week >= 1) mepaScore += 1;
-
-  // Butter / cream: ≤5 servings per week
-  if (dietData.butter_per_week !== null && dietData.butter_per_week <= 5) mepaScore += 1;
-
-  // Beans / legumes: ≥3 servings per week
-  if (dietData.beans_per_week >= 3) mepaScore += 1;
-
-  // Whole grains: ≥3 servings per day
-  if (dietData.whole_grains_per_day >= 3) mepaScore += 1;
-
-  // Sweets / pastries: ≤4 servings per week
-  if (dietData.sweets_per_week !== null && dietData.sweets_per_week <= 4) mepaScore += 1;
-
-  // Fast food: ≤1 meal per week
-  if (dietData.fast_food_per_week !== null && dietData.fast_food_per_week <= 1) mepaScore += 1;
-
-  // Sugar-sweetened beverages: ≥7 servings per week (NOTE: This seems unusual, but implementing as specified)
-  // If the value is null, we can't determine if criteria is met, so don't add point
-  if (dietData.sugary_drinks_per_week !== null && dietData.sugary_drinks_per_week >= 7) mepaScore += 1;
-
-  // Convert MEPA score (0-10) to display score
-  // User specified: 100 | 15-16, 80 | 12-14, 50 | 8-11, 25 | 4-7, 0 | 0-3
-  // But MEPA score range is 0-10, so adjusting to: 100 | 8-10, 80 | 6-7, 50 | 4-5, 25 | 2-3, 0 | 0-1
-  // If user wants different ranges, they can be adjusted here
-  let displayScore;
-  if (mepaScore >= 8) {
-    displayScore = 100; // Top tier: 8-10 (adjusted from 15-16)
-  } else if (mepaScore >= 6) {
-    displayScore = 80; // Second tier: 6-7 (adjusted from 12-14)
-  } else if (mepaScore >= 4) {
-    displayScore = 50; // Third tier: 4-5 (adjusted from 8-11)
-  } else if (mepaScore >= 2) {
-    displayScore = 25; // Fourth tier: 2-3 (adjusted from 4-7)
-  } else {
-    displayScore = 0; // Bottom tier: 0-1 (adjusted from 0-3)
-  }
-
-  return { mepaScore, displayScore };
 }
 
 // GET /api/health-scores
@@ -171,7 +114,7 @@ router.get("/", verifyToken, async (req, res) => {
     let dietScore = null;
     let dietMepaScore = null;
     if (dietRows && dietRows.length > 0) {
-      const dietResult = calculateDietScore(dietRows[0]);
+      const dietResult = getDietScore(dietRows[0]);
       if (dietResult) {
         dietMepaScore = dietResult.mepaScore;
         dietScore = dietResult.displayScore;

@@ -16,6 +16,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
 import { getCachedBloodSugar, setCachedBloodSugar } from '../../utils/bloodSugarCache';
 import { getCachedBmi, setCachedBmi } from '../../utils/bmiCache';
+import { getCachedDiet, setCachedDiet } from '../../utils/dietCache';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -77,18 +78,28 @@ const getBMIRangeLabel = (bmiValue: number | null): string | null => {
   return 'Poor (Obese)';
 };
 
+// Diet range label derived from MEPA score (0-10): 8-10 excellent, 5-7 fair, 0-4 poor
+const getDietRangeLabel = (mepaScore: number | null): string | null => {
+  if (mepaScore === null) return null;
+  if (mepaScore >= 8) return 'Excellent';
+  if (mepaScore >= 5) return 'Fair';
+  return 'Poor';
+};
+
 const MetricItem: React.FC<{
   title: string;
   score: number | null;
   unit?: string;
   badge?: string;
   onPress?: () => void;
-  status?: string;
+  status?: string | null;
   isFirstInSection?: boolean;
   showNotCalculated?: boolean;
-}> = ({ title, score, unit, badge, onPress, status, isFirstInSection, showNotCalculated }) => {
+  colorValueByStatus?: boolean;
+}> = ({ title, score, unit, badge, onPress, status, isFirstInSection, showNotCalculated, colorValueByStatus }) => {
   const calculatedStatus = status || getStatusFromScore(score !== null && score !== undefined ? score : null);
   const statusColor = getStatusColor(calculatedStatus || null);
+  const valueColor = colorValueByStatus && calculatedStatus ? statusColor : undefined;
   
   const content = (
     <View style={[styles.metricItem, isFirstInSection && styles.firstMetricItem]}>
@@ -103,7 +114,7 @@ const MetricItem: React.FC<{
       <View style={styles.metricContent}>
         {score !== null && score !== undefined ? (
           <>
-            <Text style={styles.metricValue}>{score}</Text>
+            <Text style={[styles.metricValue, valueColor ? { color: valueColor } : undefined]}>{score}</Text>
             {unit && <Text style={styles.metricUnit}> {unit}</Text>}
           </>
         ) : (
@@ -141,6 +152,7 @@ const CardioVascularScreen: React.FC = () => {
   const [bmiScore, setBmiScore] = useState<number | null>(null);
   const [bmiValue, setBmiValue] = useState<number | null>(null);
   const [dietScore, setDietScore] = useState<number | null>(null);
+  const [dietMepaScore, setDietMepaScore] = useState<number | null>(null);
   const [smokingScore, setSmokingScore] = useState<number | null>(null);
   const [heartScore, setHeartScore] = useState<number | null>(null);
   
@@ -202,7 +214,7 @@ const CardioVascularScreen: React.FC = () => {
       return;
     }
 
-    // Check AsyncStorage caches first (blood sugar + BMI)
+    // Check AsyncStorage caches first (blood sugar + BMI + diet)
     const cachedBS = await getCachedBloodSugar();
     if (cachedBS) {
       setBloodSugarScore(cachedBS.score ?? null);
@@ -213,6 +225,12 @@ const CardioVascularScreen: React.FC = () => {
     if (cachedBMI) {
       setBmiScore(cachedBMI.score ?? null);
       setBmiValue(cachedBMI.value ?? null);
+    }
+
+    const cachedDiet = await getCachedDiet();
+    if (cachedDiet) {
+      setDietScore(cachedDiet.score ?? null);
+      setDietMepaScore(cachedDiet.mepaScore ?? null);
     }
 
     try {
@@ -244,8 +262,13 @@ const CardioVascularScreen: React.FC = () => {
           score: data.bmi?.score ?? null,
           value: data.bmi?.value ?? null,
         });
-        // Diet
+        // Diet — update state and persist to cache
         setDietScore(data.diet?.score ?? null);
+        setDietMepaScore(data.diet?.mepaScore ?? null);
+        await setCachedDiet({
+          score: data.diet?.score ?? null,
+          mepaScore: data.diet?.mepaScore ?? null,
+        });
         // Smoking
         setSmokingScore(data.smoking?.score ?? null);
         // Heart score will be recalculated by useEffect
@@ -263,7 +286,10 @@ const CardioVascularScreen: React.FC = () => {
           setBmiScore(null);
           setBmiValue(null);
         }
-        setDietScore(null);
+        if (!cachedDiet) {
+          setDietScore(null);
+          setDietMepaScore(null);
+        }
         setSmokingScore(null);
       }
     } catch (error) {
@@ -278,7 +304,10 @@ const CardioVascularScreen: React.FC = () => {
         setBmiScore(null);
         setBmiValue(null);
       }
-      setDietScore(null);
+      if (!cachedDiet) {
+        setDietScore(null);
+        setDietMepaScore(null);
+      }
       setSmokingScore(null);
     }
   }, [accessToken]);
@@ -417,8 +446,9 @@ const CardioVascularScreen: React.FC = () => {
           
           <MetricItem 
             title="Diet" 
-            score={dietScore}
+            score={dietMepaScore}
             badge={dietScore !== null ? String(dietScore) : undefined}
+            status={getDietRangeLabel(dietMepaScore)}
             showNotCalculated={dietScore === null}
             onPress={handleDietPress}
           />

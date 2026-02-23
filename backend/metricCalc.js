@@ -49,4 +49,47 @@ function getBMIScore(bmiValue) {
   return 0; // >= 40
 }
 
-module.exports = { getBloodGlucoseScore, getBMIScore };
+/**
+ * Calculate a diet score (0–100) based on MEPA criteria.
+ * Accepts an object with snake_case keys matching the diet_assessments table.
+ *
+ * @param {Object} d - diet data row
+ * @returns {{ mepaScore: number, displayScore: number } | null}
+ */
+function getDietScore(d) {
+  if (!d) return null;
+
+  let mepaScore = 0;
+
+  // Vegetables: ≥2 servings/day
+  if (d.vegetables_per_day != null && d.vegetables_per_day >= 2) mepaScore += 1;
+  // Fruit: ≥1 serving/day
+  if (d.fruit_per_day != null && d.fruit_per_day >= 1) mepaScore += 1;
+  // Red/processed meat: ≤3 servings/week
+  if (d.red_meat_per_week != null && d.red_meat_per_week <= 3) mepaScore += 1;
+  // Fish: ≥1 serving/week
+  if (d.fish_per_week != null && d.fish_per_week >= 1) mepaScore += 1;
+  // Butter/cream: ≤5 servings/week
+  if (d.butter_per_week != null && d.butter_per_week <= 5) mepaScore += 1;
+  // Beans/legumes: ≥3 servings/week
+  if (d.beans_per_week != null && d.beans_per_week >= 3) mepaScore += 1;
+  // Whole grains: ≥3 servings/day
+  if (d.whole_grains_per_day != null && d.whole_grains_per_day >= 3) mepaScore += 1;
+  // Sweets/pastries: ≤4 servings/week
+  if (d.sweets_per_week != null && d.sweets_per_week <= 4) mepaScore += 1;
+  // Fast food: ≤1 meal/week
+  if (d.fast_food_per_week != null && d.fast_food_per_week <= 1) mepaScore += 1;
+  // Sugary drinks: ≥7 servings/week
+  if (d.sugary_drinks_per_week != null && d.sugary_drinks_per_week >= 7) mepaScore += 1;
+
+  let displayScore;
+  if (mepaScore >= 8)      displayScore = 100;
+  else if (mepaScore >= 6) displayScore = 80;
+  else if (mepaScore >= 4) displayScore = 50;
+  else if (mepaScore >= 2) displayScore = 25;
+  else                     displayScore = 0;
+
+  return { mepaScore, displayScore };
+}
+
+module.exports = { getBloodGlucoseScore, getBMIScore, getDietScore };

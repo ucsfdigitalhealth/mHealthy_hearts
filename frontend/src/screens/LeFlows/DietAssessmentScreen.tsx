@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useRef } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  PanResponder, Animated, Dimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { setCachedDiet } from '../../utils/dietCache';
 
 type Question = {
   id: number;
@@ -17,10 +21,10 @@ type Question = {
 const questions: Question[] = [
   {
     id: 1,
-    category: 'WHOLE GRAINS',
-    title: 'Life Essential 8',
-    description: 'How many servings of whole-grain foods do you eat per day? Examples include whole-grain bread, brown rice, oatmeal, quinoa',
-    emoji: '🌾',
+    category: 'SWEETS',
+    title: 'Sweets & Pastries',
+    description: 'How many servings of sweets, candy bars, pastries, cookies, or cakes do you eat?',
+    emoji: '🍰',
     options: [
       { label: '3+', value: 3 },
       { label: '2', value: 2 },
@@ -58,10 +62,10 @@ const questions: Question[] = [
   },
   {
     id: 4,
-    category: 'NUTS',
-    title: 'Nuts',
-    description: 'How many servings of nuts, seeds, or legumes do you eat per week?',
-    emoji: '🥜',
+    category: 'BEANS',
+    title: 'Beans',
+    description: 'How many servings of beans do you eat?',
+    emoji: '🫘',
     options: [
       { label: '4+', value: 4 },
       { label: '3', value: 3 },
@@ -155,13 +159,113 @@ const questions: Question[] = [
   },
 ];
 
+type Phase = 'intro' | 'questions' | 'commitment' | 'importance' | 'confidence' | 'resources' | 'results';
+
+// Local MEPA score calculator — mirrors backend getDietScore
+function calcDietScoreLocal(ans: { [key: number]: number }): { mepaScore: number; displayScore: number } {
+  let mepa = 0;
+  const vegsPerDay = ans[2] ?? null;
+  const fruitPerDay = ans[3] ?? null;
+  const redMeatPerWeek = ans[9] ?? null;
+  const fishPerWeek = ans[5] ?? null;
+  const butterPerWeek = ans[6] ? ans[6] * 7 : null;
+  const beansPerWeek = ans[4] ?? null;
+  const wholeGrainsPerDay = ans[7] ?? null;
+  const sweetsPerWeek = ans[1] ?? null;
+  const fastFoodPerWeek = ans[8] ?? null;
+  const sugaryDrinksPerWeek = ans[10] ?? null;
+
+  if (vegsPerDay != null && vegsPerDay >= 2) mepa++;
+  if (fruitPerDay != null && fruitPerDay >= 1) mepa++;
+  if (redMeatPerWeek != null && redMeatPerWeek <= 3) mepa++;
+  if (fishPerWeek != null && fishPerWeek >= 1) mepa++;
+  if (butterPerWeek != null && butterPerWeek <= 5) mepa++;
+  if (beansPerWeek != null && beansPerWeek >= 3) mepa++;
+  if (wholeGrainsPerDay != null && wholeGrainsPerDay >= 3) mepa++;
+  if (sweetsPerWeek != null && sweetsPerWeek <= 4) mepa++;
+  if (fastFoodPerWeek != null && fastFoodPerWeek <= 1) mepa++;
+  if (sugaryDrinksPerWeek != null && sugaryDrinksPerWeek >= 7) mepa++;
+
+  let displayScore: number;
+  if (mepa >= 8) displayScore = 100;
+  else if (mepa >= 6) displayScore = 80;
+  else if (mepa >= 4) displayScore = 50;
+  else if (mepa >= 2) displayScore = 25;
+  else displayScore = 0;
+
+  return { mepaScore: mepa, displayScore };
+}
+
+const SLIDER_WIDTH = Dimensions.get('window').width - 80;
+
+const CustomSlider: React.FC<{ value: number; onValueChange: (v: number) => void }> = ({
+  value,
+  onValueChange,
+}) => {
+  const onChangeRef = useRef(onValueChange);
+  onChangeRef.current = onValueChange;
+
+  const posX = useRef((value / 10) * SLIDER_WIDTH);
+  const animX = useRef(new Animated.Value((value / 10) * SLIDER_WIDTH)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        animX.setOffset(posX.current);
+        animX.setValue(0);
+      },
+      onPanResponderMove: (_, gs) => {
+        const clamped = Math.max(0, Math.min(SLIDER_WIDTH, posX.current + gs.dx));
+        animX.setValue(gs.dx);
+        onChangeRef.current(Math.round((clamped / SLIDER_WIDTH) * 10));
+      },
+      onPanResponderRelease: (_, gs) => {
+        const clamped = Math.max(0, Math.min(SLIDER_WIDTH, posX.current + gs.dx));
+        posX.current = clamped;
+        animX.flattenOffset();
+        animX.setValue(clamped);
+        onChangeRef.current(Math.round((clamped / SLIDER_WIDTH) * 10));
+      },
+    })
+  ).current;
+
+  const thumbLeft = animX.interpolate({
+    inputRange: [0, SLIDER_WIDTH],
+    outputRange: [-14, SLIDER_WIDTH - 14],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <View style={styles.sliderContainer}>
+      <View style={styles.sliderTrackWrapper}>
+        <View style={styles.sliderTrackLine} />
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={[styles.sliderThumb, { left: thumbLeft }]}
+        />
+      </View>
+      <View style={styles.sliderLabels}>
+        <Text style={styles.sliderLabel}>{'0\nNot'}</Text>
+        <Text style={styles.sliderLabel}>{'5\nSomewhat'}</Text>
+        <Text style={styles.sliderLabel}>{'10\nVery'}</Text>
+      </View>
+    </View>
+  );
+};
+
 const DietAssessmentScreen: React.FC = () => {
   const navigation = useNavigation();
   const { accessToken } = useAuth();
+  const [phase, setPhase] = useState<Phase>('intro');
+  const [introStep, setIntroStep] = useState<0 | 1>(0);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<{ [key: number]: number }>({});
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [showResults, setShowResults] = useState(false);
+  const [commitment, setCommitment] = useState<boolean | null>(null);
+  const [importanceVal, setImportanceVal] = useState(5);
+  const [confidenceVal, setConfidenceVal] = useState(5);
 
   const question = questions[currentQuestion];
   const progress = ((currentQuestion + 1) / questions.length) * 100;
@@ -171,61 +275,65 @@ const DietAssessmentScreen: React.FC = () => {
   };
 
   const handleNext = () => {
-    if (selectedOption !== null) {
-      setAnswers({ ...answers, [question.id]: selectedOption });
-      
-      if (currentQuestion < questions.length - 1) {
-        setCurrentQuestion(currentQuestion + 1);
-        // Set selected option if user already answered this question
-        const nextQuestionId = questions[currentQuestion + 1].id;
-        setSelectedOption(answers[nextQuestionId] ?? null);
-      } else {
-        setShowResults(true);
+    if (phase === 'questions') {
+      if (selectedOption !== null) {
+        const updatedAnswers = { ...answers, [question.id]: selectedOption };
+        setAnswers(updatedAnswers);
+        if (currentQuestion < questions.length - 1) {
+          setCurrentQuestion(currentQuestion + 1);
+          const nextQuestionId = questions[currentQuestion + 1].id;
+          setSelectedOption(answers[nextQuestionId] ?? null);
+        } else {
+          setPhase('commitment');
+        }
       }
+    } else if (phase === 'commitment') {
+      if (commitment === null) return;
+      setPhase(commitment ? 'importance' : 'resources');
+    } else if (phase === 'importance') {
+      setPhase('confidence');
+    } else if (phase === 'confidence') {
+      setPhase('resources');
+    } else if (phase === 'resources') {
+      setPhase('results');
     }
   };
 
   const handleBack = () => {
-    if (showResults) {
-      setShowResults(false);
-      setSelectedOption(answers[question.id] ?? null);
-    } else if (currentQuestion > 0) {
-      setCurrentQuestion(currentQuestion - 1);
-      const prevQuestionId = questions[currentQuestion - 1].id;
-      setSelectedOption(answers[prevQuestionId] ?? null);
+    if (phase === 'results') {
+      setPhase('resources');
+    } else if (phase === 'resources') {
+      setPhase(commitment ? 'confidence' : 'commitment');
+    } else if (phase === 'confidence') {
+      setPhase('importance');
+    } else if (phase === 'importance') {
+      setPhase('commitment');
+    } else if (phase === 'commitment') {
+      setPhase('questions');
+      setCurrentQuestion(questions.length - 1);
+      setSelectedOption(answers[questions[questions.length - 1].id] ?? null);
+    } else if (phase === 'questions') {
+      if (currentQuestion > 0) {
+        setCurrentQuestion(currentQuestion - 1);
+        const prevQuestionId = questions[currentQuestion - 1].id;
+        setSelectedOption(answers[prevQuestionId] ?? null);
+      } else {
+        setPhase('intro');
+        setIntroStep(1);
+      }
     } else {
-      navigation.goBack();
-    }
-  };
-
-  const calculateScore = () => {
-    const maxScore = 100;
-    let score = 0;
-    
-    for (let i = 1; i <= 5; i++) {
-      if (answers[i]) {
-        score += answers[i] * 3;
+      // intro phase
+      if (introStep === 1) {
+        setIntroStep(0);
+      } else {
+        navigation.goBack();
       }
     }
-    
-    for (let i = 6; i <= 10; i++) {
-      if (answers[i]) {
-        score -= answers[i] * 2;
-      }
-    }
-    
-    score = Math.max(0, Math.min(maxScore, score + 30));
-    return Math.round(score);
   };
 
   const handleDone = async () => {
-    // Map question IDs to API fields based on user requirements
-    // Question mapping: 
-    // id 1 = whole_grains_per_day, id 2 = vegetables_per_day, id 3 = fruit_per_day,
-    // id 4 = beans_per_week (nuts/legumes), id 5 = fish_per_week, id 6 = butter_per_week,
-    // id 7 = sweets_per_week (currently refined grains - mapping to sweets),
-    // id 8 = fast_food_per_week, id 9 = red_meat_per_week, id 10 = sugary_drinks_per_week
-    
+    const { displayScore, mepaScore } = calcDietScoreLocal(answers);
+
     try {
       await fetch('http://localhost:3000/api/diet', {
         method: 'POST',
@@ -234,27 +342,225 @@ const DietAssessmentScreen: React.FC = () => {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
-          wholeGrainsPerDay: answers[1] ?? null,
+          sweetsPerWeek: answers[1] ?? null,
           vegetablesPerDay: answers[2] ?? null,
           fruitPerDay: answers[3] ?? null,
-          beansPerWeek: answers[4] ?? null, // nuts/legumes
+          beansPerWeek: answers[4] ?? null,
           fishPerWeek: answers[5] ?? null,
-          butterPerWeek: answers[6] ? answers[6] * 7 : null, // Convert per day to per week
-          sweetsPerWeek: answers[7] ?? null, // Note: question is about refined grains, mapping to sweets
+          butterPerWeek: answers[6] ? answers[6] * 7 : null,
+          wholeGrainsPerDay: answers[7] ?? null,
           fastFoodPerWeek: answers[8] ?? null,
           redMeatPerWeek: answers[9] ?? null,
           sugaryDrinksPerWeek: answers[10] ?? null,
+          commitmentToChange: commitment === true,
+          importance: commitment ? importanceVal : null,
+          confidence: commitment ? confidenceVal : null,
         }),
       });
     } catch (error) {
       console.error('Error saving diet assessment:', error);
     }
 
+    await setCachedDiet({ score: displayScore, mepaScore });
     navigation.goBack();
   };
 
-  if (showResults) {
-    const score = calculateScore();
+  // ── Intro screens ──────────────────────────────────────────────────────────
+  if (phase === 'intro') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color="#007AFF" />
+            <Text style={styles.backText}>
+              {introStep === 0 ? 'Cancel' : 'Back'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.introContent} showsVerticalScrollIndicator={false}>
+          {introStep === 0 ? (
+            <>
+              <Text style={styles.introTitle}>Let's assess your eating habits</Text>
+              <Text style={styles.introSubtitle}>
+                This short screener asks about the types of foods you eat. It helps calculate your diet score for cardiovascular health.
+              </Text>
+              <View style={styles.introImageContainer}>
+                <Text style={styles.introEmoji}>🥗</Text>
+              </View>
+              <TouchableOpacity style={styles.introStartButton} onPress={() => setIntroStep(1)}>
+                <Text style={styles.introButtonText}>Start</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.introTitle}>Tip</Text>
+              <Text style={styles.introSubtitle}>
+                The following questions ask about your eating habits. Please answer based on either a typical day or a typical week.
+              </Text>
+              <View style={styles.introImageContainer}>
+                <Text style={styles.introEmoji}>🥗</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.introNextButton}
+                onPress={() => {
+                  setPhase('questions');
+                  setCurrentQuestion(0);
+                  setSelectedOption(null);
+                }}
+              >
+                <Text style={styles.introButtonText}>Next</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Commitment screen ──────────────────────────────────────────────────────
+  if (phase === 'commitment') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color="#007AFF" />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.phaseContent} showsVerticalScrollIndicator={false}>
+          <Text style={styles.phaseTitle}>Commitment to Healthy Change</Text>
+          <Text style={styles.phaseSubtitle}>
+            Based on your diet assessment, are you committed to making healthy changes to your eating habits?
+          </Text>
+          <View style={styles.commitmentButtons}>
+            <TouchableOpacity
+              style={[styles.commitmentButton, commitment === true && styles.commitmentButtonSelected]}
+              onPress={() => setCommitment(true)}
+            >
+              <Text style={[styles.commitmentButtonText, commitment === true && styles.commitmentButtonTextSelected]}>
+                Yes
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.commitmentButton, commitment === false && styles.commitmentButtonSelected]}
+              onPress={() => setCommitment(false)}
+            >
+              <Text style={[styles.commitmentButtonText, commitment === false && styles.commitmentButtonTextSelected]}>
+                No
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.blueButton, commitment === null && styles.nextButtonDisabled]}
+            onPress={handleNext}
+            disabled={commitment === null}
+          >
+            <Text style={styles.blueButtonText}>Next</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Importance slider ──────────────────────────────────────────────────────
+  if (phase === 'importance') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color="#007AFF" />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.phaseContent} showsVerticalScrollIndicator={false}>
+          <Text style={styles.phaseTitle}>Importance</Text>
+          <Text style={styles.phaseSubtitle}>
+            How important is improving your diet to you?
+          </Text>
+          <Text style={styles.sliderValue}>{importanceVal}</Text>
+          <CustomSlider value={importanceVal} onValueChange={setImportanceVal} />
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <TouchableOpacity style={styles.blueButton} onPress={handleNext}>
+            <Text style={styles.blueButtonText}>Next</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Confidence slider ──────────────────────────────────────────────────────
+  if (phase === 'confidence') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color="#007AFF" />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.phaseContent} showsVerticalScrollIndicator={false}>
+          <Text style={styles.phaseTitle}>Confidence</Text>
+          <Text style={styles.phaseSubtitle}>
+            How confident are you that you can improve your diet?
+          </Text>
+          <Text style={styles.sliderValue}>{confidenceVal}</Text>
+          <CustomSlider value={confidenceVal} onValueChange={setConfidenceVal} />
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <TouchableOpacity style={styles.blueButton} onPress={handleNext}>
+            <Text style={styles.blueButtonText}>Next</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Resources screen ───────────────────────────────────────────────────────
+  if (phase === 'resources') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color="#007AFF" />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.phaseContent} showsVerticalScrollIndicator={false}>
+          <Text style={styles.phaseTitle}>Resources</Text>
+          <Text style={styles.phaseSubtitle}>
+            You're on the right path! Here are some heart-healthy eating tips to help you along the way.
+          </Text>
+          <View style={styles.introImageContainer}>
+            <Text style={styles.introEmoji}>🥦</Text>
+          </View>
+          <Text style={styles.resourcesBody}>
+            Focus on eating more fruits, vegetables, whole grains, and legumes. Limit red meat, sweets, and sugary drinks to support your cardiovascular health.
+          </Text>
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <TouchableOpacity style={styles.blueButton} onPress={handleNext}>
+            <Text style={styles.blueButtonText}>Next</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Results screen ─────────────────────────────────────────────────────────
+  if (phase === 'results') {
+    const { displayScore } = calcDietScoreLocal(answers);
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -266,12 +572,12 @@ const DietAssessmentScreen: React.FC = () => {
 
         <ScrollView style={styles.resultsContainer}>
           <Text style={styles.resultsTitle}>Great Job!</Text>
-          
+
           <View style={styles.scoreCard}>
             <Text style={styles.scoreLabel}>Based on your responses</Text>
             <View style={styles.scoreCircle}>
               <Text style={styles.scoreEmoji}>🎉</Text>
-              <Text style={styles.scoreNumber}>{score}</Text>
+              <Text style={styles.scoreNumber}>{displayScore}</Text>
               <Text style={styles.scoreMax}>out of 100</Text>
             </View>
           </View>
@@ -290,14 +596,13 @@ const DietAssessmentScreen: React.FC = () => {
     );
   }
 
+  // ── Questions screen ───────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#007AFF" />
-          <Text style={styles.backText}>
-            {currentQuestion === 0 ? 'Cancel' : 'Back'}
-          </Text>
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
 
         <View style={styles.progressBarContainer}>
@@ -516,6 +821,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  blueButton: {
+    backgroundColor: '#224694',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  blueButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
   resultsContainer: {
     flex: 1,
     paddingHorizontal: 20,
@@ -574,6 +890,150 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  // Intro screens
+  introContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 32,
+    alignItems: 'center',
+  },
+  introTitle: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 44,
+  },
+  introSubtitle: {
+    fontSize: 22,
+    fontStyle: 'italic',
+    color: '#000',
+    textAlign: 'center',
+    lineHeight: 32,
+    marginBottom: 40,
+  },
+  introImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  introEmoji: {
+    fontSize: 120,
+  },
+  introStartButton: {
+    backgroundColor: '#000000',
+    borderRadius: 17,
+    paddingVertical: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
+  introNextButton: {
+    backgroundColor: '#2084a4',
+    borderRadius: 17,
+    paddingVertical: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
+  introButtonText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  // Commitment / slider / resources phases
+  phaseContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 32,
+    alignItems: 'center',
+  },
+  phaseTitle: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  phaseSubtitle: {
+    fontSize: 18,
+    color: '#3C3C43',
+    textAlign: 'center',
+    lineHeight: 26,
+    marginBottom: 40,
+  },
+  commitmentButtons: {
+    width: '100%',
+    gap: 16,
+  },
+  commitmentButton: {
+    backgroundColor: '#E5E5EA',
+    borderRadius: 14,
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  commitmentButtonSelected: {
+    backgroundColor: '#000',
+  },
+  commitmentButtonText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#555',
+  },
+  commitmentButtonTextSelected: {
+    color: '#FFFFFF',
+  },
+  // Slider
+  sliderContainer: {
+    width: SLIDER_WIDTH,
+    marginVertical: 16,
+  },
+  sliderTrackWrapper: {
+    height: 40,
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  sliderTrackLine: {
+    height: 4,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 2,
+  },
+  sliderThumb: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#000',
+    top: 6,
+  },
+  sliderLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  sliderLabel: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  sliderValue: {
+    fontSize: 64,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  // Resources
+  resourcesBody: {
+    fontSize: 16,
+    color: '#3C3C43',
+    textAlign: 'center',
+    lineHeight: 24,
+    paddingHorizontal: 8,
+  },
 });
 
-export default DietAssessmentScreen
+export default DietAssessmentScreen;
