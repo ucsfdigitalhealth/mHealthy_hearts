@@ -17,6 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getCachedBloodSugar, setCachedBloodSugar } from '../../utils/bloodSugarCache';
 import { getCachedBmi, setCachedBmi } from '../../utils/bmiCache';
 import { getCachedDiet, setCachedDiet } from '../../utils/dietCache';
+import { getCachedBloodLipids, setCachedBloodLipids } from '../../utils/bloodLipidsCache';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -56,6 +57,16 @@ const getStatusColor = (status: string | null): string => {
       return '#DC2626';
     case 'Poor (Underweight)':
       return '#5AC8FA';
+    // Blood lipids range labels
+    case 'Healthy Range (<130 mg/dL)':
+      return '#34C759';
+    case 'Intermediate Range (130–159 mg/dL)':
+      return '#FFCC00';
+    case 'Elevated Range (160–189 mg/dL)':
+      return '#FF9500';
+    case 'High Range (190–219 mg/dL)':
+    case 'Very High Range (≥ 220 mg/dL)':
+      return '#FF3B30';
     default:
       return '#6B7280';
   }
@@ -84,6 +95,21 @@ const getDietRangeLabel = (mepaScore: number | null): string | null => {
   if (mepaScore >= 8) return 'Excellent';
   if (mepaScore >= 5) return 'Fair';
   return 'Poor';
+};
+
+// Blood lipids (Non-HDL) range label derived from score
+const nonHDLScoring: Record<string, number> = {
+  'Healthy Range': 100,
+  'Intermediate Range': 60,
+  'Elevated Range ': 40,
+  'High Range': 20,
+  'Very High Range': 0,
+};
+
+const getBloodLipidRangeLabel = (score: number | null): string | null => {
+  if (score === null) return null;
+  const entry = Object.entries(nonHDLScoring).find(([, s]) => s === score);
+  return entry ? entry[0] : null;
 };
 
 const MetricItem: React.FC<{
@@ -214,7 +240,13 @@ const CardioVascularScreen: React.FC = () => {
       return;
     }
 
-    // Check AsyncStorage caches first (blood sugar + BMI + diet)
+    // Check AsyncStorage caches first (blood lipids + blood sugar + BMI + diet)
+    const cachedBL = await getCachedBloodLipids();
+    if (cachedBL) {
+      setBloodLipidScore(cachedBL.score ?? null);
+      setBloodLipidValue(cachedBL.value ?? null);
+    }
+
     const cachedBS = await getCachedBloodSugar();
     if (cachedBS) {
       setBloodSugarScore(cachedBS.score ?? null);
@@ -244,9 +276,14 @@ const CardioVascularScreen: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        // Blood Lipids
+        // Blood Lipids — update state and persist to cache
         setBloodLipidScore(data.bloodLipids?.score ?? null);
         setBloodLipidValue(data.bloodLipids?.value ?? null);
+        await setCachedBloodLipids({
+          score: data.bloodLipids?.score ?? null,
+          value: data.bloodLipids?.value ?? null,
+          measureType: data.bloodLipids?.measureType ?? null,
+        });
         // Blood Sugar — update state and persist to cache
         setBloodSugarScore(data.bloodSugar?.score ?? null);
         setBloodSugarValue(data.bloodSugar?.value ?? null);
@@ -275,9 +312,11 @@ const CardioVascularScreen: React.FC = () => {
       } else {
         const errorText = await response.text();
         console.error('Error fetching health scores:', response.status, errorText);
-        // Reset non-blood-sugar values on error; blood sugar stays from cache if available
-        setBloodLipidScore(null);
-        setBloodLipidValue(null);
+        // On error, fall back to cached values where available
+        if (!cachedBL) {
+          setBloodLipidScore(null);
+          setBloodLipidValue(null);
+        }
         if (!cachedBS) {
           setBloodSugarScore(null);
           setBloodSugarValue(null);
@@ -294,8 +333,10 @@ const CardioVascularScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching health scores:', error);
-      setBloodLipidScore(null);
-      setBloodLipidValue(null);
+      if (!cachedBL) {
+        setBloodLipidScore(null);
+        setBloodLipidValue(null);
+      }
       if (!cachedBS) {
         setBloodSugarScore(null);
         setBloodSugarValue(null);
@@ -430,6 +471,7 @@ const CardioVascularScreen: React.FC = () => {
             score={bloodLipidValue !== null ? bloodLipidValue : null} 
             unit="mg/dL"
             badge={bloodLipidScore !== null ? String(bloodLipidScore) : undefined}
+            status={getBloodLipidRangeLabel(bloodLipidScore)}
             showNotCalculated={bloodLipidScore === null}
             onPress={handleBloodLipidsPress}
           />

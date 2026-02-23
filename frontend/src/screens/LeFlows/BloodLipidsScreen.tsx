@@ -1,5 +1,5 @@
 // BloodLipidsFlowScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,334 +7,574 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  PanResponder,
+  LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { setCachedBloodLipids } from '../../utils/bloodLipidsCache';
 
+// ─── Scoring helper (mirrors backend/metricCalc.js) ──────────────────────────
+function getNonHDLScoreLocal(value: number | null): number | null {
+  if (value === null) return null;
+  if (value < 130) return 100;
+  if (value <= 159) return 60;
+  if (value <= 189) return 40;
+  if (value <= 219) return 20;
+  return 0;
+}
+
+// ─── Range info ───────────────────────────────────────────────────────────────
+type RangeInfo = {
+  label: string;
+  score: number;
+  tip: string;
+};
+
+function getRangeInfo(value: number | null): RangeInfo | null {
+  if (value === null) return null;
+  if (value < 130) return {
+    label: 'Healthy Range (<130 mg/dL)',
+    score: 100,
+    tip: 'Continue building meals around whole foods like vegetables, fruits, whole grains, and lean proteins to help maintain these strong numbers over time.',
+  };
+  if (value <= 159) return {
+    label: 'Intermediate Range (130–159 mg/dL)',
+    score: 60,
+    tip: 'Improving your blood lipids can lower your risk for heart disease. Try eating more fiber-rich foods, choosing healthy fats, and staying active.',
+  };
+  if (value <= 189) return {
+    label: 'Elevated Range (160–189 mg/dL)',
+    score: 40,
+    tip: 'Choosing foods lower in saturated fat and including more plant‑based meals during the week can help improve your cholesterol.',
+  };
+  if (value <= 219) return {
+    label: 'High Range (190–219 mg/dL)',
+    score: 20,
+    tip: 'Improving your blood lipids can lower your risk for heart disease. Limiting fried and processed foods and cooking with healthier oils can support better cholesterol levels.',
+  };
+  return {
+    label: 'Very High Range (≥ 220 mg/dL)',
+    score: 0,
+    tip: 'Heart‑healthy eating patterns, regular movement, and checking in with a healthcare professional can help you take meaningful next steps.',
+  };
+}
+
+function getMeasureTypeLabel(measureType: string | null): string {
+  if (measureType === 'total-cholesterol') return 'Total Cholesterol';
+  if (measureType === 'non-hdl-cholesterol') return 'Non-HDL Cholesterol';
+  return 'Cholesterol';
+}
+
+// ─── Custom Slider ────────────────────────────────────────────────────────────
+const CustomSlider: React.FC<{
+  value: number;
+  onValueChange: (v: number) => void;
+}> = ({ value, onValueChange }) => {
+  const trackWidthRef = useRef<number>(0);
+  const onValueChangeRef = useRef(onValueChange);
+  onValueChangeRef.current = onValueChange;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const { locationX } = evt.nativeEvent;
+        const newVal = Math.round((locationX / trackWidthRef.current) * 10);
+        onValueChangeRef.current(Math.min(10, Math.max(0, newVal)));
+      },
+      onPanResponderMove: (evt) => {
+        const { locationX } = evt.nativeEvent;
+        const newVal = Math.round((locationX / trackWidthRef.current) * 10);
+        onValueChangeRef.current(Math.min(10, Math.max(0, newVal)));
+      },
+    })
+  ).current;
+
+  const thumbPercent = (value / 10) * 100;
+
+  return (
+    <View style={sliderStyles.container}>
+      <Text style={sliderStyles.valueDisplay}>{value}</Text>
+      <View
+        style={sliderStyles.track}
+        onLayout={(e: LayoutChangeEvent) => {
+          trackWidthRef.current = e.nativeEvent.layout.width;
+        }}
+        {...panResponder.panHandlers}
+      >
+        <View style={[sliderStyles.thumb, { left: `${thumbPercent}%` as any }]} />
+      </View>
+      <View style={sliderStyles.labels}>
+        <View style={sliderStyles.labelItem}>
+          <Text style={sliderStyles.labelNum}>0</Text>
+          <Text style={sliderStyles.labelText}>Not</Text>
+        </View>
+        <View style={sliderStyles.labelItem}>
+          <Text style={sliderStyles.labelNum}>5</Text>
+          <Text style={sliderStyles.labelText}>Somewhat</Text>
+        </View>
+        <View style={sliderStyles.labelItem}>
+          <Text style={sliderStyles.labelNum}>10</Text>
+          <Text style={sliderStyles.labelText}>Very</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const sliderStyles = StyleSheet.create({
+  container: {
+    marginBottom: 40,
+    alignItems: 'center',
+  },
+  valueDisplay: {
+    fontSize: 80,
+    fontWeight: '700',
+    color: '#212529',
+    marginBottom: 16,
+  },
+  track: {
+    width: '90%',
+    height: 34,
+    backgroundColor: '#D9D9D9',
+    borderRadius: 17,
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  thumb: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#212529',
+    top: -1,
+    marginLeft: -18,
+  },
+  labels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '90%',
+    marginTop: 8,
+  },
+  labelItem: {
+    alignItems: 'center',
+  },
+  labelNum: {
+    fontSize: 18,
+    color: '#A2A2A2',
+    fontWeight: '500',
+  },
+  labelText: {
+    fontSize: 13,
+    color: '#A2A2A2',
+  },
+});
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 const BloodLipidsFlowScreen: React.FC = () => {
   const navigation = useNavigation();
   const { accessToken } = useAuth();
+
   const [currentStep, setCurrentStep] = useState<number>(1);
-  
-  // Map to store all user selections
-  const [selections, setSelections] = useState<Record<number, any>>({
-    1: null, // Step 1: Intro (always starts)
-    2: null, // Step 2: Measure type selection
-    3: null, // Step 3: Input value
-    4: null, // Step 4: Thank you (always ends)
-  });
 
-  // Steps from the image
-  const steps = [
-    {
-      id: 1,
-      title: "Let's assess your blood lipids",
-      type: 'intro',
-      image: '🩺',
-      subtitle: "LOOP LIPIDS",
-      key: 'intro'
-    },
-    {
-      id: 2,
-      title: "Which measure do you have available?",
-      type: 'measure-type',
-      options: [
-        {
-          id: 'total-cholesterol',
-          title: "Total cholesterol",
-          subtitle: "mg/dL",
-          value: 'total-cholesterol'
-        },
-        {
-          id: 'non-hdl-cholesterol',
-          title: "Non-HDL cholesterol",
-          subtitle: "mg/dL",
-          value: 'non-hdl-cholesterol'
-        },
-        {
-          id: 'no-results',
-          title: "I don't have recent results",
-          subtitle: null,
-          value: 'no-results'
-        }
-      ],
-      key: 'measureType'
-    },
-    {
-      id: 3,
-      title: "Enter your most recent total cholesterol result",
-      type: 'input',
-      subtitle: "mg/dL",
-      value: selections[3] || '130',
-      placeholder: "130",
-      key: 'cholesterolValue'
-    },
-    {
-      id: 4,
-      title: "Thank you for sharing!",
-      type: 'thank-you',
-      subtitle: "This can lower your risk for heart disease by eating more fiber-rich foods, choosing healthy fats, and trying stress reduction techniques.",
-      image: '📊',
-      key: 'thankYou'
-    }
-  ];
+  // Selections
+  const [measureType, setMeasureType] = useState<string | null>(null);
+  const [value, setValue] = useState<string>('');
+  const [medication, setMedication] = useState<boolean | null>(null);
+  const [commitment, setCommitment] = useState<boolean | null>(null);
+  const [importance, setImportance] = useState<number>(5);
+  const [confidence, setConfidence] = useState<number>(5);
 
-  const handleNext = () => {
-    if (currentStep < steps.length) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
+  // Total steps for progress bar (always 9 logical steps)
+  const TOTAL_STEPS = 10;
 
+  const goToStep = (step: number) => setCurrentStep(step);
+
+  // ── Back navigation ──────────────────────────────────────────────────────────
   const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    } else {
-      // Navigate back to previous screen on first step
-      navigation.goBack();
+    switch (currentStep) {
+      case 1:
+        navigation.goBack();
+        break;
+      case 2:
+        goToStep(1);
+        break;
+      case 3:
+        goToStep(2);
+        break;
+      case 4:
+        // Result screen — came from step 3 (value input)
+        goToStep(3);
+        break;
+      case 5:
+        // Medication — came from step 4 (result) or step 2 (no-results)
+        if (measureType === 'no-results') goToStep(2);
+        else goToStep(4);
+        break;
+      case 6:
+        goToStep(5);
+        break;
+      case 7:
+        goToStep(6);
+        break;
+      case 8:
+        // Confidence — came from step 7 (importance)
+        goToStep(7);
+        break;
+      case 9:
+        // Score summary — came from step 8 (confidence) or step 6 (commitment=No)
+        if (commitment) goToStep(8);
+        else goToStep(6);
+        break;
+      case 10:
+        // Resources — came from step 9 if value exists, else from step 8 or 6
+        if (value) goToStep(9);
+        else if (commitment) goToStep(8);
+        else goToStep(6);
+        break;
+      default:
+        goToStep(currentStep - 1);
     }
   };
 
-  const handleMeasureSelect = (measureId: string) => {
-    setSelections(prev => ({
-      ...prev,
-      [2]: measureId
-    }));
-    
-    // If user selects "no results", skip to step 4 (thank you)
-    if (measureId === 'no-results') {
-      setCurrentStep(4);
+  // ── Choice handlers ──────────────────────────────────────────────────────────
+  const handleMeasureSelect = (type: string) => {
+    setMeasureType(type);
+    if (type === 'no-results') {
+      goToStep(5); // skip value input and result screen, go to medication
     } else {
-      handleNext();
+      goToStep(3);
     }
   };
 
-  const handleInputChange = (value: string) => {
-    setSelections(prev => ({
-      ...prev,
-      [3]: value
-    }));
+  const handleMedicationSelect = (isYes: boolean) => {
+    setMedication(isYes);
   };
 
+  const handleCommitmentSelect = (isYes: boolean) => {
+    setCommitment(isYes);
+  };
+
+  const handleCommitmentNext = () => {
+    if (commitment) {
+      goToStep(7); // importance slider
+    } else {
+      // Skip sliders — go to score summary if value exists, else resources
+      if (value) goToStep(9);
+      else goToStep(10);
+    }
+  };
+
+  const handleImportanceNext = () => goToStep(8);
+
+  const handleConfidenceNext = () => {
+    if (value) goToStep(9);
+    else goToStep(10);
+  };
+
+  const handleResultNext = () => goToStep(5);
+
+  const handleScoreSummaryNext = () => goToStep(10);
+
+  // ── Done (Resources screen) ──────────────────────────────────────────────────
   const handleDone = async () => {
-    // Log all selections for debugging/API calls
-    console.log('Blood Lipids User Selections:', selections);
+    const numericValue = value ? Number(value) : null;
+    const score = getNonHDLScoreLocal(numericValue);
 
     try {
-      const measureType = selections[2]; // 'total-cholesterol' | 'non-hdl-cholesterol' | 'no-results' | null
-      const value = selections[3];       // numeric string or null
+      await fetch('http://localhost:3000/api/blood-lipids', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({
+          measureType: measureType || 'no-results',
+          value: numericValue,
+          medication,
+          commitmentToChange: commitment,
+          importance: commitment ? importance : null,
+          confidence: commitment ? confidence : null,
+        }),
+      });
 
-      // Only send to API if user completed measure selection
-      if (measureType) {
-        const payload: {
-          measureType: string;
-          value?: string;
-        } = { measureType };
-
-        // Don't send value if user chose "no results"
-        if (measureType !== 'no-results' && value) {
-          payload.value = String(value);
-        }
-
-        await fetch('http://localhost:3000/api/blood-lipids', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-          body: JSON.stringify(payload),
-        });
-      }
+      await setCachedBloodLipids({
+        score,
+        value: numericValue,
+        measureType: measureType || 'no-results',
+      });
     } catch (error) {
-      console.error('Error saving blood lipids selection:', error);
+      console.error('Error saving blood lipids assessment:', error);
     }
 
-    // Navigate back to previous screen
     navigation.goBack();
   };
 
-  const renderStep = (step: typeof steps[0]) => {
-    switch (step.type) {
-      case 'intro':
-        return (
-          <View style={styles.stepContainer}>
-            <View style={styles.introIconContainer}>
-              <Text style={styles.introIcon}>{step.image}</Text>
-            </View>
-            <Text style={styles.stepTitle}>{step.title}</Text>
-            <Text style={styles.stepSubtitle}>{step.subtitle}</Text>
-            
-            <TouchableOpacity 
-              style={styles.primaryButton}
-              onPress={handleNext}
+  // ── Step renderers ───────────────────────────────────────────────────────────
+  const renderStep1 = () => (
+    <View style={styles.stepContainer}>
+      <View style={styles.introIconContainer}>
+        <Text style={styles.introIcon}>🩺</Text>
+      </View>
+      <Text style={styles.stepTitle}>Let's assess your blood lipids</Text>
+      <Text style={styles.stepSubtitle}>LOOP LIPIDS</Text>
+      <TouchableOpacity style={styles.primaryButton} onPress={() => goToStep(2)}>
+        <Text style={styles.primaryButtonText}>Start Assessment</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderStep2 = () => {
+    const options = [
+      { id: 'total-cholesterol', title: 'Total cholesterol', subtitle: 'mg/dL' },
+      { id: 'non-hdl-cholesterol', title: 'Non-HDL cholesterol', subtitle: 'mg/dL' },
+      { id: 'no-results', title: "I don't have recent results", subtitle: null },
+    ];
+    return (
+      <View style={styles.stepContainer}>
+        <Text style={styles.stepTitle}>Which measure do you have available?</Text>
+        <View style={styles.optionsContainer}>
+          {options.map((opt) => (
+            <TouchableOpacity
+              key={opt.id}
+              style={[styles.optionCard, measureType === opt.id && styles.optionCardSelected]}
+              onPress={() => handleMeasureSelect(opt.id)}
             >
-              <Text style={styles.primaryButtonText}>Start Assessment</Text>
-            </TouchableOpacity>
-          </View>
-        );
-
-      case 'measure-type':
-        const selectedMeasureId = selections[2];
-        
-        return (
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>{step.title}</Text>
-            
-            <View style={styles.measureOptionsContainer}>
-              {step.options?.map((option) => (
-                <TouchableOpacity
-                  key={option.id}
-                  style={[
-                    styles.measureOption,
-                    selectedMeasureId === option.id && styles.measureOptionSelected
-                  ]}
-                  onPress={() => handleMeasureSelect(option.id)}
-                >
-                  <View style={styles.measureOptionContent}>
-                    <View style={styles.measureOptionTextContainer}>
-                      <Text style={[
-                        styles.measureOptionTitle,
-                        selectedMeasureId === option.id && styles.measureOptionTitleSelected
-                      ]}>
-                        {option.title}
-                      </Text>
-                      {option.subtitle && (
-                        <Text style={[
-                          styles.measureOptionSubtitle,
-                          selectedMeasureId === option.id && styles.measureOptionSubtitleSelected
-                        ]}>
-                          {option.subtitle}
-                        </Text>
-                      )}
-                    </View>
-                    
-                    {selectedMeasureId === option.id && (
-                      <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-            
-            {selectedMeasureId && selectedMeasureId !== 'no-results' && (
-              <TouchableOpacity 
-                style={styles.nextButton}
-                onPress={handleNext}
-              >
-                <Text style={styles.nextButtonText}>Next</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        );
-
-      case 'input':
-        const inputValue = selections[3] || '';
-        const measureType = selections[2];
-        
-        let title = step.title;
-        let subtitle = step.subtitle;
-        
-        // Update title and subtitle based on selected measure type
-        if (measureType === 'non-hdl-cholesterol') {
-          title = "Enter your most recent non-HDL cholesterol result";
-          subtitle = "mg/dL";
-        }
-        
-        return (
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>{title}</Text>
-            <Text style={styles.measureUnit}>{subtitle}</Text>
-            
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                value={inputValue}
-                onChangeText={handleInputChange}
-                placeholder={step.placeholder}
-                keyboardType="numeric"
-                maxLength={3}
-              />
-              <Text style={styles.inputUnitLabel}>{subtitle}</Text>
-            </View>
-            
-            <View style={styles.referenceContainer}>
-              <View style={styles.referenceRow}>
-                <View style={styles.referenceIndicator}>
-                  <View style={[styles.referenceBar, styles.referenceBarGood]} />
-                  <Text style={styles.referenceLabel}>Good</Text>
-                  <Text style={styles.referenceValue}>{'< 200'}</Text>
-                </View>
-                
-                <View style={styles.referenceIndicator}>
-                  <View style={[styles.referenceBar, styles.referenceBorderline]} />
-                  <Text style={styles.referenceLabel}>Borderline</Text>
-                  <Text style={styles.referenceValue}>200-239</Text>
-                </View>
-                
-                <View style={styles.referenceIndicator}>
-                  <View style={[styles.referenceBar, styles.referenceHigh]} />
-                  <Text style={styles.referenceLabel}>High</Text>
-                  <Text style={styles.referenceValue}>{'≥ 240'}</Text>
-                </View>
-              </View>
-            </View>
-            
-            <TouchableOpacity 
-              style={[
-                styles.nextButton,
-                !inputValue && styles.nextButtonDisabled
-              ]}
-              onPress={handleNext}
-              disabled={!inputValue}
-            >
-              <Text style={styles.nextButtonText}>Continue</Text>
-            </TouchableOpacity>
-          </View>
-        );
-
-      case 'thank-you':
-        return (
-          <View style={styles.stepContainer}>
-            <View style={styles.thankYouIconContainer}>
-              <Text style={styles.thankYouIcon}>{step.image}</Text>
-            </View>
-            
-            <Text style={styles.thankYouTitle}>{step.title}</Text>
-            <Text style={styles.thankYouMessage}>{step.subtitle}</Text>
-            
-            <View style={styles.healthTipContainer}>
-              <Text style={styles.healthTipTitle}>Improving your blood lipids</Text>
-              <Text style={styles.healthTipText}>
-                This can lower your risk for heart disease by eating more fiber-rich foods, choosing healthy fats, and trying stress reduction techniques.
-              </Text>
-              
-              {/* Show user's selection if they provided data */}
-              {selections[2] && selections[2] !== 'no-results' && selections[3] && (
-                <View style={styles.resultSummary}>
-                  <Text style={styles.resultSummaryTitle}>Your Result:</Text>
-                  <Text style={styles.resultSummaryText}>
-                    {selections[2] === 'total-cholesterol' ? 'Total Cholesterol' : 'Non-HDL Cholesterol'}: {selections[3]} mg/dL
+              <View style={styles.optionContent}>
+                <View style={styles.optionTextContainer}>
+                  <Text style={[styles.optionTitle, measureType === opt.id && styles.optionTitleSelected]}>
+                    {opt.title}
                   </Text>
+                  {opt.subtitle && (
+                    <Text style={[styles.optionSubtitle, measureType === opt.id && styles.optionSubtitleSelected]}>
+                      {opt.subtitle}
+                    </Text>
+                  )}
                 </View>
-              )}
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.doneButton}
-              onPress={handleDone}
-            >
-              <Text style={styles.doneButtonText}>Done</Text>
+                {measureType === opt.id && (
+                  <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                )}
+              </View>
             </TouchableOpacity>
-          </View>
-        );
+          ))}
+        </View>
+      </View>
+    );
+  };
 
-      default:
-        return null;
+  const renderStep3 = () => {
+    const typeLabel = measureType === 'total-cholesterol' ? 'total cholesterol' : 'non-HDL cholesterol';
+    return (
+      <View style={styles.stepContainer}>
+        <Text style={styles.stepTitle}>Enter your most recent {typeLabel} result</Text>
+        <Text style={styles.measureUnit}>mg/dL</Text>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            value={value}
+            onChangeText={setValue}
+            placeholder="130"
+            keyboardType="numeric"
+            maxLength={4}
+          />
+          <Text style={styles.inputUnitLabel}>mg/dL</Text>
+        </View>
+        <View style={styles.referenceContainer}>
+          <View style={styles.referenceRow}>
+            <View style={styles.referenceIndicator}>
+              <View style={[styles.referenceBar, { backgroundColor: '#34C759' }]} />
+              <Text style={styles.referenceLabel}>Healthy</Text>
+              <Text style={styles.referenceValue}>{'< 130'}</Text>
+            </View>
+            <View style={styles.referenceIndicator}>
+              <View style={[styles.referenceBar, { backgroundColor: '#FFCC00' }]} />
+              <Text style={styles.referenceLabel}>Intermediate</Text>
+              <Text style={styles.referenceValue}>130–159</Text>
+            </View>
+            <View style={styles.referenceIndicator}>
+              <View style={[styles.referenceBar, { backgroundColor: '#FF9500' }]} />
+              <Text style={styles.referenceLabel}>Elevated</Text>
+              <Text style={styles.referenceValue}>160–189</Text>
+            </View>
+            <View style={styles.referenceIndicator}>
+              <View style={[styles.referenceBar, { backgroundColor: '#FF3B30' }]} />
+              <Text style={styles.referenceLabel}>High+</Text>
+              <Text style={styles.referenceValue}>{'≥ 190'}</Text>
+            </View>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={[styles.primaryButton, !value && styles.buttonDisabled]}
+          onPress={() => goToStep(4)}
+          disabled={!value}
+        >
+          <Text style={styles.primaryButtonText}>Continue</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderStep4 = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.sectionLabel}>Medication</Text>
+      <Text style={styles.stepTitle}>Are you currently taking medication to lower cholesterol?</Text>
+      <View style={styles.yesNoContainer}>
+        <TouchableOpacity
+          style={[styles.yesNoCard, medication === true && styles.yesNoCardSelected]}
+          onPress={() => handleMedicationSelect(true)}
+        >
+          <Text style={[styles.yesNoText, medication === true && styles.yesNoTextSelected]}>Yes</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.yesNoCard, medication === false && styles.yesNoCardSelected]}
+          onPress={() => handleMedicationSelect(false)}
+        >
+          <Text style={[styles.yesNoText, medication === false && styles.yesNoTextSelected]}>No</Text>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity
+        style={[styles.navButton, medication === null && styles.buttonDisabled]}
+        onPress={() => goToStep(6)}
+        disabled={medication === null}
+      >
+        <Text style={styles.navButtonText}>Next</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderStep5 = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.sectionLabel}>Commitment to Healthy Change</Text>
+      <Text style={styles.stepTitle}>Do you plan to improve this area?</Text>
+      <View style={styles.yesNoContainer}>
+        <TouchableOpacity
+          style={[styles.yesNoCard, commitment === true && styles.yesNoCardSelected]}
+          onPress={() => handleCommitmentSelect(true)}
+        >
+          <Text style={[styles.yesNoText, commitment === true && styles.yesNoTextSelected]}>Yes</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.yesNoCard, commitment === false && styles.yesNoCardSelected]}
+          onPress={() => handleCommitmentSelect(false)}
+        >
+          <Text style={[styles.yesNoText, commitment === false && styles.yesNoTextSelected]}>No</Text>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity
+        style={[styles.navButton, commitment === null && styles.buttonDisabled]}
+        onPress={handleCommitmentNext}
+        disabled={commitment === null}
+      >
+        <Text style={styles.navButtonText}>Next</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderStep6 = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.sectionLabel}>Importance</Text>
+      <Text style={styles.stepTitle}>How important is this change to you right now?</Text>
+      <CustomSlider value={importance} onValueChange={setImportance} />
+      <TouchableOpacity style={styles.navButton} onPress={handleImportanceNext}>
+        <Text style={styles.navButtonText}>Next</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderStep7 = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.sectionLabel}>Confidence</Text>
+      <Text style={styles.stepTitle}>How confident are you about making this change?</Text>
+      <CustomSlider value={confidence} onValueChange={setConfidence} />
+      <TouchableOpacity style={styles.navButton} onPress={handleConfidenceNext}>
+        <Text style={styles.navButtonText}>Next</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderStep8 = () => {
+    const numericValue = value ? Number(value) : null;
+    const rangeInfo = getRangeInfo(numericValue);
+    const typeLabel = getMeasureTypeLabel(measureType);
+
+    return (
+      <View style={styles.stepContainer}>
+        <Text style={styles.resultTitle}>
+          {`Your ${typeLabel} is ${value} mg/dL, that's in the `}
+          <Text style={styles.resultRangeLabel}>{rangeInfo?.label ?? ''}</Text>
+          {'.'}
+        </Text>
+        <View style={styles.mascotContainer}>
+          <Text style={styles.mascotEmoji}>🩸</Text>
+        </View>
+        <View style={styles.tipCard}>
+          <Text style={styles.tipText}>{rangeInfo?.tip ?? ''}</Text>
+        </View>
+        <TouchableOpacity style={styles.primaryButton} onPress={handleResultNext}>
+          <Text style={styles.primaryButtonText}>Next</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderStep9 = () => {
+    const numericValue = value ? Number(value) : null;
+    const score = getNonHDLScoreLocal(numericValue);
+    return (
+      <View style={styles.stepContainer}>
+        <Text style={styles.summaryTitle}>Blood Lipids Summary</Text>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summarySubtitle}>{"Here's your blood lipids score:"}</Text>
+          <View style={styles.scoreBox}>
+            <Text style={styles.scoreNumber}>{score ?? '--'}</Text>
+            <Text style={styles.scorePoints}>Points</Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.navButton} onPress={handleScoreSummaryNext}>
+          <Text style={styles.navButtonText}>Next</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderStep10 = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.sectionLabel}>Resources</Text>
+      <Text style={styles.resourcesMessage}>
+        {"You're on the right path!\n\nCheck out the Stress Management video and additional links for more support!"}
+      </Text>
+      <View style={styles.videoCard}>
+        <Text style={styles.videoEmoji}>🧘</Text>
+        <Text style={styles.videoLabel}>Stress Management</Text>
+      </View>
+      <TouchableOpacity style={styles.doneButton} onPress={handleDone}>
+        <Text style={styles.doneButtonText}>Done</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderCurrentStep = () => {
+    switch (currentStep) {
+      case 1: return renderStep1();
+      case 2: return renderStep2();
+      case 3: return renderStep3();
+      case 4: return renderStep8();   // Result screen (right after value input)
+      case 5: return renderStep4();   // Medication
+      case 6: return renderStep5();   // Commitment
+      case 7: return renderStep6();   // Importance
+      case 8: return renderStep7();   // Confidence
+      case 9: return renderStep9();   // Score summary
+      case 10: return renderStep10(); // Resources
+      default: return null;
     }
   };
 
-  const currentStepData = steps.find(step => step.id === currentStep);
+  // Progress: show position relative to total logical steps
+  const progressPercent = ((currentStep - 1) / (TOTAL_STEPS - 1)) * 100;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -342,37 +582,24 @@ const BloodLipidsFlowScreen: React.FC = () => {
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#007AFF" />
-          <Text style={styles.backText}>
-            {currentStep === 1 ? 'Cancel' : 'Back'}
-          </Text>
+          <Text style={styles.backText}>{currentStep === 1 ? 'Cancel' : 'Back'}</Text>
         </TouchableOpacity>
-        
-        {/* Progress Bar */}
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill, 
-                { width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }
-              ]} 
-            />
+            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
           </View>
-          <Text style={styles.progressText}>
-            Step {Math.min(currentStep, steps.length)} of {steps.length}
-          </Text>
+          <Text style={styles.progressText}>Step {currentStep} of {TOTAL_STEPS}</Text>
         </View>
       </View>
 
-      <ScrollView 
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {currentStepData && renderStep(currentStepData)}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {renderCurrentStep()}
       </ScrollView>
     </SafeAreaView>
   );
 };
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -427,6 +654,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 500,
   },
+  // Intro
   introIconContainer: {
     width: 80,
     height: 80,
@@ -439,6 +667,15 @@ const styles = StyleSheet.create({
   },
   introIcon: {
     fontSize: 40,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#6C757D',
+    textAlign: 'center',
+    letterSpacing: 1,
+    marginBottom: 16,
+    textTransform: 'uppercase',
   },
   stepTitle: {
     fontSize: 28,
@@ -456,6 +693,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 1,
   },
+  // Buttons
   primaryButton: {
     backgroundColor: '#007AFF',
     borderRadius: 16,
@@ -473,11 +711,47 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  measureOptionsContainer: {
+  buttonDisabled: {
+    opacity: 0.4,
+  },
+  navButton: {
+    backgroundColor: '#224694',
+    borderRadius: 16,
+    paddingVertical: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  navButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  doneButton: {
+    backgroundColor: '#212529',
+    borderRadius: 16,
+    paddingVertical: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  doneButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  // Measure type options
+  optionsContainer: {
     gap: 16,
     marginBottom: 40,
   },
-  measureOption: {
+  optionCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
@@ -489,59 +763,40 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  measureOptionSelected: {
+  optionCardSelected: {
     borderColor: '#007AFF',
     backgroundColor: '#F0F7FF',
   },
-  measureOptionContent: {
+  optionContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  measureOptionTextContainer: {
+  optionTextContainer: {
     flex: 1,
   },
-  measureOptionTitle: {
+  optionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#212529',
     marginBottom: 4,
   },
-  measureOptionTitleSelected: {
+  optionTitleSelected: {
     color: '#007AFF',
   },
-  measureOptionSubtitle: {
+  optionSubtitle: {
     fontSize: 16,
     color: '#6C757D',
   },
-  measureOptionSubtitleSelected: {
+  optionSubtitleSelected: {
     color: '#0056B3',
   },
-  nextButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 16,
-    paddingVertical: 18,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  nextButtonDisabled: {
-    backgroundColor: '#CED4DA',
-    opacity: 0.6,
-  },
-  nextButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
+  // Value input
   measureUnit: {
     fontSize: 20,
     color: '#007AFF',
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
     fontWeight: '600',
   },
   inputContainer: {
@@ -551,7 +806,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    marginBottom: 32,
+    marginBottom: 24,
     borderWidth: 2,
     borderColor: '#E9ECEF',
     shadowColor: '#000',
@@ -578,7 +833,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 40,
+    marginBottom: 32,
   },
   referenceRow: {
     flexDirection: 'row',
@@ -589,114 +844,164 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   referenceBar: {
-    width: 60,
+    width: 48,
     height: 8,
     borderRadius: 4,
-    marginBottom: 8,
-  },
-  referenceBarGood: {
-    backgroundColor: '#34C759',
-  },
-  referenceBorderline: {
-    backgroundColor: '#FF9500',
-  },
-  referenceHigh: {
-    backgroundColor: '#FF3B30',
+    marginBottom: 6,
   },
   referenceLabel: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#6C757D',
-    marginBottom: 4,
+    marginBottom: 2,
     fontWeight: '500',
+    textAlign: 'center',
   },
   referenceValue: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
     color: '#212529',
-  },
-  thankYouIconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#E8F5E9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 32,
-    alignSelf: 'center',
-  },
-  thankYouIcon: {
-    fontSize: 48,
-  },
-  thankYouTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#212529',
-    marginBottom: 16,
     textAlign: 'center',
   },
-  thankYouMessage: {
-    fontSize: 18,
-    color: '#6C757D',
-    textAlign: 'center',
-    lineHeight: 28,
-    marginBottom: 40,
+  // Yes/No
+  yesNoContainer: {
+    gap: 16,
+    marginVertical: 32,
   },
-  healthTipContainer: {
-    backgroundColor: '#F0F7FF',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#D0E3FF',
-    marginBottom: 40,
-  },
-  healthTipTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0056B3',
-    marginBottom: 12,
-  },
-  healthTipText: {
-    fontSize: 16,
-    color: '#495057',
-    lineHeight: 24,
-    marginBottom: 16,
-  },
-  resultSummary: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#007AFF',
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
-  },
-  resultSummaryTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#007AFF',
-    marginBottom: 8,
-  },
-  resultSummaryText: {
-    fontSize: 16,
-    color: '#212529',
-    fontWeight: '600',
-  },
-  doneButton: {
-    backgroundColor: '#34C759',
-    borderRadius: 16,
-    paddingVertical: 20,
+  yesNoCard: {
+    backgroundColor: '#E4E1E1',
+    borderRadius: 17,
+    paddingVertical: 30,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 4,
   },
-  doneButtonText: {
+  yesNoCardSelected: {
+    backgroundColor: '#212529',
+  },
+  yesNoText: {
+    fontSize: 40,
+    fontWeight: '700',
+    fontStyle: 'italic',
+    color: '#212529',
+  },
+  yesNoTextSelected: {
     color: '#FFFFFF',
+  },
+  // Result screen
+  resultTitle: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#D74B31',
+    textAlign: 'center',
+    lineHeight: 44,
+    marginBottom: 24,
+  },
+  resultRangeLabel: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#D74B31',
+  },
+  mascotContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  mascotEmoji: {
+    fontSize: 80,
+  },
+  tipCard: {
+    backgroundColor: 'rgba(243,243,243,0.95)',
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: '#000000',
+    padding: 20,
+    marginBottom: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.1,
+    elevation: 4,
+  },
+  tipText: {
+    fontSize: 20,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    color: '#212529',
+    textAlign: 'center',
+    lineHeight: 28,
+  },
+  // Score summary screen
+  summaryTitle: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#212529',
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  summaryCard: {
+    backgroundColor: '#F0ECEC',
+    borderRadius: 17,
+    padding: 32,
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  summarySubtitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    fontStyle: 'italic',
+    color: '#212529',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 32,
+  },
+  scoreBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#C4C4C4',
+    paddingVertical: 20,
+    paddingHorizontal: 32,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 12,
+  },
+  scoreNumber: {
+    fontSize: 64,
+    fontWeight: '700',
+    color: '#212529',
+  },
+  scorePoints: {
+    fontSize: 40,
+    fontWeight: '700',
+    color: '#212529',
+  },
+  // Resources screen
+  resourcesMessage: {
+    fontSize: 24,
+    color: '#212529',
+    textAlign: 'center',
+    lineHeight: 36,
+    marginBottom: 32,
+  },
+  videoCard: {
+    backgroundColor: '#D9D9D9',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#212529',
+    paddingVertical: 40,
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  videoEmoji: {
+    fontSize: 64,
+    marginBottom: 12,
+  },
+  videoLabel: {
     fontSize: 18,
     fontWeight: '600',
+    color: '#212529',
   },
 });
 

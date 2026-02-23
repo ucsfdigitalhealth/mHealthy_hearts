@@ -92,4 +92,21 @@ function getDietScore(d) {
   return { mepaScore, displayScore };
 }
 
-module.exports = { getBloodGlucoseScore, getBMIScore, getDietScore };
+/**
+ * Calculate a non-HDL cholesterol score (0–100) based on LE8 scoring criteria.
+ *
+ * @param {number|null} value - non-HDL cholesterol in mg/dL
+ * @returns {number|null} score 0–100, or null if no value
+ */
+function getNonHDLScore(value) {
+  if (value === null || value === undefined) return null;
+  const v = Number(value);
+  if (isNaN(v)) return null;
+  if (v < 130) return 100;
+  if (v <= 159) return 60;
+  if (v <= 189) return 40;
+  if (v <= 219) return 20;
+  return 0; // >= 220
+}
+
+module.exports = { getBloodGlucoseScore, getBMIScore, getDietScore, getNonHDLScore };
