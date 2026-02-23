@@ -15,6 +15,7 @@ import Settings from '../../components/Settings';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
 import { getCachedBloodSugar, setCachedBloodSugar } from '../../utils/bloodSugarCache';
+import { getCachedBmi, setCachedBmi } from '../../utils/bmiCache';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -46,6 +47,14 @@ const getStatusColor = (status: string | null): string => {
       return '#d1ce1d';
     case 'Diabetes':
       return '#cd482f';
+    case 'Excellent':
+      return '#059669';
+    case 'Fair (Overweight)':
+      return '#F59E0B';
+    case 'Poor (Obese)':
+      return '#DC2626';
+    case 'Poor (Underweight)':
+      return '#5AC8FA';
     default:
       return '#6B7280';
   }
@@ -57,6 +66,15 @@ const getBloodSugarRangeLabel = (score: number | null): string | null => {
   if (score === 100) return 'In-Range';
   if (score === 60) return 'Prediabetes';
   return 'Diabetes';
+};
+
+// BMI range label derived from BMI value
+const getBMIRangeLabel = (bmiValue: number | null): string | null => {
+  if (bmiValue === null) return null;
+  if (bmiValue < 18.5) return 'Poor (Underweight)';
+  if (bmiValue <= 24.9) return 'Excellent';
+  if (bmiValue <= 29.9) return 'Fair (Overweight)';
+  return 'Poor (Obese)';
 };
 
 const MetricItem: React.FC<{
@@ -77,7 +95,7 @@ const MetricItem: React.FC<{
       <View style={styles.metricHeader}>
         <Text style={styles.metricTitle}>{title}</Text>
         {badge && (
-          <View style={styles.badge}>
+          <View style={[styles.badge, { backgroundColor: statusColor }]}>
             <Text style={styles.badgeText}>{badge} Point</Text>
           </View>
         )}
@@ -184,11 +202,17 @@ const CardioVascularScreen: React.FC = () => {
       return;
     }
 
-    // Check AsyncStorage cache for blood sugar first
+    // Check AsyncStorage caches first (blood sugar + BMI)
     const cachedBS = await getCachedBloodSugar();
     if (cachedBS) {
       setBloodSugarScore(cachedBS.score ?? null);
       setBloodSugarValue(cachedBS.value ?? null);
+    }
+
+    const cachedBMI = await getCachedBmi();
+    if (cachedBMI) {
+      setBmiScore(cachedBMI.score ?? null);
+      setBmiValue(cachedBMI.value ?? null);
     }
 
     try {
@@ -213,9 +237,13 @@ const CardioVascularScreen: React.FC = () => {
           value: data.bloodSugar?.value ?? null,
           testType: data.bloodSugar?.testType ?? null,
         });
-        // BMI
+        // BMI — update state and persist to cache
         setBmiScore(data.bmi?.score ?? null);
         setBmiValue(data.bmi?.value ?? null);
+        await setCachedBmi({
+          score: data.bmi?.score ?? null,
+          value: data.bmi?.value ?? null,
+        });
         // Diet
         setDietScore(data.diet?.score ?? null);
         // Smoking
@@ -231,22 +259,25 @@ const CardioVascularScreen: React.FC = () => {
           setBloodSugarScore(null);
           setBloodSugarValue(null);
         }
-        setBmiScore(null);
-        setBmiValue(null);
+        if (!cachedBMI) {
+          setBmiScore(null);
+          setBmiValue(null);
+        }
         setDietScore(null);
         setSmokingScore(null);
       }
     } catch (error) {
       console.error('Error fetching health scores:', error);
-      // Reset non-blood-sugar values on error; blood sugar stays from cache if available
       setBloodLipidScore(null);
       setBloodLipidValue(null);
       if (!cachedBS) {
         setBloodSugarScore(null);
         setBloodSugarValue(null);
       }
-      setBmiScore(null);
-      setBmiValue(null);
+      if (!cachedBMI) {
+        setBmiScore(null);
+        setBmiValue(null);
+      }
       setDietScore(null);
       setSmokingScore(null);
     }
@@ -374,13 +405,14 @@ const CardioVascularScreen: React.FC = () => {
             onPress={handleBloodLipidsPress}
           />
           
-          <MetricItem 
-            title="Body Mass Index" 
-            score={bmiValue !== null ? Math.round(bmiValue * 10) / 10 : null} 
+          <MetricItem
+            title="Body Mass Index"
+            score={bmiValue !== null ? Math.round(bmiValue * 10) / 10 : null}
             unit="BMI"
             badge={bmiScore !== null ? String(bmiScore) : undefined}
             showNotCalculated={bmiScore === null}
             onPress={handleBmiPress}
+            status={getBMIRangeLabel(bmiValue)}
           />
           
           <MetricItem 
@@ -622,7 +654,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   badge: {
-    backgroundColor: '#059669',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,

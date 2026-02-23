@@ -32,4 +32,21 @@ function getBloodGlucoseScore({ testType, value }) {
   return 0;
 }
 
-module.exports = { getBloodGlucoseScore };
+/**
+ * Calculate a BMI score (0–100) based on LE8 scoring criteria.
+ *
+ * @param {number|null} bmiValue - BMI value
+ * @returns {number|null} score 0–100, or null if no value
+ */
+function getBMIScore(bmiValue) {
+  if (bmiValue === null || bmiValue === undefined) return null;
+  const v = Number(bmiValue);
+  if (isNaN(v)) return null;
+  if (v < 25) return 100;
+  if (v <= 29.9) return 70;
+  if (v <= 34.9) return 30;
+  if (v <= 39.9) return 15;
+  return 0; // >= 40
+}
+
+module.exports = { getBloodGlucoseScore, getBMIScore };

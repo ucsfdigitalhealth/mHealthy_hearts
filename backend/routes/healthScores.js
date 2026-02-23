@@ -2,18 +2,10 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db.js");
 const { verifyToken } = require("../auth.js");
-const { getBloodGlucoseScore } = require("../metricCalc.js");
+const { getBloodGlucoseScore, getBMIScore } = require("../metricCalc.js");
 
 
 
-// Helper function to calculate BMI score
-function calculateBMIScore(bmi) {
-  if (bmi < 25) return 100;
-  if (bmi >= 25.0 && bmi <= 29.9) return 70;
-  if (bmi >= 30.0 && bmi <= 34.9) return 30;
-  if (bmi >= 35.0 && bmi <= 39.9) return 15;
-  return 0; // >= 40.0
-}
 
 // Helper function to calculate smoking score
 function calculateSmokingScore(smokingData) {
@@ -167,7 +159,7 @@ router.get("/", verifyToken, async (req, res) => {
     let bmiValue = null;
     if (bmiRows && bmiRows.length > 0) {
       bmiValue = Number(bmiRows[0].bmi_value);
-      bmiScore = calculateBMIScore(bmiValue);
+      bmiScore = getBMIScore(bmiValue);
     }
 
     // Get latest diet assessment
