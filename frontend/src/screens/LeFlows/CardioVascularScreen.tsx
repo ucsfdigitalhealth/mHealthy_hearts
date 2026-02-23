@@ -14,6 +14,7 @@ import type { RootStackParamList } from '../../../App'; // Update path as needed
 import Settings from '../../components/Settings';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
+import { getCachedBloodSugar, setCachedBloodSugar } from '../../utils/bloodSugarCache';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -39,9 +40,23 @@ const getStatusColor = (status: string | null): string => {
       return '#F59E0B';
     case 'Poor':
       return '#DC2626';
+    case 'In-Range':
+      return '#369949';
+    case 'Prediabetes':
+      return '#d1ce1d';
+    case 'Diabetes':
+      return '#cd482f';
     default:
       return '#6B7280';
   }
+};
+
+// Blood sugar range label derived from score (mirrors Figma color logic)
+const getBloodSugarRangeLabel = (score: number | null): string | null => {
+  if (score === null) return null;
+  if (score === 100) return 'In-Range';
+  if (score === 60) return 'Prediabetes';
+  return 'Diabetes';
 };
 
 const MetricItem: React.FC<{
@@ -169,6 +184,13 @@ const CardioVascularScreen: React.FC = () => {
       return;
     }
 
+    // Check AsyncStorage cache for blood sugar first
+    const cachedBS = await getCachedBloodSugar();
+    if (cachedBS) {
+      setBloodSugarScore(cachedBS.score ?? null);
+      setBloodSugarValue(cachedBS.value ?? null);
+    }
+
     try {
       const response = await fetch('http://localhost:3000/api/health-scores', {
         method: 'GET',
@@ -183,9 +205,14 @@ const CardioVascularScreen: React.FC = () => {
         // Blood Lipids
         setBloodLipidScore(data.bloodLipids?.score ?? null);
         setBloodLipidValue(data.bloodLipids?.value ?? null);
-        // Blood Sugar
+        // Blood Sugar — update state and persist to cache
         setBloodSugarScore(data.bloodSugar?.score ?? null);
         setBloodSugarValue(data.bloodSugar?.value ?? null);
+        await setCachedBloodSugar({
+          score: data.bloodSugar?.score ?? null,
+          value: data.bloodSugar?.value ?? null,
+          testType: data.bloodSugar?.testType ?? null,
+        });
         // BMI
         setBmiScore(data.bmi?.score ?? null);
         setBmiValue(data.bmi?.value ?? null);
@@ -197,11 +224,13 @@ const CardioVascularScreen: React.FC = () => {
       } else {
         const errorText = await response.text();
         console.error('Error fetching health scores:', response.status, errorText);
-        // Reset all values on error
+        // Reset non-blood-sugar values on error; blood sugar stays from cache if available
         setBloodLipidScore(null);
         setBloodLipidValue(null);
-        setBloodSugarScore(null);
-        setBloodSugarValue(null);
+        if (!cachedBS) {
+          setBloodSugarScore(null);
+          setBloodSugarValue(null);
+        }
         setBmiScore(null);
         setBmiValue(null);
         setDietScore(null);
@@ -209,11 +238,13 @@ const CardioVascularScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching health scores:', error);
-      // Reset all values on error
+      // Reset non-blood-sugar values on error; blood sugar stays from cache if available
       setBloodLipidScore(null);
       setBloodLipidValue(null);
-      setBloodSugarScore(null);
-      setBloodSugarValue(null);
+      if (!cachedBS) {
+        setBloodSugarScore(null);
+        setBloodSugarValue(null);
+      }
       setBmiScore(null);
       setBmiValue(null);
       setDietScore(null);
@@ -324,11 +355,12 @@ const CardioVascularScreen: React.FC = () => {
             onPress={handleBloodSugarPress}
           />
           
-          <MetricItem 
-            title="Blood Sugar" 
-            score={bloodSugarValue !== null ? bloodSugarValue : null} 
+          <MetricItem
+            title="Blood Sugar"
+            score={bloodSugarValue !== null ? bloodSugarValue : null}
             unit="mg/dL"
             badge={bloodSugarScore !== null ? String(bloodSugarScore) : undefined}
+            status={getBloodSugarRangeLabel(bloodSugarScore)}
             showNotCalculated={bloodSugarScore === null}
             onPress={handleBloodSugarPress}
           />

@@ -1,20 +1,28 @@
 const express = require("express");
 const router = express.Router();
+const crypto = require("crypto");
 const db = require("../db.js");
 const { verifyToken } = require("../auth.js");
+const { getBloodGlucoseScore } = require("../metricCalc.js");
 
 // POST /api/blood-sugar
-// Stores the user's blood sugar assessment (test type + value)
+// Stores the user's full blood sugar assessment
 router.post("/", verifyToken, async (req, res) => {
   try {
     const userId = req.user?.userId || null;
-    const { testType, value } = req.body || {};
+    const {
+      testType,
+      value,
+      hasDiabetes,
+      commitmentToChange,
+      importance,
+      confidence,
+    } = req.body || {};
 
     if (!testType) {
       return res.status(400).json({ message: "testType is required" });
     }
 
-    // value is optional if user has no results
     const numericValue =
       value === undefined || value === null || value === ""
         ? null
@@ -26,17 +34,75 @@ router.post("/", verifyToken, async (req, res) => {
         .json({ message: "value must be a number if provided" });
     }
 
+    const hasDiabetesBool =
+      hasDiabetes === true || hasDiabetes === "true" || hasDiabetes === 1
+        ? 1
+        : hasDiabetes === false || hasDiabetes === "false" || hasDiabetes === 0
+        ? 0
+        : null;
+
+    const commitBool =
+      commitmentToChange === true ||
+      commitmentToChange === "true" ||
+      commitmentToChange === 1
+        ? 1
+        : commitmentToChange === false ||
+          commitmentToChange === "false" ||
+          commitmentToChange === 0
+        ? 0
+        : null;
+
+    // Only persist importance/confidence if user committed to change
+    const importanceVal = commitBool === 1 ? (Number(importance) || null) : null;
+    const confidenceVal = commitBool === 1 ? (Number(confidence) || null) : null;
+
+    const dataId = crypto.randomUUID();
+
     await db.execute(
-      "INSERT INTO blood_sugar_assessments (user_id, test_type, value) VALUES (?, ?, ?)",
-      [userId, testType, numericValue]
+      `INSERT INTO blood_sugar_assessments
+        (data_id, user_id, test_type, value, has_diabetes, commitment_to_change, importance, confidence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [dataId, userId, testType, numericValue, hasDiabetesBool, commitBool, importanceVal, confidenceVal]
     );
+
+    const score = getBloodGlucoseScore({ testType, value: numericValue });
 
     return res.status(201).json({
       success: true,
       message: "Blood sugar assessment saved successfully",
+      score,
     });
   } catch (error) {
     console.error("Error saving blood sugar assessment:", error);
+    return res
+      .status(500)
+      .json({ message: "Server Error", error: error.message });
+  }
+});
+
+// GET /api/blood-sugar/score
+// Returns the latest blood sugar score and value for the authenticated user
+router.get("/score", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+
+    const [rows] = await db.execute(
+      `SELECT test_type, value FROM blood_sugar_assessments
+       WHERE user_id = ? AND value IS NOT NULL
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(200).json({ score: null, value: null, testType: null });
+    }
+
+    const { test_type: testType, value } = rows[0];
+    const score = getBloodGlucoseScore({ testType, value: Number(value) });
+
+    return res.status(200).json({ score, value: Number(value), testType });
+  } catch (error) {
+    console.error("Error fetching blood sugar score:", error);
     return res
       .status(500)
       .json({ message: "Server Error", error: error.message });

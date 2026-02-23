@@ -2,17 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db.js");
 const { verifyToken } = require("../auth.js");
-
-// Helper function to calculate blood sugar score
-function calculateBloodSugarScore(value) {
-  if (value < 100) return 100;
-  if (value >= 100 && value <= 125) return 60;
-  if (value >= 126 && value <= 154) return 40;
-  if (value >= 155 && value <= 182) return 30;
-  if (value >= 183 && value <= 212) return 20;
-  if (value >= 213 && value <= 240) return 10;
-  return 0; // >= 241
-}
+const { getBloodGlucoseScore } = require("../metricCalc.js");
 
 
 
@@ -164,9 +154,7 @@ router.get("/", verifyToken, async (req, res) => {
     if (bloodSugarRows && bloodSugarRows.length > 0 && bloodSugarRows[0].value !== null) {
       bloodSugarValue = Number(bloodSugarRows[0].value);
       bloodSugarTestType = bloodSugarRows[0].test_type;
-      // For HbA1c, we might need different ranges, but for now using Fasting Glucose ranges
-      // If test_type is HbA1c, we should convert or use different ranges
-      bloodSugarScore = calculateBloodSugarScore(bloodSugarValue);
+      bloodSugarScore = getBloodGlucoseScore({ testType: bloodSugarTestType, value: bloodSugarValue });
     }
 
     // Get latest BMI value
