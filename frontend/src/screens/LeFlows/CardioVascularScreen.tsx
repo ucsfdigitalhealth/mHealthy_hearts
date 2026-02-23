@@ -447,6 +447,7 @@ const CardioVascularScreen: React.FC = () => {
           <MetricItem 
             title="Diet" 
             score={dietMepaScore}
+            unit="(MEPA score)"
             badge={dietScore !== null ? String(dietScore) : undefined}
             status={getDietRangeLabel(dietMepaScore)}
             showNotCalculated={dietScore === null}
