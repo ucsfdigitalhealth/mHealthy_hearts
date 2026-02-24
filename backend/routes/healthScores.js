@@ -2,46 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db.js");
 const { verifyToken } = require("../auth.js");
-const { getBloodGlucoseScore, getBMIScore, getDietScore } = require("../metricCalc.js");
-
-
-
-
-// Helper function to calculate smoking score
-function calculateSmokingScore(smokingData) {
-  if (!smokingData) return null;
-
-  const { category, frequency, time_quit } = smokingData;
-
-  // Never smokers: score 100
-  if (category === 'never') {
-    return 100;
-  }
-
-  // Former smokers: score based on time since quitting
-  if (category === 'former') {
-    if (time_quit === '5+') {
-      return 100;
-    } else if (time_quit === '1+') {
-      return 75;
-    } else {
-      // '<1' or any other value
-      return 50;
-    }
-  }
-
-  // Current smokers: score based on frequency
-  if (category === 'current') {
-    if (frequency === 'rarely') {
-      return 25;
-    } else {
-      // 'somedays' or 'everyday' or any other value
-      return 0;
-    }
-  }
-
-  return null;
-}
+const { getBloodGlucoseScore, getBMIScore, getDietScore, getNicotineScore } = require("../metricCalc.js");
 
 // GET /api/health-scores
 // Gets all health scores (blood lipids, blood sugar, BMI, diet, smoking) for the authenticated user
@@ -131,7 +92,12 @@ router.get("/", verifyToken, async (req, res) => {
     let smokingCategory = null;
     if (smokingRows && smokingRows.length > 0) {
       smokingCategory = smokingRows[0].category;
-      smokingScore = calculateSmokingScore(smokingRows[0]);
+      smokingScore = getNicotineScore({
+        category: smokingRows[0].category,
+        frequency: smokingRows[0].frequency,
+        timeQuit: smokingRows[0].time_quit,
+        secondHandExposure: smokingRows[0].second_hand_exposure,
+      });
     }
 
     return res.status(200).json({

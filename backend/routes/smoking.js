@@ -1,75 +1,102 @@
 const express = require("express");
 const router = express.Router();
+const crypto = require("crypto");
 const db = require("../db.js");
 const { verifyToken } = require("../auth.js");
-
-// Helper function to calculate smoking score (same logic as in healthScores.js)
-function calculateSmokingScore(category, frequency, timeQuit) {
-  // Never smokers: score 100
-  if (category === 'never') {
-    return 100;
-  }
-
-  // Former smokers: score based on time since quitting
-  if (category === 'former') {
-    if (timeQuit === '5+') {
-      return 100;
-    } else if (timeQuit === '1+') {
-      return 75;
-    } else {
-      // '<1' or any other value (including null)
-      return 50;
-    }
-  }
-
-  // Current smokers: score based on frequency
-  if (category === 'current') {
-    if (frequency === 'rarely') {
-      return 25;
-    } else {
-      // 'somedays' or 'everyday' or any other value (including null)
-      return 0;
-    }
-  }
-
-  return 0; // Default fallback
-}
+const { getNicotineScore } = require("../metricCalc.js");
 
 // POST /api/smoking
-// Stores the user's smoking assessment with calculated score
+// Stores the user's full smoking assessment with calculated score
 router.post("/", verifyToken, async (req, res) => {
   try {
     const userId = req.user?.userId || null;
-    const { category, frequency, timeQuit, interestInQuitting } = req.body || {};
+    const {
+      category,
+      frequency,
+      productType,
+      timeQuit,
+      interestInQuitting,
+      secondHandExposure,
+      commitmentToChange,
+      importance,
+      confidence,
+    } = req.body || {};
 
     if (!category) {
       return res.status(400).json({ message: "category is required" });
     }
 
-    // Validate category
-    if (!['current', 'former', 'never'].includes(category)) {
-      return res.status(400).json({ message: "category must be 'current', 'former', or 'never'" });
+    if (!["current", "former", "never"].includes(category)) {
+      return res
+        .status(400)
+        .json({ message: "category must be 'current', 'former', or 'never'" });
     }
 
-    // Calculate the smoking score based on the data
-    const score = calculateSmokingScore(category, frequency, timeQuit);
+    const secondHandBool =
+      secondHandExposure === true ||
+      secondHandExposure === "true" ||
+      secondHandExposure === 1
+        ? 1
+        : secondHandExposure === false ||
+          secondHandExposure === "false" ||
+          secondHandExposure === 0
+        ? 0
+        : null;
+
+    const commitBool =
+      commitmentToChange === true ||
+      commitmentToChange === "true" ||
+      commitmentToChange === 1
+        ? 1
+        : commitmentToChange === false ||
+          commitmentToChange === "false" ||
+          commitmentToChange === 0
+        ? 0
+        : null;
+
+    const score = getNicotineScore({
+      category,
+      frequency: frequency || null,
+      timeQuit: timeQuit || null,
+      secondHandExposure: secondHandBool,
+    });
+
+    // Only store importance/confidence when user committed to change
+    const importanceVal =
+      commitBool === 1 && importance != null ? Number(importance) : null;
+    const confidenceVal =
+      commitBool === 1 && confidence != null ? Number(confidence) : null;
+
+    const dataId = crypto.randomUUID();
 
     await db.execute(
       `INSERT INTO smoking_assessments (
+        data_id,
         user_id,
         category,
         frequency,
+        type_smoker,
         time_quit,
         interest_in_quitting,
-        score
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
+        score,
+        second_hand_exposure,
+        commitment_to_change,
+        importance,
+        confidence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        dataId,
         userId,
         category,
         frequency || null,
+        productType || null,
         timeQuit || null,
         interestInQuitting || null,
         score,
+        secondHandBool,
+        commitBool,
+        importanceVal,
+        confidenceVal,
       ]
     );
 
@@ -85,5 +112,40 @@ router.post("/", verifyToken, async (req, res) => {
   }
 });
 
-module.exports = { router };
+// GET /api/smoking/score
+// Returns the smoking score and category for the authenticated user
+router.get("/score", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
 
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const [rows] = await db.execute(
+      "SELECT category, frequency, time_quit, second_hand_exposure FROM smoking_assessments WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+      [userId]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(200).json({ score: null, category: null });
+    }
+
+    const { category, frequency, time_quit, second_hand_exposure } = rows[0];
+    const score = getNicotineScore({
+      category,
+      frequency,
+      timeQuit: time_quit,
+      secondHandExposure: second_hand_exposure,
+    });
+
+    return res.status(200).json({ score, category });
+  } catch (error) {
+    console.error("[GET /api/smoking/score] Error:", error);
+    return res
+      .status(500)
+      .json({ message: "Server Error", error: error.message });
+  }
+});
+
+module.exports = { router };

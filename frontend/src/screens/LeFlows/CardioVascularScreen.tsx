@@ -18,6 +18,7 @@ import { getCachedBloodSugar, setCachedBloodSugar } from '../../utils/bloodSugar
 import { getCachedBmi, setCachedBmi } from '../../utils/bmiCache';
 import { getCachedDiet, setCachedDiet } from '../../utils/dietCache';
 import { getCachedBloodLipids, setCachedBloodLipids } from '../../utils/bloodLipidsCache';
+import { getCachedSmoking, setCachedSmoking } from '../../utils/smokingCache';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -57,6 +58,17 @@ const getStatusColor = (status: string | null): string => {
       return '#DC2626';
     case 'Poor (Underweight)':
       return '#5AC8FA';
+    // Smoking range labels
+    case 'Optimal':
+      return '#059669';
+    case 'Low Risk':
+      return '#3B82F6';
+    case 'Moderate Risk':
+      return '#F59E0B';
+    case 'High Risk':
+      return '#F97316';
+    case 'Critical Risk':
+      return '#DC2626';
     // Blood lipids range labels
     case 'Healthy Range (<130 mg/dL)':
       return '#34C759';
@@ -95,6 +107,16 @@ const getDietRangeLabel = (mepaScore: number | null): string | null => {
   if (mepaScore >= 8) return 'Excellent';
   if (mepaScore >= 5) return 'Fair';
   return 'Poor';
+};
+
+// Smoking range label derived from score
+const getSmokingRangeLabel = (score: number | null): string | null => {
+  if (score === null) return null;
+  if (score === 0) return 'Critical Risk';
+  if (score <= 25) return 'High Risk';
+  if (score <= 50) return 'Moderate Risk';
+  if (score <= 75) return 'Low Risk';
+  return 'Optimal';
 };
 
 // Blood lipids (Non-HDL) range label derived from score
@@ -265,6 +287,11 @@ const CardioVascularScreen: React.FC = () => {
       setDietMepaScore(cachedDiet.mepaScore ?? null);
     }
 
+    const cachedSmoking = await getCachedSmoking();
+    if (cachedSmoking) {
+      setSmokingScore(cachedSmoking.score ?? null);
+    }
+
     try {
       const response = await fetch('http://localhost:3000/api/health-scores', {
         method: 'GET',
@@ -306,8 +333,12 @@ const CardioVascularScreen: React.FC = () => {
           score: data.diet?.score ?? null,
           mepaScore: data.diet?.mepaScore ?? null,
         });
-        // Smoking
+        // Smoking — update state and persist to cache
         setSmokingScore(data.smoking?.score ?? null);
+        await setCachedSmoking({
+          score: data.smoking?.score ?? null,
+          category: data.smoking?.category ?? null,
+        });
         // Heart score will be recalculated by useEffect
       } else {
         const errorText = await response.text();
@@ -496,11 +527,12 @@ const CardioVascularScreen: React.FC = () => {
             onPress={handleDietPress}
           />
           
-          <MetricItem 
-            title="Smoking" 
+          <MetricItem
+            title="Smoking"
             score={smokingScore}
             badge={smokingScore !== null ? String(smokingScore) : undefined}
             showNotCalculated={smokingScore === null}
+            status={getSmokingRangeLabel(smokingScore)}
             onPress={handleSmokingPress}
           />
         </View>

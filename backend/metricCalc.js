@@ -109,4 +109,35 @@ function getNonHDLScore(value) {
   return 0; // >= 220
 }
 
-module.exports = { getBloodGlucoseScore, getBMIScore, getDietScore, getNonHDLScore };
+/**
+ * Calculate a nicotine/smoking score (0–100) based on LE8 scoring criteria.
+ * Secondhand smoke exposure (anyone smoking inside the home) deducts 20 points.
+ *
+ * @param {Object}  params
+ * @param {string|null}  params.category           - 'never', 'former', or 'current'
+ * @param {string|null}  params.frequency          - for current: 'everyday', 'somedays', 'rarely'
+ * @param {string|null}  params.timeQuit           - for former: '<1', '1+', '5+'
+ * @param {boolean|number|null} params.secondHandExposure - true/1 deducts 20 pts
+ * @returns {number|null} score 0–100, or null if no category provided
+ */
+function getNicotineScore({ category, frequency, timeQuit, secondHandExposure }) {
+  if (!category) return null;
+
+  let base;
+  if (category === 'never') {
+    base = 100;
+  } else if (category === 'former') {
+    if (timeQuit === '5+') base = 100;
+    else if (timeQuit === '1+') base = 75;
+    else base = 50; // '<1' or unspecified
+  } else if (category === 'current') {
+    base = frequency === 'rarely' ? 25 : 0; // 'somedays', 'everyday', or unspecified
+  } else {
+    return null;
+  }
+
+  const penalty = (secondHandExposure === true || secondHandExposure === 1) ? 20 : 0;
+  return Math.max(0, base - penalty);
+}
+
+module.exports = { getBloodGlucoseScore, getBMIScore, getDietScore, getNonHDLScore, getNicotineScore };
