@@ -140,4 +140,50 @@ function getNicotineScore({ category, frequency, timeQuit, secondHandExposure })
   return Math.max(0, base - penalty);
 }
 
-module.exports = { getBloodGlucoseScore, getBMIScore, getDietScore, getNonHDLScore, getNicotineScore };
+/**
+ * Calculate physical activity score (0–100) as
+ *   steps / goalSteps * 100, capped at 100.
+ *
+ * @param {number|null} steps - total steps for the day
+ * @param {number|null} goalSteps - daily step goal (e.g. 6000 or 10000)
+ * @returns {number|null} score 0–100, or null if inputs are invalid
+ */
+function getPhysicalActivityScore(steps, goalSteps) {
+  if (steps === null || steps === undefined) return null;
+  if (goalSteps === null || goalSteps === undefined) return null;
+
+  const s = Number(steps);
+  const g = Number(goalSteps);
+  if (!Number.isFinite(s) || !Number.isFinite(g) || g <= 0) return null;
+
+  const raw = (s / g) * 100;
+  const clamped = Math.max(0, Math.min(100, raw));
+  return Math.round(clamped);
+}
+
+/**
+ * Calculate sleep score (0–100) as
+ *   sleptHours / 8 * 100, capped at 100.
+ *
+ * @param {number|null} sleepHours - hours of sleep (e.g. 7.5)
+ * @returns {number|null} score 0–100, or null if input is invalid
+ */
+function getSleepScore(sleepHours) {
+  if (sleepHours === null || sleepHours === undefined) return null;
+  const h = Number(sleepHours);
+  if (!Number.isFinite(h) || h <= 0) return null;
+
+  const raw = (h / 8) * 100;
+  const clamped = Math.max(0, Math.min(100, raw));
+  return Math.round(clamped);
+}
+
+module.exports = {
+  getBloodGlucoseScore,
+  getBMIScore,
+  getDietScore,
+  getNonHDLScore,
+  getNicotineScore,
+  getPhysicalActivityScore,
+  getSleepScore,
+};

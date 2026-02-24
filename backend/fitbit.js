@@ -144,12 +144,13 @@ async function saveDailyFitbitData(userId, daily) {
     minutesFairlyActive,
     minutesVeryActive
   } = daily;
+  const dataId = crypto.randomUUID();
   const updatedAt = getCurrentUTCDateTime();
 
   await db.execute(
     `INSERT INTO fitbit_daily_data
-      (user_id, date, steps, minutes_lightly_active, minutes_fairly_active, minutes_very_active, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+      (data_id, user_id, date, steps, minutes_lightly_active, minutes_fairly_active, minutes_very_active, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
         steps = VALUES(steps),
         minutes_lightly_active = VALUES(minutes_lightly_active),
@@ -158,6 +159,7 @@ async function saveDailyFitbitData(userId, daily) {
         updated_at = VALUES(updated_at)
     `,
     [
+      dataId,
       userId,
       date,
       steps,
@@ -501,27 +503,49 @@ router.get('/fitbit/steps', verifyTokenOrRefresh, async (req, res) => {
       return res.json({ message: 'Steps data fetched', data });
     }
 
-    const dataResponse = await axios.get(
-      `https://api.fitbit.com/1/user/-/activities/steps/date/${today}/1d.json`,
-      { headers: { Authorization: `Bearer ${fitbit_access_token}` } }
-    );
+    // Fetch today's activity metrics from Fitbit (steps + minutes active)
+    const [lightlyActiveRes, fairlyActiveRes, veryActiveRes, stepsRes] = await Promise.all([
+      axios.get(
+        `https://api.fitbit.com/1/user/-/activities/minutesLightlyActive/date/${today}/${today}.json`,
+        { headers: { Authorization: `Bearer ${fitbit_access_token}` } }
+      ),
+      axios.get(
+        `https://api.fitbit.com/1/user/-/activities/minutesFairlyActive/date/${today}/${today}.json`,
+        { headers: { Authorization: `Bearer ${fitbit_access_token}` } }
+      ),
+      axios.get(
+        `https://api.fitbit.com/1/user/-/activities/minutesVeryActive/date/${today}/${today}.json`,
+        { headers: { Authorization: `Bearer ${fitbit_access_token}` } }
+      ),
+      axios.get(
+        `https://api.fitbit.com/1/user/-/activities/steps/date/${today}/1d.json`,
+        { headers: { Authorization: `Bearer ${fitbit_access_token}` } }
+      ),
+    ]);
 
-    // Persist steps for today so we can serve from DB next time (until > 30 minutes old)
-    const stepsValue = dataResponse.data['activities-steps']?.[0]?.value ?? 0;
-    const steps = typeof stepsValue === 'string' ? parseInt(stepsValue, 10) : (stepsValue || 0);
-    const updatedAt = getCurrentUTCDateTime();
-    const [updateResult] = await db.execute(
-      'UPDATE fitbit_daily_data SET steps = ?, updated_at = ? WHERE user_id = ? AND date = ?',
-      [steps, updatedAt, req.user.userId, today]
-    );
-    if (updateResult.affectedRows === 0) {
-      await db.execute(
-        `INSERT INTO fitbit_daily_data
-          (data_id, user_id, date, steps, minutes_lightly_active, minutes_fairly_active, minutes_very_active, updated_at)
-         VALUES (?, ?, ?, ?, 0, 0, 0, ?)`,
-        [crypto.randomUUID(), req.user.userId, today, steps, updatedAt]
-      );
-    }
+    const lightlyArr = lightlyActiveRes.data['activities-minutesLightlyActive'] || [];
+    const fairlyArr = fairlyActiveRes.data['activities-minutesFairlyActive'] || [];
+    const veryArr = veryActiveRes.data['activities-minutesVeryActive'] || [];
+    const stepsArr = stepsRes.data['activities-steps'] || [];
+
+    const lightlyVal = lightlyArr[0]?.value ?? 0;
+    const fairlyVal = fairlyArr[0]?.value ?? 0;
+    const veryVal = veryArr[0]?.value ?? 0;
+    const stepsVal = stepsArr[0]?.value ?? 0;
+
+    const minutesLightlyActive = typeof lightlyVal === 'string' ? parseInt(lightlyVal, 10) : (lightlyVal || 0);
+    const minutesFairlyActive = typeof fairlyVal === 'string' ? parseInt(fairlyVal, 10) : (fairlyVal || 0);
+    const minutesVeryActive = typeof veryVal === 'string' ? parseInt(veryVal, 10) : (veryVal || 0);
+    const steps = typeof stepsVal === 'string' ? parseInt(stepsVal, 10) : (stepsVal || 0);
+
+    // Persist today's activity metrics so we can serve from DB next time (until > 30 minutes old)
+    await saveDailyFitbitData(req.user.userId, {
+      date: today,
+      steps,
+      minutesLightlyActive,
+      minutesFairlyActive,
+      minutesVeryActive,
+    });
 
     const { updateGoalAndStreakForDate } = require('./routes/activityGoals');
     updateGoalAndStreakForDate(req.user.userId, today, steps).catch(err =>
@@ -530,7 +554,7 @@ router.get('/fitbit/steps', verifyTokenOrRefresh, async (req, res) => {
 
     res.json({
       message: 'Steps data fetched',
-      data: dataResponse.data
+      data: stepsRes.data,
     });
   } catch (error) {
     console.error('Steps fetch error:', error.response?.data || error.message);
