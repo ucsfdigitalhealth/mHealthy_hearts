@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  PanResponder, Animated, Dimensions,
+  TextInput, PanResponder, Animated, Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +15,6 @@ type Question = {
   title: string;
   description: string;
   emoji: string;
-  options: { label: string; value: number }[];
 };
 
 const questions: Question[] = [
@@ -25,40 +24,20 @@ const questions: Question[] = [
     title: 'Sweets & Pastries',
     description: 'How many servings of sweets, candy bars, pastries, cookies, or cakes do you eat?',
     emoji: '🍰',
-    options: [
-      { label: '3+', value: 3 },
-      { label: '2', value: 2 },
-      { label: '1', value: 1 },
-      { label: '0', value: 0 },
-    ],
   },
   {
     id: 2,
     category: 'VEGETABLES',
     title: 'Vegetables',
-    description: 'How many servings of vegetables (NOT including potatoes) do you eat per day?',
+    description: 'How many servings of vegetables (NOT including potatoes) do you eat?',
     emoji: '🥗',
-    options: [
-      { label: '4+', value: 4 },
-      { label: '3', value: 3 },
-      { label: '2', value: 2 },
-      { label: '1', value: 1 },
-      { label: '0', value: 0 },
-    ],
   },
   {
     id: 3,
     category: 'FRUIT',
     title: 'Fruit',
-    description: 'How many servings of fruit do you eat per day? (Not including juice)',
+    description: 'How many servings of fruit do you eat? (Not including juice)',
     emoji: '🍎',
-    options: [
-      { label: '4+', value: 4 },
-      { label: '3', value: 3 },
-      { label: '2', value: 2 },
-      { label: '1', value: 1 },
-      { label: '0', value: 0 },
-    ],
   },
   {
     id: 4,
@@ -66,114 +45,82 @@ const questions: Question[] = [
     title: 'Beans',
     description: 'How many servings of beans do you eat?',
     emoji: '🫘',
-    options: [
-      { label: '4+', value: 4 },
-      { label: '3', value: 3 },
-      { label: '2', value: 2 },
-      { label: '1', value: 1 },
-      { label: '0', value: 0 },
-    ],
   },
   {
     id: 5,
     category: 'FISH',
     title: 'Fish',
-    description: 'How many servings of fish do you eat per week? (Not fried)',
+    description: 'How many servings of fish do you eat? (Not fried)',
     emoji: '🐟',
-    options: [
-      { label: '3+', value: 3 },
-      { label: '2', value: 2 },
-      { label: '1', value: 1 },
-      { label: '0', value: 0 },
-    ],
   },
   {
     id: 6,
     category: 'DAIRY',
     title: 'Butter or Cream',
-    description: 'How many servings of butter, stick margarine, or cream do you eat per day?',
+    description: 'How many servings of butter, stick margarine, or cream do you eat?',
     emoji: '🧈',
-    options: [
-      { label: '3+', value: 3 },
-      { label: '2', value: 2 },
-      { label: '1', value: 1 },
-      { label: '0', value: 0 },
-    ],
   },
   {
     id: 7,
     category: 'WHOLE GRAINS',
     title: 'Whole Grains',
-    description: 'How many servings of white bread, white rice, or other refined grains do you eat per day?',
+    description: 'How many servings of white bread, white rice, or other refined grains do you eat?',
     emoji: '🍞',
-    options: [
-      { label: '5+', value: 5 },
-      { label: '4', value: 4 },
-      { label: '3', value: 3 },
-      { label: '2', value: 2 },
-      { label: '1', value: 1 },
-      { label: '0', value: 0 },
-    ],
   },
   {
     id: 8,
     category: 'PROCESSED FOODS',
     title: 'Fast or Fried Food',
-    description: 'How many servings of fast food or fried food do you eat per week?',
+    description: 'How many servings of fast food or fried food do you eat?',
     emoji: '🍔',
-    options: [
-      { label: '7+', value: 7 },
-      { label: '5', value: 5 },
-      { label: '3', value: 3 },
-      { label: '1', value: 1 },
-      { label: '0', value: 0 },
-    ],
   },
   {
     id: 9,
     category: 'MEAT',
     title: 'Red Meat',
-    description: 'How many servings of red meat (beef, pork, lamb) or processed meat do you eat per week?',
+    description: 'How many servings of red meat (beef, pork, lamb) or processed meat do you eat?',
     emoji: '🥩',
-    options: [
-      { label: '7+', value: 7 },
-      { label: '5', value: 5 },
-      { label: '3', value: 3 },
-      { label: '1', value: 1 },
-      { label: '0', value: 0 },
-    ],
   },
   {
     id: 10,
     category: 'BEVERAGES',
     title: 'Sugar Sweetened Beverages',
-    description: 'How many sugar-sweetened beverages (soda, lemonade, fruit punch, sweet tea) do you drink per week?',
+    description: 'How many sugar-sweetened beverages (soda, lemonade, fruit punch, sweet tea) do you drink?',
     emoji: '🥤',
-    options: [
-      { label: '7+', value: 7 },
-      { label: '5', value: 5 },
-      { label: '3', value: 3 },
-      { label: '1', value: 1 },
-      { label: '0', value: 0 },
-    ],
   },
 ];
 
+// ─── Answer type ──────────────────────────────────────────────────────────────
+type AnswerEntry = { value: number; unit: 'day' | 'week' };
+type Answers = { [key: number]: AnswerEntry };
+
+// ─── Unit conversion helpers ──────────────────────────────────────────────────
+function perDay(a: AnswerEntry | undefined): number | null {
+  if (!a) return null;
+  return a.unit === 'day' ? a.value : a.value / 7;
+}
+
+function perWeek(a: AnswerEntry | undefined): number | null {
+  if (!a) return null;
+  return a.unit === 'week' ? a.value : a.value * 7;
+}
+
 type Phase = 'intro' | 'questions' | 'commitment' | 'importance' | 'confidence' | 'resources' | 'results';
 
-// Local MEPA score calculator — mirrors backend getDietScore
-function calcDietScoreLocal(ans: { [key: number]: number }): { mepaScore: number; displayScore: number } {
+// ─── Local MEPA score calculator — mirrors backend getDietScore ───────────────
+function calcDietScoreLocal(ans: Answers): { mepaScore: number; displayScore: number } {
   let mepa = 0;
-  const vegsPerDay = ans[2] ?? null;
-  const fruitPerDay = ans[3] ?? null;
-  const redMeatPerWeek = ans[9] ?? null;
-  const fishPerWeek = ans[5] ?? null;
-  const butterPerWeek = ans[6] ? ans[6] * 7 : null;
-  const beansPerWeek = ans[4] ?? null;
-  const wholeGrainsPerDay = ans[7] ?? null;
-  const sweetsPerWeek = ans[1] ?? null;
-  const fastFoodPerWeek = ans[8] ?? null;
-  const sugaryDrinksPerWeek = ans[10] ?? null;
+
+  const vegsPerDay      = perDay(ans[2]);
+  const fruitPerDay     = perDay(ans[3]);
+  const redMeatPerWeek  = perWeek(ans[9]);
+  const fishPerWeek     = perWeek(ans[5]);
+  const butterPerWeek   = perWeek(ans[6]);
+  const beansPerWeek    = perWeek(ans[4]);
+  const wholeGrainsPerDay = perDay(ans[7]);
+  const sweetsPerWeek   = perWeek(ans[1]);
+  const fastFoodPerWeek = perWeek(ans[8]);
+  const sugaryDrinksPerWeek = perWeek(ans[10]);
 
   if (vegsPerDay != null && vegsPerDay >= 2) mepa++;
   if (fruitPerDay != null && fruitPerDay >= 1) mepa++;
@@ -196,6 +143,7 @@ function calcDietScoreLocal(ans: { [key: number]: number }): { mepaScore: number
   return { mepaScore: mepa, displayScore };
 }
 
+// ─── Slider ───────────────────────────────────────────────────────────────────
 const SLIDER_WIDTH = Dimensions.get('window').width - 80;
 
 const CustomSlider: React.FC<{ value: number; onValueChange: (v: number) => void }> = ({
@@ -255,14 +203,16 @@ const CustomSlider: React.FC<{ value: number; onValueChange: (v: number) => void
   );
 };
 
+// ─── Main screen ──────────────────────────────────────────────────────────────
 const DietAssessmentScreen: React.FC = () => {
   const navigation = useNavigation();
   const { accessToken } = useAuth();
   const [phase, setPhase] = useState<Phase>('intro');
   const [introStep, setIntroStep] = useState<0 | 1>(0);
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState<{ [key: number]: number }>({});
-  const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const [answers, setAnswers] = useState<Answers>({});
+  const [dayInput, setDayInput] = useState<string>('');
+  const [weekInput, setWeekInput] = useState<string>('');
   const [commitment, setCommitment] = useState<boolean | null>(null);
   const [importanceVal, setImportanceVal] = useState(5);
   const [confidenceVal, setConfidenceVal] = useState(5);
@@ -270,22 +220,55 @@ const DietAssessmentScreen: React.FC = () => {
   const question = questions[currentQuestion];
   const progress = ((currentQuestion + 1) / questions.length) * 100;
 
-  const handleOptionSelect = (value: number) => {
-    setSelectedOption(value);
+  // Which box is active
+  const dayActive = dayInput.length > 0;
+  const weekActive = weekInput.length > 0;
+  // Neither can have a value simultaneously; one disables the other
+  const dayDisabled = weekActive;
+  const weekDisabled = dayActive;
+  const hasInput = dayActive || weekActive;
+
+  // Restore inputs from saved answer for a given question id
+  const restoreInputs = (savedAnswer: AnswerEntry | undefined) => {
+    if (savedAnswer) {
+      if (savedAnswer.unit === 'day') {
+        setDayInput(String(savedAnswer.value));
+        setWeekInput('');
+      } else {
+        setWeekInput(String(savedAnswer.value));
+        setDayInput('');
+      }
+    } else {
+      setDayInput('');
+      setWeekInput('');
+    }
+  };
+
+  // Build an AnswerEntry from the current inputs (returns undefined if empty)
+  const getCurrentAnswer = (): AnswerEntry | undefined => {
+    if (dayInput !== '') {
+      const n = parseFloat(dayInput);
+      if (!isNaN(n)) return { value: n, unit: 'day' };
+    }
+    if (weekInput !== '') {
+      const n = parseFloat(weekInput);
+      if (!isNaN(n)) return { value: n, unit: 'week' };
+    }
+    return undefined;
   };
 
   const handleNext = () => {
     if (phase === 'questions') {
-      if (selectedOption !== null) {
-        const updatedAnswers = { ...answers, [question.id]: selectedOption };
-        setAnswers(updatedAnswers);
-        if (currentQuestion < questions.length - 1) {
-          setCurrentQuestion(currentQuestion + 1);
-          const nextQuestionId = questions[currentQuestion + 1].id;
-          setSelectedOption(answers[nextQuestionId] ?? null);
-        } else {
-          setPhase('commitment');
-        }
+      const current = getCurrentAnswer();
+      if (!current) return;
+      const updatedAnswers = { ...answers, [question.id]: current };
+      setAnswers(updatedAnswers);
+      if (currentQuestion < questions.length - 1) {
+        const nextIdx = currentQuestion + 1;
+        setCurrentQuestion(nextIdx);
+        restoreInputs(updatedAnswers[questions[nextIdx].id]);
+      } else {
+        setPhase('commitment');
       }
     } else if (phase === 'commitment') {
       if (commitment === null) return;
@@ -309,20 +292,20 @@ const DietAssessmentScreen: React.FC = () => {
     } else if (phase === 'importance') {
       setPhase('commitment');
     } else if (phase === 'commitment') {
+      const lastIdx = questions.length - 1;
       setPhase('questions');
-      setCurrentQuestion(questions.length - 1);
-      setSelectedOption(answers[questions[questions.length - 1].id] ?? null);
+      setCurrentQuestion(lastIdx);
+      restoreInputs(answers[questions[lastIdx].id]);
     } else if (phase === 'questions') {
       if (currentQuestion > 0) {
-        setCurrentQuestion(currentQuestion - 1);
-        const prevQuestionId = questions[currentQuestion - 1].id;
-        setSelectedOption(answers[prevQuestionId] ?? null);
+        const prevIdx = currentQuestion - 1;
+        setCurrentQuestion(prevIdx);
+        restoreInputs(answers[questions[prevIdx].id]);
       } else {
         setPhase('intro');
         setIntroStep(1);
       }
     } else {
-      // intro phase
       if (introStep === 1) {
         setIntroStep(0);
       } else {
@@ -342,16 +325,16 @@ const DietAssessmentScreen: React.FC = () => {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
-          sweetsPerWeek: answers[1] ?? null,
-          vegetablesPerDay: answers[2] ?? null,
-          fruitPerDay: answers[3] ?? null,
-          beansPerWeek: answers[4] ?? null,
-          fishPerWeek: answers[5] ?? null,
-          butterPerWeek: answers[6] ? answers[6] * 7 : null,
-          wholeGrainsPerDay: answers[7] ?? null,
-          fastFoodPerWeek: answers[8] ?? null,
-          redMeatPerWeek: answers[9] ?? null,
-          sugaryDrinksPerWeek: answers[10] ?? null,
+          sweetsPerWeek:        perWeek(answers[1]),
+          vegetablesPerDay:     perDay(answers[2]),
+          fruitPerDay:          perDay(answers[3]),
+          beansPerWeek:         perWeek(answers[4]),
+          fishPerWeek:          perWeek(answers[5]),
+          butterPerWeek:        perWeek(answers[6]),
+          wholeGrainsPerDay:    perDay(answers[7]),
+          fastFoodPerWeek:      perWeek(answers[8]),
+          redMeatPerWeek:       perWeek(answers[9]),
+          sugaryDrinksPerWeek:  perWeek(answers[10]),
           commitmentToChange: commitment === true,
           importance: commitment ? importanceVal : null,
           confidence: commitment ? confidenceVal : null,
@@ -365,7 +348,7 @@ const DietAssessmentScreen: React.FC = () => {
     navigation.goBack();
   };
 
-  // ── Intro screens ──────────────────────────────────────────────────────────
+  // ── Intro screens ────────────────────────────────────────────────────────────
   if (phase === 'intro') {
     return (
       <SafeAreaView style={styles.container}>
@@ -406,7 +389,8 @@ const DietAssessmentScreen: React.FC = () => {
                 onPress={() => {
                   setPhase('questions');
                   setCurrentQuestion(0);
-                  setSelectedOption(null);
+                  setDayInput('');
+                  setWeekInput('');
                 }}
               >
                 <Text style={styles.introButtonText}>Next</Text>
@@ -418,7 +402,7 @@ const DietAssessmentScreen: React.FC = () => {
     );
   }
 
-  // ── Commitment screen ──────────────────────────────────────────────────────
+  // ── Commitment screen ────────────────────────────────────────────────────────
   if (phase === 'commitment') {
     return (
       <SafeAreaView style={styles.container}>
@@ -467,7 +451,7 @@ const DietAssessmentScreen: React.FC = () => {
     );
   }
 
-  // ── Importance slider ──────────────────────────────────────────────────────
+  // ── Importance slider ────────────────────────────────────────────────────────
   if (phase === 'importance') {
     return (
       <SafeAreaView style={styles.container}>
@@ -496,7 +480,7 @@ const DietAssessmentScreen: React.FC = () => {
     );
   }
 
-  // ── Confidence slider ──────────────────────────────────────────────────────
+  // ── Confidence slider ────────────────────────────────────────────────────────
   if (phase === 'confidence') {
     return (
       <SafeAreaView style={styles.container}>
@@ -525,7 +509,7 @@ const DietAssessmentScreen: React.FC = () => {
     );
   }
 
-  // ── Resources screen ───────────────────────────────────────────────────────
+  // ── Resources screen ─────────────────────────────────────────────────────────
   if (phase === 'resources') {
     return (
       <SafeAreaView style={styles.container}>
@@ -558,7 +542,7 @@ const DietAssessmentScreen: React.FC = () => {
     );
   }
 
-  // ── Results screen ─────────────────────────────────────────────────────────
+  // ── Results screen ───────────────────────────────────────────────────────────
   if (phase === 'results') {
     const { displayScore } = calcDietScoreLocal(answers);
     return (
@@ -596,7 +580,7 @@ const DietAssessmentScreen: React.FC = () => {
     );
   }
 
-  // ── Questions screen ───────────────────────────────────────────────────────
+  // ── Questions screen ─────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -625,49 +609,51 @@ const DietAssessmentScreen: React.FC = () => {
 
         <Text style={styles.description}>{question.description}</Text>
 
-        <View style={styles.optionsContainer}>
-          {question.options.map((option, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.optionButton,
-                selectedOption === option.value && styles.optionButtonSelected,
-              ]}
-              onPress={() => handleOptionSelect(option.value)}
-            >
-              <View style={styles.optionContent}>
-                <View
-                  style={[
-                    styles.radioButton,
-                    selectedOption === option.value && styles.radioButtonSelected,
-                  ]}
-                >
-                  {selectedOption === option.value && (
-                    <View style={styles.radioButtonInner} />
-                  )}
-                </View>
-                <Text
-                  style={[
-                    styles.optionText,
-                    selectedOption === option.value && styles.optionTextSelected,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+        {/* Day / Week inputs */}
+        <View style={styles.servingRow}>
+          {/* Day box */}
+          <View style={styles.servingBoxWrapper}>
+            <View style={[styles.servingBox, dayDisabled && styles.servingBoxDisabled]}>
+              <TextInput
+                style={[styles.servingInput, dayDisabled && styles.servingInputDisabled]}
+                value={dayInput}
+                onChangeText={(t) => setDayInput(t.replace(/[^0-9.]/g, ''))}
+                keyboardType="numeric"
+                maxLength={4}
+                editable={!dayDisabled}
+                placeholder=""
+              />
+            </View>
+            <Text style={[styles.servingUnitLabel, dayDisabled && styles.servingUnitLabelDisabled]}>
+              Day
+            </Text>
+          </View>
+
+          {/* Week box */}
+          <View style={styles.servingBoxWrapper}>
+            <View style={[styles.servingBox, weekDisabled && styles.servingBoxDisabled]}>
+              <TextInput
+                style={[styles.servingInput, weekDisabled && styles.servingInputDisabled]}
+                value={weekInput}
+                onChangeText={(t) => setWeekInput(t.replace(/[^0-9.]/g, ''))}
+                keyboardType="numeric"
+                maxLength={4}
+                editable={!weekDisabled}
+                placeholder=""
+              />
+            </View>
+            <Text style={[styles.servingUnitLabel, weekDisabled && styles.servingUnitLabelDisabled]}>
+              Week
+            </Text>
+          </View>
         </View>
       </ScrollView>
 
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[
-            styles.nextButton,
-            selectedOption === null && styles.nextButtonDisabled,
-          ]}
+          style={[styles.nextButton, !hasInput && styles.nextButtonDisabled]}
           onPress={handleNext}
-          disabled={selectedOption === null}
+          disabled={!hasInput}
         >
           <Text style={styles.nextButtonText}>
             {currentQuestion === questions.length - 1 ? 'Finish' : 'Next'}
@@ -754,52 +740,48 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 32,
   },
-  optionsContainer: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  optionButton: {
-    backgroundColor: '#F2F2F7',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  optionButtonSelected: {
-    backgroundColor: '#E3F2FD',
-    borderColor: '#007AFF',
-  },
-  optionContent: {
+  // ── Serving input boxes ───────────────────────────────────────────────────────
+  servingRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  radioButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#8E8E93',
-    marginRight: 12,
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: 20,
+    marginBottom: 32,
   },
-  radioButtonSelected: {
-    borderColor: '#007AFF',
+  servingBoxWrapper: {
+    alignItems: 'center',
   },
-  radioButtonInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#007AFF',
+  servingBox: {
+    width: 140,
+    height: 136,
+    backgroundColor: '#F1EDED',
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  optionText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#000',
+  servingBoxDisabled: {
+    backgroundColor: '#C8C8CC',
   },
-  optionTextSelected: {
-    color: '#007AFF',
+  servingInput: {
+    fontSize: 72,
+    fontWeight: '400',
+    color: '#000000',
+    textAlign: 'center',
+    width: '100%',
+    padding: 0,
   },
+  servingInputDisabled: {
+    color: '#A2A2A2',
+  },
+  servingUnitLabel: {
+    fontSize: 32,
+    color: '#A2A2A2',
+    fontWeight: '400',
+  },
+  servingUnitLabelDisabled: {
+    color: '#C8C8CC',
+  },
+  // ─────────────────────────────────────────────────────────────────────────────
   footer: {
     paddingHorizontal: 20,
     paddingVertical: 16,
@@ -808,17 +790,17 @@ const styles = StyleSheet.create({
     borderTopColor: '#E5E5EA',
   },
   nextButton: {
-    backgroundColor: '#000',
-    borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: '#2084a4',
+    borderRadius: 17,
+    paddingVertical: 20,
     alignItems: 'center',
   },
   nextButtonDisabled: {
     backgroundColor: '#E5E5EA',
   },
   nextButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   blueButton: {

@@ -9,12 +9,15 @@ import {
   TextInput,
   PanResponder,
   LayoutChangeEvent,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { setCachedBloodLipids } from '../../utils/bloodLipidsCache';
+
+const MASCOT_IMAGE = require('../../../assets/blood-lipids-mascot.png');
 
 // ─── Scoring helper (mirrors backend/metricCalc.js) ──────────────────────────
 function getNonHDLScoreLocal(value: number | null): number | null {
@@ -175,11 +178,24 @@ const sliderStyles = StyleSheet.create({
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
+// Step map:
+//  1  Welcome (mascot + Start)
+//  2  I found my results / I'll check later
+//  3  Which measure do you have?
+//  4  Enter value
+//  5  Result screen
+//  6  Medication
+//  7  Commitment
+//  8  Importance slider
+//  9  Confidence slider
+//  10 Score summary
+//  11 Resources
 const BloodLipidsFlowScreen: React.FC = () => {
   const navigation = useNavigation();
   const { accessToken } = useAuth();
 
   const [currentStep, setCurrentStep] = useState<number>(1);
+  const [checkLater, setCheckLater] = useState<boolean>(false);
 
   // Selections
   const [measureType, setMeasureType] = useState<string | null>(null);
@@ -189,8 +205,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
   const [importance, setImportance] = useState<number>(5);
   const [confidence, setConfidence] = useState<number>(5);
 
-  // Total steps for progress bar (always 9 logical steps)
-  const TOTAL_STEPS = 10;
+  const TOTAL_STEPS = 11;
 
   const goToStep = (step: number) => setCurrentStep(step);
 
@@ -207,34 +222,40 @@ const BloodLipidsFlowScreen: React.FC = () => {
         goToStep(2);
         break;
       case 4:
-        // Result screen — came from step 3 (value input)
         goToStep(3);
         break;
       case 5:
-        // Medication — came from step 4 (result) or step 2 (no-results)
-        if (measureType === 'no-results') goToStep(2);
-        else goToStep(4);
+        // Result screen — came from step 4 (value input)
+        goToStep(4);
         break;
       case 6:
-        goToStep(5);
+        // Medication — came from step 5 (result) or step 3 (no-results)
+        if (measureType === 'no-results') goToStep(3);
+        else goToStep(5);
         break;
       case 7:
         goToStep(6);
         break;
       case 8:
-        // Confidence — came from step 7 (importance)
         goToStep(7);
         break;
       case 9:
-        // Score summary — came from step 8 (confidence) or step 6 (commitment=No)
-        if (commitment) goToStep(8);
-        else goToStep(6);
+        // Confidence — came from step 8 (importance)
+        goToStep(8);
         break;
       case 10:
-        // Resources — came from step 9 if value exists, else from step 8 or 6
-        if (value) goToStep(9);
-        else if (commitment) goToStep(8);
-        else goToStep(6);
+        // Score summary — came from step 9 (confidence) or step 7 (commitment=No)
+        if (commitment) goToStep(9);
+        else goToStep(7);
+        break;
+      case 11:
+        // Resources — came from step 2 (check later), step 10, or step 9/7
+        if (checkLater) {
+          setCheckLater(false);
+          goToStep(2);
+        } else if (value) goToStep(10);
+        else if (commitment) goToStep(9);
+        else goToStep(7);
         break;
       default:
         goToStep(currentStep - 1);
@@ -245,9 +266,9 @@ const BloodLipidsFlowScreen: React.FC = () => {
   const handleMeasureSelect = (type: string) => {
     setMeasureType(type);
     if (type === 'no-results') {
-      goToStep(5); // skip value input and result screen, go to medication
+      goToStep(6); // skip value input and result screen, go to medication
     } else {
-      goToStep(3);
+      goToStep(4);
     }
   };
 
@@ -261,27 +282,32 @@ const BloodLipidsFlowScreen: React.FC = () => {
 
   const handleCommitmentNext = () => {
     if (commitment) {
-      goToStep(7); // importance slider
+      goToStep(8); // importance slider
     } else {
       // Skip sliders — go to score summary if value exists, else resources
-      if (value) goToStep(9);
-      else goToStep(10);
+      if (value) goToStep(10);
+      else goToStep(11);
     }
   };
 
-  const handleImportanceNext = () => goToStep(8);
+  const handleImportanceNext = () => goToStep(9);
 
   const handleConfidenceNext = () => {
-    if (value) goToStep(9);
-    else goToStep(10);
+    if (value) goToStep(10);
+    else goToStep(11);
   };
 
-  const handleResultNext = () => goToStep(5);
+  const handleResultNext = () => goToStep(6);
 
-  const handleScoreSummaryNext = () => goToStep(10);
+  const handleScoreSummaryNext = () => goToStep(11);
 
   // ── Done (Resources screen) ──────────────────────────────────────────────────
   const handleDone = async () => {
+    if (checkLater) {
+      navigation.goBack();
+      return;
+    }
+
     const numericValue = value ? Number(value) : null;
     const score = getNonHDLScoreLocal(numericValue);
 
@@ -315,24 +341,61 @@ const BloodLipidsFlowScreen: React.FC = () => {
   };
 
   // ── Step renderers ───────────────────────────────────────────────────────────
-  const renderStep1 = () => (
+
+  // Step 1: Welcome / intro
+  const renderWelcome = () => (
     <View style={styles.stepContainer}>
-      <View style={styles.introIconContainer}>
-        <Text style={styles.introIcon}>🩺</Text>
-      </View>
       <Text style={styles.stepTitle}>Let's assess your blood lipids</Text>
-      <Text style={styles.stepSubtitle}>LOOP LIPIDS</Text>
-      <TouchableOpacity style={styles.primaryButton} onPress={() => goToStep(2)}>
-        <Text style={styles.primaryButtonText}>Start Assessment</Text>
+      <Text style={styles.welcomeSubtitle}>
+        {"We'll ask about your most recent cholesterol or lipid panel so we can calculate your score"}
+      </Text>
+      <View style={styles.welcomeMascotContainer}>
+        <Image
+          source={MASCOT_IMAGE}
+          style={styles.mascotImage}
+          resizeMode="contain"
+        />
+        <Text style={styles.mascotLabel}>BLOOD LIPIDS</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.startButton}
+        onPress={() => goToStep(2)}
+      >
+        <Text style={styles.startButtonText}>Start</Text>
       </TouchableOpacity>
     </View>
   );
 
+  // Step 2: I found my results / I'll check later
+  const renderStep1 = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.stepTitle}>Let's assess your blood lipids</Text>
+      <Text style={styles.checkLaterDescription}>
+        {"If you're not sure, that's totally fine. If you can check your latest blood test results from your doctor or online portal, the value is usually listed under 'non‑HDL cholesterol' or 'lipid panel."}
+      </Text>
+      <View style={styles.checkLaterButtons}>
+        <TouchableOpacity
+          style={styles.checkLaterButton}
+          onPress={() => { setCheckLater(false); goToStep(3); }}
+        >
+          <Text style={styles.checkLaterButtonText}>I found my results</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.checkLaterButton}
+          onPress={() => { setCheckLater(true); goToStep(11); }}
+        >
+          <Text style={styles.checkLaterButtonText}>I'll check later</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // Step 3: Which measure do you have available?
   const renderStep2 = () => {
     const options = [
       { id: 'total-cholesterol', title: 'Total cholesterol', subtitle: 'mg/dL' },
       { id: 'non-hdl-cholesterol', title: 'Non-HDL cholesterol', subtitle: 'mg/dL' },
-      { id: 'no-results', title: "I don't have recent results", subtitle: null },
+      { id: 'no-results', title: "I don't have recent results or not Sure", subtitle: null },
     ];
     return (
       <View style={styles.stepContainer}>
@@ -366,6 +429,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
     );
   };
 
+  // Step 4: Enter value
   const renderStep3 = () => {
     const typeLabel = measureType === 'total-cholesterol' ? 'total cholesterol' : 'non-HDL cholesterol';
     return (
@@ -409,7 +473,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
         </View>
         <TouchableOpacity
           style={[styles.primaryButton, !value && styles.buttonDisabled]}
-          onPress={() => goToStep(4)}
+          onPress={() => goToStep(5)}
           disabled={!value}
         >
           <Text style={styles.primaryButtonText}>Continue</Text>
@@ -418,6 +482,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
     );
   };
 
+  // Step 6: Medication
   const renderStep4 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.sectionLabel}>Medication</Text>
@@ -438,7 +503,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
       </View>
       <TouchableOpacity
         style={[styles.navButton, medication === null && styles.buttonDisabled]}
-        onPress={() => goToStep(6)}
+        onPress={() => goToStep(7)}
         disabled={medication === null}
       >
         <Text style={styles.navButtonText}>Next</Text>
@@ -446,6 +511,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
     </View>
   );
 
+  // Step 7: Commitment
   const renderStep5 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.sectionLabel}>Commitment to Healthy Change</Text>
@@ -474,6 +540,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
     </View>
   );
 
+  // Step 8: Importance
   const renderStep6 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.sectionLabel}>Importance</Text>
@@ -485,6 +552,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
     </View>
   );
 
+  // Step 9: Confidence
   const renderStep7 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.sectionLabel}>Confidence</Text>
@@ -496,6 +564,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
     </View>
   );
 
+  // Step 5: Result screen (shown right after value entry)
   const renderStep8 = () => {
     const numericValue = value ? Number(value) : null;
     const rangeInfo = getRangeInfo(numericValue);
@@ -521,6 +590,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
     );
   };
 
+  // Step 10: Score summary
   const renderStep9 = () => {
     const numericValue = value ? Number(value) : null;
     const score = getNonHDLScoreLocal(numericValue);
@@ -541,6 +611,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
     );
   };
 
+  // Step 11: Resources
   const renderStep10 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.sectionLabel}>Resources</Text>
@@ -559,16 +630,17 @@ const BloodLipidsFlowScreen: React.FC = () => {
 
   const renderCurrentStep = () => {
     switch (currentStep) {
-      case 1: return renderStep1();
-      case 2: return renderStep2();
-      case 3: return renderStep3();
-      case 4: return renderStep8();   // Result screen (right after value input)
-      case 5: return renderStep4();   // Medication
-      case 6: return renderStep5();   // Commitment
-      case 7: return renderStep6();   // Importance
-      case 8: return renderStep7();   // Confidence
-      case 9: return renderStep9();   // Score summary
-      case 10: return renderStep10(); // Resources
+      case 1:  return renderWelcome();  // Welcome / intro
+      case 2:  return renderStep1();    // I found my results / I'll check later
+      case 3:  return renderStep2();    // Which measure?
+      case 4:  return renderStep3();    // Enter value
+      case 5:  return renderStep8();    // Result screen (right after value input)
+      case 6:  return renderStep4();    // Medication
+      case 7:  return renderStep5();    // Commitment
+      case 8:  return renderStep6();    // Importance
+      case 9:  return renderStep7();    // Confidence
+      case 10: return renderStep9();    // Score summary
+      case 11: return renderStep10();   // Resources
       default: return null;
     }
   };
@@ -654,19 +726,68 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 500,
   },
-  // Intro
-  introIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#E3F2FD',
-    justifyContent: 'center',
+  // Welcome screen
+  welcomeSubtitle: {
+    fontSize: 24,
+    fontStyle: 'italic',
+    color: '#212529',
+    textAlign: 'center',
+    lineHeight: 34,
+    marginBottom: 24,
+  },
+  welcomeMascotContainer: {
     alignItems: 'center',
     marginBottom: 32,
-    alignSelf: 'center',
   },
-  introIcon: {
-    fontSize: 40,
+  mascotImage: {
+    width: 220,
+    height: 220,
+    marginBottom: 12,
+  },
+  mascotLabel: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#212529',
+    letterSpacing: 1,
+  },
+  startButton: {
+    backgroundColor: '#212529',
+    borderRadius: 17,
+    paddingVertical: 22,
+    alignItems: 'center',
+    alignSelf: 'center',
+    width: '70%',
+  },
+  startButtonText: {
+    color: '#FFFFFF',
+    fontSize: 32,
+    fontWeight: '700',
+  },
+  // Check later screen
+  checkLaterDescription: {
+    fontSize: 24,
+    fontStyle: 'italic',
+    color: '#212529',
+    textAlign: 'center',
+    lineHeight: 34,
+    marginBottom: 48,
+  },
+  checkLaterButtons: {
+    gap: 16,
+  },
+  checkLaterButton: {
+    backgroundColor: '#212529',
+    borderRadius: 17,
+    paddingVertical: 22,
+    alignItems: 'center',
+    alignSelf: 'center',
+    width: '80%',
+  },
+  checkLaterButtonText: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   sectionLabel: {
     fontSize: 16,
@@ -684,14 +805,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     lineHeight: 36,
     textAlign: 'center',
-  },
-  stepSubtitle: {
-    fontSize: 18,
-    color: '#6C757D',
-    textAlign: 'center',
-    marginBottom: 40,
-    fontWeight: '600',
-    letterSpacing: 1,
   },
   // Buttons
   primaryButton: {
