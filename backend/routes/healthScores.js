@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db.js");
 const { verifyToken } = require("../auth.js");
-const { getBloodGlucoseScore, getBMIScore, getDietScore, getNicotineScore } = require("../metricCalc.js");
+const { getBloodGlucoseScore, getBMIScore, getDietScore, getNicotineScore, getPhysicalActivityScore, getSleepScore } = require("../metricCalc.js");
 
 // GET /api/health-scores
 // Gets all health scores (blood lipids, blood sugar, BMI, diet, smoking) for the authenticated user
@@ -100,6 +100,37 @@ router.get("/", verifyToken, async (req, res) => {
       });
     }
 
+    // Physical Activity — today's steps from fitbit_daily_data
+    const today = new Date().toISOString().slice(0, 10);
+    const [activityRows] = await db.execute(
+      "SELECT steps FROM fitbit_daily_data WHERE user_id = ? AND date = ? ORDER BY updated_at DESC LIMIT 1",
+      [userId, today]
+    );
+    const [goalRows] = await db.execute(
+      "SELECT step_target FROM daily_goals WHERE user_id = ? AND goal_date = ?",
+      [userId, today]
+    );
+    let physicalActivityScore = null;
+    let physicalActivitySteps = null;
+    if (activityRows && activityRows.length > 0 && activityRows[0].steps != null) {
+      physicalActivitySteps = Number(activityRows[0].steps);
+      const goalSteps = goalRows && goalRows.length > 0 ? Number(goalRows[0].step_target) : 10000;
+      physicalActivityScore = getPhysicalActivityScore(physicalActivitySteps, goalSteps);
+    }
+
+    // Sleep — yesterday's sleep from fitbit_sleep_data
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const [sleepDbRows] = await db.execute(
+      "SELECT total_minutes_asleep FROM fitbit_sleep_data WHERE user_id = ? AND date = ? ORDER BY updated_at DESC LIMIT 1",
+      [userId, yesterday]
+    );
+    let sleepScore = null;
+    let sleepHours = null;
+    if (sleepDbRows && sleepDbRows.length > 0 && sleepDbRows[0].total_minutes_asleep != null) {
+      sleepHours = Number(sleepDbRows[0].total_minutes_asleep) / 60;
+      sleepScore = getSleepScore(sleepHours);
+    }
+
     return res.status(200).json({
       bloodLipids: {
         score: bloodLipidScore,
@@ -121,6 +152,14 @@ router.get("/", verifyToken, async (req, res) => {
       smoking: {
         score: smokingScore,
         category: smokingCategory,
+      },
+      physicalActivity: {
+        score: physicalActivityScore,
+        steps: physicalActivitySteps,
+      },
+      sleep: {
+        score: sleepScore,
+        hours: sleepHours,
       },
     });
   } catch (error) {

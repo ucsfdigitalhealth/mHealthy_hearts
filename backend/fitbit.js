@@ -5,6 +5,7 @@ const axios = require('axios');
 const qs = require('qs');
 const crypto = require('crypto');
 const { verifyTokenOrRefresh } = require('./auth');
+const { getPhysicalActivityScore, getSleepScore } = require('./metricCalc');
 require('dotenv').config();
 
 const router = express.Router();
@@ -500,7 +501,13 @@ router.get('/fitbit/steps', verifyTokenOrRefresh, async (req, res) => {
       const data = {
         'activities-steps': [{ dateTime: today, value: String(cached.steps) }]
       };
-      return res.json({ message: 'Steps data fetched', data });
+      const [cachedGoalRows] = await db.execute(
+        'SELECT step_target FROM daily_goals WHERE user_id = ? AND goal_date = ?',
+        [req.user.userId, today]
+      );
+      const cachedGoalSteps = cachedGoalRows && cachedGoalRows.length > 0 ? Number(cachedGoalRows[0].step_target) : 10000;
+      const cachedActivityScore = getPhysicalActivityScore(cached.steps, cachedGoalSteps);
+      return res.json({ message: 'Steps data fetched', data, score: cachedActivityScore, steps: cached.steps });
     }
 
     // Fetch today's activity metrics from Fitbit (steps + minutes active)
@@ -552,9 +559,18 @@ router.get('/fitbit/steps', verifyTokenOrRefresh, async (req, res) => {
       console.error('Activity goal/streak update error:', err)
     );
 
+    const [liveGoalRows] = await db.execute(
+      'SELECT step_target FROM daily_goals WHERE user_id = ? AND goal_date = ?',
+      [req.user.userId, today]
+    );
+    const liveGoalSteps = liveGoalRows && liveGoalRows.length > 0 ? Number(liveGoalRows[0].step_target) : 10000;
+    const activityScore = getPhysicalActivityScore(steps, liveGoalSteps);
+
     res.json({
       message: 'Steps data fetched',
       data: stepsRes.data,
+      score: activityScore,
+      steps,
     });
   } catch (error) {
     console.error('Steps fetch error:', error.response?.data || error.message);
@@ -594,9 +610,12 @@ router.get('/fitbit/sleep', verifyTokenOrRefresh, async (req, res) => {
     const useCache = cached && cached.updated_at != null && new Date(cached.updated_at) > thirtyMinutesAgo;
 
     if (useCache) {
+      const cachedSleepHours = (cached.total_minutes_asleep || 0) / 60;
+      const cachedSleepScore = getSleepScore(cachedSleepHours);
       const payload = {
         message: 'Sleep data fetched (cached)',
         bedDate: yesterdayLocal,
+        score: cachedSleepScore,
         data: {
           sleep: [{
             dateOfSleep: yesterdayLocal,
@@ -660,10 +679,12 @@ router.get('/fitbit/sleep', verifyTokenOrRefresh, async (req, res) => {
     const totalMinutesAsleep = yesterdaySleep?.minutesAsleep ?? 0;
     const totalTimeInBed = yesterdaySleep?.timeInBed ?? 0;
     const sleepEfficiency = yesterdaySleep?.efficiency ?? 0;
+    const liveSleepScore = getSleepScore(totalMinutesAsleep / 60);
 
     res.json({
       message: 'Sleep data fetched',
       bedDate: yesterdayLocal,
+      score: liveSleepScore,
       data: {
         sleep: yesterdaySleep ? [yesterdaySleep] : [],
         summary: {

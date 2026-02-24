@@ -202,17 +202,21 @@ const CardioVascularScreen: React.FC = () => {
   const [dietScore, setDietScore] = useState<number | null>(null);
   const [dietMepaScore, setDietMepaScore] = useState<number | null>(null);
   const [smokingScore, setSmokingScore] = useState<number | null>(null);
+  const [activityScore, setActivityScore] = useState<number | null>(null);
+  const [activitySteps, setActivitySteps] = useState<number | null>(null);
+  const [sleepScore, setSleepScore] = useState<number | null>(null);
+  const [sleepDisplayHours, setSleepDisplayHours] = useState<number | null>(null);
   const [heartScore, setHeartScore] = useState<number | null>(null);
   
   // Calculate heart score as average of all LE8 scores
   const calculateHeartScore = useCallback(() => {
     const scores: number[] = [];
     
-    // Physical Activity (placeholder - will be fetched from API later)
-    // Sleep (placeholder - will be fetched from API later)
-    // Blood Pressure (placeholder - will be fetched from API later)
-    
+    // Blood Pressure (placeholder - will be added when implemented)
+
     // Add scores that we have
+    if (activityScore !== null) scores.push(activityScore);
+    if (sleepScore !== null) scores.push(sleepScore);
     if (bloodSugarScore !== null) scores.push(bloodSugarScore);
     if (bloodLipidScore !== null) scores.push(bloodLipidScore);
     if (bmiScore !== null) scores.push(bmiScore);
@@ -225,7 +229,7 @@ const CardioVascularScreen: React.FC = () => {
     } else {
       setHeartScore(null);
     }
-  }, [bloodSugarScore, bloodLipidScore, bmiScore, dietScore, smokingScore]);
+  }, [activityScore, sleepScore, bloodSugarScore, bloodLipidScore, bmiScore, dietScore, smokingScore]);
   
   // Recalculate heart score whenever any score changes
   useEffect(() => {
@@ -339,6 +343,12 @@ const CardioVascularScreen: React.FC = () => {
           score: data.smoking?.score ?? null,
           category: data.smoking?.category ?? null,
         });
+        // Physical Activity — from fitbit_daily_data (no persistent cache needed; Fitbit hooks handle it)
+        setActivityScore(data.physicalActivity?.score ?? null);
+        setActivitySteps(data.physicalActivity?.steps ?? null);
+        // Sleep — from fitbit_sleep_data
+        setSleepScore(data.sleep?.score ?? null);
+        setSleepDisplayHours(data.sleep?.hours ?? null);
         // Heart score will be recalculated by useEffect
       } else {
         const errorText = await response.text();
@@ -361,6 +371,10 @@ const CardioVascularScreen: React.FC = () => {
           setDietMepaScore(null);
         }
         setSmokingScore(null);
+        setActivityScore(null);
+        setActivitySteps(null);
+        setSleepScore(null);
+        setSleepDisplayHours(null);
       }
     } catch (error) {
       console.error('Error fetching health scores:', error);
@@ -381,6 +395,10 @@ const CardioVascularScreen: React.FC = () => {
         setDietMepaScore(null);
       }
       setSmokingScore(null);
+      setActivityScore(null);
+      setActivitySteps(null);
+      setSleepScore(null);
+      setSleepDisplayHours(null);
     }
   }, [accessToken]);
 
@@ -462,21 +480,23 @@ const CardioVascularScreen: React.FC = () => {
 
         {/* All Metrics in List */}
         <View style={styles.metricsList}>
-          <MetricItem 
-            title="Physical Activity" 
-            score={null}
-            unit="min"
+          <MetricItem
+            title="Physical Activity"
+            score={activitySteps}
+            unit="steps"
+            badge={activityScore !== null ? String(activityScore) : undefined}
+            status={getStatusFromScore(activityScore)}
             showNotCalculated={true}
             isFirstInSection={true}
-            onPress={handleBloodSugarPress}
           />
-          
-          <MetricItem 
-            title="Sleep" 
-            score={null}
+
+          <MetricItem
+            title="Sleep"
+            score={sleepDisplayHours !== null ? Math.round(sleepDisplayHours * 10) / 10 : null}
             unit="hrs"
+            badge={sleepScore !== null ? String(sleepScore) : undefined}
+            status={getStatusFromScore(sleepScore)}
             showNotCalculated={true}
-            onPress={handleBloodSugarPress}
           />
           
           <MetricItem 
