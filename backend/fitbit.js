@@ -798,5 +798,121 @@ return res.json({
   }
 });
 
+// Route 7: Historical activity data (steps) from fitbit_daily_data (rolling windows)
+router.get('/fitbit/history/activity', verifyTokenOrRefresh, async (req, res) => {
+  try {
+    const tz = getTimezoneFromRequest(req);
+    const today = getTodayInTimezone(tz);
+
+    const rangeParam = (req.query.range || 'weekly').toString().toLowerCase();
+    let daysBack;
+    if (rangeParam === 'yearly') {
+      daysBack = 365;
+    } else if (rangeParam === 'monthly') {
+      daysBack = 30;
+    } else {
+      // default weekly
+      daysBack = 7;
+    }
+
+    // inclusive window: today and previous (daysBack - 1) days
+    const startDate = subtractDaysLocal(today, daysBack - 1);
+    const endDate = today;
+
+    const [rows] = await db.execute(
+      `SELECT date, steps
+       FROM fitbit_daily_data
+       WHERE user_id = ? AND date BETWEEN ? AND ?
+       ORDER BY date ASC`,
+      [req.user.userId, startDate, endDate]
+    );
+
+    const points = rows.map((r) => ({
+      date: getLocalDateString(new Date(r.date)),
+      steps: r.steps != null ? Number(r.steps) : null,
+    }));
+
+    return res.json({
+      message: 'Activity history fetched',
+      range: rangeParam,
+      startDate,
+      endDate,
+      points,
+    });
+  } catch (error) {
+    console.error('Activity history fetch error:', error.response?.data || error.message);
+
+    if (error.message === 'Fitbit not connected') {
+      return res.status(400).json({ message: error.message });
+    }
+
+    if (error.response?.status === 401) {
+      res.status(401).json({ message: 'Token invalid - reconnect or refresh' });
+    } else if (error.response?.status === 403) {
+      res.status(403).json({ message: 'Insufficient scopes - re-authorize with more permissions' });
+    } else {
+      res.status(500).json({ message: 'Server Error' });
+    }
+  }
+});
+
+// Route 8: Historical sleep data from fitbit_sleep_data (rolling windows)
+router.get('/fitbit/history/sleep', verifyTokenOrRefresh, async (req, res) => {
+  try {
+    const tz = getTimezoneFromRequest(req);
+    const today = getTodayInTimezone(tz);
+
+    const rangeParam = (req.query.range || 'weekly').toString().toLowerCase();
+    let daysBack;
+    if (rangeParam === 'yearly') {
+      daysBack = 365;
+    } else if (rangeParam === 'monthly') {
+      daysBack = 30;
+    } else {
+      // default weekly
+      daysBack = 7;
+    }
+
+    const startDate = subtractDaysLocal(today, daysBack - 1);
+    const endDate = today;
+
+    const [rows] = await db.execute(
+      `SELECT date, total_minutes_asleep, sleep_efficiency
+       FROM fitbit_sleep_data
+       WHERE user_id = ? AND date BETWEEN ? AND ?
+       ORDER BY date ASC`,
+      [req.user.userId, startDate, endDate]
+    );
+
+    const points = rows.map((r) => ({
+      date: getLocalDateString(new Date(r.date)),
+      minutesAsleep: r.total_minutes_asleep != null ? Number(r.total_minutes_asleep) : null,
+      efficiency: r.sleep_efficiency != null ? Number(r.sleep_efficiency) : null,
+    }));
+
+    return res.json({
+      message: 'Sleep history fetched',
+      range: rangeParam,
+      startDate,
+      endDate,
+      points,
+    });
+  } catch (error) {
+    console.error('Sleep history fetch error:', error.response?.data || error.message);
+
+    if (error.message === 'Fitbit not connected') {
+      return res.status(400).json({ message: error.message });
+    }
+
+    if (error.response?.status === 401) {
+      res.status(401).json({ message: 'Token invalid - reconnect or refresh' });
+    } else if (error.response?.status === 403) {
+      res.status(403).json({ message: 'Insufficient scopes - re-authorize with more permissions' });
+    } else {
+      res.status(500).json({ message: 'Server Error' });
+    }
+  }
+});
+
 module.exports = router;
 
