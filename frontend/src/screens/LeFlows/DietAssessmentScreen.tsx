@@ -19,13 +19,6 @@ type Question = {
 
 const questions: Question[] = [
   {
-    id: 1,
-    category: 'SWEETS',
-    title: 'Sweets & Pastries',
-    description: 'How many servings of sweets, candy bars, pastries, cookies, or cakes do you eat?',
-    emoji: '🍰',
-  },
-  {
     id: 2,
     category: 'VEGETABLES',
     title: 'Vegetables',
@@ -38,6 +31,20 @@ const questions: Question[] = [
     title: 'Fruit',
     description: 'How many servings of fruit do you eat? (Not including juice)',
     emoji: '🍎',
+  },
+  {
+    id: 7,
+    category: 'WHOLE GRAINS',
+    title: 'Whole Grains',
+    description: 'How many servings of white bread, white rice, or other refined grains do you eat?',
+    emoji: '🍞',
+  },
+  {
+    id: 1,
+    category: 'SWEETS',
+    title: 'Sweets & Pastries',
+    description: 'How many servings of sweets, candy bars, pastries, cookies, or cakes do you eat?',
+    emoji: '🍰',
   },
   {
     id: 4,
@@ -59,13 +66,6 @@ const questions: Question[] = [
     title: 'Butter or Cream',
     description: 'How many servings of butter, stick margarine, or cream do you eat?',
     emoji: '🧈',
-  },
-  {
-    id: 7,
-    category: 'WHOLE GRAINS',
-    title: 'Whole Grains',
-    description: 'How many servings of white bread, white rice, or other refined grains do you eat?',
-    emoji: '🍞',
   },
   {
     id: 8,
@@ -468,7 +468,7 @@ const DietAssessmentScreen: React.FC = () => {
             How important is improving your diet to you?
           </Text>
           <Text style={styles.sliderValue}>{importanceVal}</Text>
-          <CustomSlider value={importanceVal} onValueChange={setImportanceVal} />
+          <CustomSlider key="importance" value={importanceVal} onValueChange={setImportanceVal} />
         </ScrollView>
 
         <View style={styles.footer}>
@@ -497,7 +497,7 @@ const DietAssessmentScreen: React.FC = () => {
             How confident are you that you can improve your diet?
           </Text>
           <Text style={styles.sliderValue}>{confidenceVal}</Text>
-          <CustomSlider value={confidenceVal} onValueChange={setConfidenceVal} />
+          <CustomSlider key="confidence" value={confidenceVal} onValueChange={setConfidenceVal} />
         </ScrollView>
 
         <View style={styles.footer}>
