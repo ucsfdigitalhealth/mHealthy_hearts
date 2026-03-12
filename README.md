@@ -129,120 +129,132 @@ CREATE TABLE user_auth_testing (
 );
 ```
 
-Create the `fitbit_daily_data` table:
+Create the `fitbit_daily_data` table (activity only):
 ```sql
-CREATE TABLE fitbit_daily_data (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
+CREATE TABLE IF NOT EXISTS fitbit_daily_data (
+  data_id CHAR(36) NOT NULL PRIMARY KEY,
+  user_id VARCHAR(36) NOT NULL,
   date DATE NOT NULL,
-
-  -- Activity
-  steps INT,
-  active_minutes INT,
-  calories_burned INT,
-
-  -- Sleep
-  sleep_duration INT,
-  sleep_efficiency INT,
-  sleep_score INT,
-
-  -- Timestamp that this data was retrieved
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  steps INT NOT NULL DEFAULT 0,
+  minutes_lightly_active INT NOT NULL DEFAULT 0,
+  minutes_fairly_active INT NOT NULL DEFAULT 0,
+  minutes_very_active INT NOT NULL DEFAULT 0,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
+  INDEX idx_user_id (user_id),
+  INDEX idx_date (date),
+  INDEX idx_user_date (user_id, date)
 );
 ```
 
-Create the `user_goals` table:
+Create the `fitbit_sleep_data` table (sleep keyed by bed date):
 ```sql
-CREATE TABLE user_goals (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-
-  -- These goals should be according to goals set by user in GoalSetting or the like
-  step_goal INT,
-  sleep_goal INT,
-
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE IF NOT EXISTS fitbit_sleep_data (
+  data_id CHAR(36) NOT NULL PRIMARY KEY,
+  user_id VARCHAR(36) NOT NULL,
+  date DATE NOT NULL COMMENT 'Bed date (local): calendar date when user went to bed',
+  total_minutes_asleep INT NOT NULL DEFAULT 0,
+  total_time_in_bed INT NOT NULL DEFAULT 0,
+  sleep_efficiency DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
+  UNIQUE KEY uk_user_date (user_id, date),
+  INDEX idx_user_id (user_id),
+  INDEX idx_date (date)
 );
 ```
 
-Create the `blood_lipids_assessments` table:
+Create the `blood_lipids_assessments` table (v2):
 ```sql
 CREATE TABLE blood_lipids_assessments (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id VARCHAR(36) NULL,
-  measure_type VARCHAR(64) NOT NULL,
-  value DECIMAL(10,2) NULL,
+  data_id CHAR(36) NOT NULL PRIMARY KEY,
+  user_id VARCHAR(36) NOT NULL,
+  measure_type VARCHAR(50) NOT NULL,
+  value DECIMAL(8,2),
+  medication TINYINT(1),
+  commitment_to_change TINYINT(1),
+  importance INT,
+  confidence INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE
 );
 ```
 
-Create the `blood_sugar_assessments` table:
+Create the `blood_sugar_assessments` table (v2):
 ```sql
 CREATE TABLE blood_sugar_assessments (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  data_id CHAR(36) NOT NULL PRIMARY KEY,
   user_id VARCHAR(36) NULL,
-  test_type VARCHAR(64) NOT NULL,
+  test_type VARCHAR(64) NULL,
   value DECIMAL(10,2) NULL,
+  has_diabetes TINYINT(1) NULL,
+  commitment_to_change TINYINT(1) NULL,
+  importance INT NULL,
+  confidence INT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
-  INDEX idx_user_id (user_id),
-  INDEX idx_created_at (created_at)
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE
 );
 ```
 
-Create the `bmi_assessments` table:
+Create the `bmi_assessments` table (v2):
 ```sql
 CREATE TABLE bmi_assessments (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  data_id CHAR(36) NOT NULL PRIMARY KEY,
   user_id VARCHAR(36) NULL,
-  bmi_value DECIMAL(5,2) NOT NULL,
-  weight DECIMAL(6,2) NULL,
-  height DECIMAL(5,2) NULL,
+  bmi_value DECIMAL(5,2) NULL,
+  weight DECIMAL(7,2) NULL,
+  height DECIMAL(7,2) NULL,
+  previous_bmi DECIMAL(5,2) NULL,
+  commitment_to_change TINYINT(1) NULL,
+  importance INT NULL,
+  confidence INT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
-  INDEX idx_user_id (user_id),
-  INDEX idx_created_at (created_at)
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE
 );
 ```
 
-Create the `diet_assessments` table:
+Create the `diet_assessments` table (v2):
 ```sql
 CREATE TABLE diet_assessments (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  data_id CHAR(36) NOT NULL PRIMARY KEY,
   user_id VARCHAR(36) NULL,
-  vegetables_per_day DECIMAL(4,2) NULL,
-  fruit_per_day DECIMAL(4,2) NULL,
-  red_meat_per_week DECIMAL(4,2) NULL,
-  fish_per_week DECIMAL(4,2) NULL,
-  butter_per_week DECIMAL(4,2) NULL,
-  beans_per_week DECIMAL(4,2) NULL,
-  whole_grains_per_day DECIMAL(4,2) NULL,
-  sweets_per_week DECIMAL(4,2) NULL,
-  fast_food_per_week DECIMAL(4,2) NULL,
-  sugary_drinks_per_week DECIMAL(4,2) NULL,
+  vegetables_per_day DECIMAL(5,2) NULL,
+  fruit_per_day DECIMAL(5,2) NULL,
+  red_meat_per_week DECIMAL(5,2) NULL,
+  fish_per_week DECIMAL(5,2) NULL,
+  butter_per_week DECIMAL(5,2) NULL,
+  beans_per_week DECIMAL(5,2) NULL,
+  whole_grains_per_day DECIMAL(5,2) NULL,
+  sweets_per_week DECIMAL(5,2) NULL,
+  fast_food_per_week DECIMAL(5,2) NULL,
+  sugary_drinks_per_week DECIMAL(5,2) NULL,
+  commitment_to_change TINYINT(1) NULL,
+  importance INT NULL,
+  confidence INT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
-  INDEX idx_user_id (user_id),
-  INDEX idx_created_at (created_at)
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE
 );
 ```
 
-Create the `smoking_assessments` table:
+Create the `smoking_assessments` table (v2):
 ```sql
 CREATE TABLE smoking_assessments (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  data_id CHAR(36) NOT NULL PRIMARY KEY,
   user_id VARCHAR(36) NULL,
-  category VARCHAR(20) NOT NULL,
+  category VARCHAR(20) NULL,
   frequency VARCHAR(20) NULL,
   time_quit VARCHAR(20) NULL,
   interest_in_quitting VARCHAR(20) NULL,
-  score INT NOT NULL,
+  score INT NULL,
+  commitment_to_change TINYINT(1) NULL,
+  importance INT NULL,
+  confidence INT NULL,
+  former_smoker INT NULL,
+  second_hand_exposure TINYINT(1) NULL,
+  type_smoker VARCHAR(255) NULL,
+  interest_cutting VARCHAR(255) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE,
-  INDEX idx_user_id (user_id),
-  INDEX idx_created_at (created_at),
-  INDEX idx_category (category)
+  FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE
 );
 ```
 
@@ -250,7 +262,7 @@ Create the `daily_goals` table:
 ```sql
 CREATE TABLE IF NOT EXISTS daily_goals (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
+  user_id VARCHAR(36) NOT NULL,
   goal_date DATE NOT NULL,
   step_target INT NOT NULL,
   symptom_rating INT NULL,
@@ -267,12 +279,23 @@ CREATE TABLE IF NOT EXISTS daily_goals (
 Create the `activity_streaks` table:
 ```sql
 CREATE TABLE IF NOT EXISTS activity_streaks (
-  user_id INT NOT NULL PRIMARY KEY,
+  user_id VARCHAR(36) NOT NULL PRIMARY KEY,
   current_streak INT NOT NULL DEFAULT 0,
   longest_streak INT NOT NULL DEFAULT 0,
   last_goal_met_date DATE NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE
+);
+```
+
+Legacy (not currently used in the app):
+```sql
+CREATE TABLE IF NOT EXISTS user_goals (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  step_goal INT,
+  sleep_goal INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
