@@ -93,6 +93,15 @@ router.post("/", verifyToken, async (req, res) => {
 
     const score = getBMIScore(numericBmi);
 
+    // Write daily score to daily_scores table
+    const scoreDate = new Date().toISOString().slice(0, 10);
+    if (userId && score !== null) {
+      await db.execute(
+        'INSERT INTO daily_scores (user_id, score_type, score_value, score_date) VALUES (?, ?, ?, ?)',
+        [userId, 'bmi', score, scoreDate]
+      );
+    }
+
     return res.status(201).json({
       success: true,
       message: "BMI assessment saved successfully",

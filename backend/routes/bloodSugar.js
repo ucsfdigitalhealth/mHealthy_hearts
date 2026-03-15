@@ -67,6 +67,15 @@ router.post("/", verifyToken, async (req, res) => {
 
     const score = getBloodGlucoseScore({ testType, value: numericValue });
 
+    // Write daily score to daily_scores table
+    const scoreDate = new Date().toISOString().slice(0, 10);
+    if (userId && score !== null) {
+      await db.execute(
+        'INSERT INTO daily_scores (user_id, score_type, score_value, score_date) VALUES (?, ?, ?, ?)',
+        [userId, 'blood_sugar', score, scoreDate]
+      );
+    }
+
     return res.status(201).json({
       success: true,
       message: "Blood sugar assessment saved successfully",

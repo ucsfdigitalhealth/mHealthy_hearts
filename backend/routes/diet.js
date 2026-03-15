@@ -67,6 +67,14 @@ router.post("/", verifyToken, async (req, res) => {
     );
 
     const scoreResult = getDietScore(dietData);
+    // Write daily score to daily_scores table
+    const scoreDate = new Date().toISOString().slice(0, 10);
+    if (userId && scoreResult?.displayScore != null) {
+      await db.execute(
+        'INSERT INTO daily_scores (user_id, score_type, score_value, score_date) VALUES (?, ?, ?, ?)',
+        [userId, 'diet', scoreResult.displayScore, scoreDate]
+      );
+    }
     return res.status(201).json({
       success: true,
       message: "Diet assessment saved successfully",

@@ -131,6 +131,26 @@ router.get("/", verifyToken, async (req, res) => {
       sleepScore = getSleepScore(sleepHours);
     }
 
+    // Calculate composite score (average of available scores)
+    const scoreValues = [
+      bloodLipidScore,
+      bloodSugarScore,
+      bmiScore,
+      dietScore,
+      smokingScore,
+      physicalActivityScore,
+      sleepScore
+    ].filter(v => typeof v === 'number' && !isNaN(v));
+    let compositeScore = null;
+    if (scoreValues.length > 0) {
+      compositeScore = scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length;
+      // Write composite score to composite_scores table
+      const scoreDate = new Date().toISOString().slice(0, 10);
+      await db.execute(
+        'INSERT INTO composite_scores (user_id, composite_score, score_date) VALUES (?, ?, ?)',
+        [userId, compositeScore, scoreDate]
+      );
+    }
     return res.status(200).json({
       bloodLipids: {
         score: bloodLipidScore,
@@ -161,6 +181,7 @@ router.get("/", verifyToken, async (req, res) => {
         score: sleepScore,
         hours: sleepHours,
       },
+      compositeScore,
     });
   } catch (error) {
     console.error("[GET /api/health-scores] Error:", error);
