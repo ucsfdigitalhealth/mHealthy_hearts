@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute, RouteProp } from '@react-navigation/native';
+import { useRoute, RouteProp, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import type { RootStackParamList } from '../../App';
 import TodayScreen from './TodayScreen';
 import CardioVascularScreen from './LeFlows/CardioVascularScreen';
 import ActivityScreen from './ActivityScreen';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useAuth } from '../context/AuthContext';
+import { getDeviceTimezone } from '../utils/localDate';
 
 type TabType = 'today' | 'activity' | 'health';
 type HomeTabsRouteProp = RouteProp<RootStackParamList, 'HomeTabs'>;
@@ -14,6 +17,8 @@ type HomeTabsRouteProp = RouteProp<RootStackParamList, 'HomeTabs'>;
 const HomeTabsScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('today');
   const route = useRoute<HomeTabsRouteProp>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { accessToken } = useAuth();
 
   // Show alert based on Fitbit connection result
   useEffect(() => {
@@ -32,6 +37,36 @@ const HomeTabsScreen: React.FC = () => {
       );
     }
   }, [route.params?.fitbitConnectionResult]);
+
+  // Require daily goal: on first load/focus, if no goal for today, open goal flow.
+  useFocusEffect(
+    useCallback(() => {
+      const checkGoal = async () => {
+        if (!accessToken) return;
+        try {
+          const tz = getDeviceTimezone();
+          const url = tz
+            ? `http://localhost:3000/api/activity/goal-today?timezone=${encodeURIComponent(tz)}`
+            : 'http://localhost:3000/api/activity/goal-today';
+          const res = await fetch(url, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              ...(tz ? { 'X-Timezone': tz } : {}),
+            },
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!data.goal) {
+            navigation.navigate('GoalStep1');
+          }
+        } catch (e) {
+          console.error('[HomeTabs] Error checking daily goal:', e);
+        }
+      };
+
+      checkGoal();
+    }, [accessToken, navigation])
+  );
 
   const renderContent = () => {
     switch (activeTab) {

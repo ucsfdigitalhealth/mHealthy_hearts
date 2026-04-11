@@ -336,7 +336,7 @@ export const LoginScreen: React.FC = () => {
             </TouchableOpacity>
 
             {/* Debug component - remove this after fixing the issue */}
-            <ApiTester />
+            {/* <ApiTester /> */}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

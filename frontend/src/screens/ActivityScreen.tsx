@@ -63,8 +63,12 @@ const ActivityScreen: React.FC = () => {
     }, [fetchGoalAndStreak])
   );
 
+  // Temporary: allow testing without Fitbit connected
+  const effectiveStepsNumber = steps === '—' ? 5000 : stepsNumber;
+  const effectiveStepsText = steps === '—' ? '5,000' : steps;
+
   const goalSteps = todayGoal?.stepTarget ?? 6000;
-  const progressPct = goalSteps > 0 ? Math.min(100, (stepsNumber / goalSteps) * 100) : 0;
+  const progressPct = goalSteps > 0 ? Math.min(100, (effectiveStepsNumber / goalSteps) * 100) : 0;
   const progressColor = progressPct < 33 ? '#DC2626' : progressPct < 66 ? '#F59E0B' : '#34C759';
 
   return (
@@ -126,7 +130,7 @@ const ActivityScreen: React.FC = () => {
             ]}
           />
           <View style={styles.progressCircleCenter}>
-            <Text style={styles.progressNumber}>{steps}</Text>
+            <Text style={styles.progressNumber}>{effectiveStepsText}</Text>
             <Text style={styles.progressGoal}>of {goalSteps.toLocaleString()} steps</Text>
           </View>
         </View>

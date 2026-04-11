@@ -35,6 +35,156 @@ function subtractDays(dateStr, n) {
   return d.toISOString().slice(0, 10);
 }
 
+const FLOOR_STEPS = 3000;
+
+function clampFloor(s) {
+  return Math.max(FLOOR_STEPS, Math.round(s));
+}
+
+function pct(s, p) {
+  return clampFloor(s * (1 + p / 100));
+}
+
+/**
+ * Fit2ThriveMB daily step goal logic (Table 3).
+ * Returns 3-4 options (ascending). symptomRating 1-5 (1=most able, 5=least able).
+ * refSteps: reference steps (yesterday or last available >2000).
+ * yesterdaySteps: actual yesterday steps.
+ * yesterdayGoalMet: boolean.
+ */
+function computeGoalOptions(symptomRating, yesterdaySteps, yesterdayGoalMet, yesterdayGoalTarget, refSteps) {
+  const sym = Math.min(5, Math.max(1, Math.round(symptomRating)));
+  const steps = yesterdaySteps ?? 0;
+  const ref = refSteps ?? 5000;
+  const met = !!yesterdayGoalMet;
+  const target = yesterdayGoalTarget || ref;
+
+  let option1; let option2; let option3; let option4;
+
+  // No data or <2000 (not worn)
+  if (steps < 2001) {
+    if (sym === 1 || sym === 2) {
+      option1 = ref; option2 = pct(ref, 10); option3 = pct(ref, 20); option4 = null;
+    } else if (sym === 3) {
+      option1 = pct(ref, -10); option2 = ref; option3 = pct(ref, 10); option4 = null;
+    } else {
+      option1 = pct(ref, -20); option2 = pct(ref, -10); option3 = ref; option4 = null;
+    }
+  }
+  // 2000-3750 steps
+  else if (steps <= 3750) {
+    if (met) {
+      if (sym === 1 || sym === 2) {
+        option1 = 3750; option2 = 4125; option3 = 4500; option4 = null;
+      } else if (sym === 3) {
+        option1 = 3375; option2 = 3750; option3 = 4125; option4 = null;
+      } else {
+        option1 = 3000; option2 = 3375; option3 = 3750; option4 = null;
+      }
+    } else {
+      if (sym === 1 || sym === 2) {
+        option1 = 3375; option2 = 3750; option3 = 4125; option4 = null;
+      } else {
+        option1 = 3000; option2 = 3375; option3 = 3750; option4 = null;
+      }
+    }
+  }
+  // 3751-11999
+  else if (steps <= 11999) {
+    if (met) {
+      if (sym === 1 || sym === 2) {
+        option1 = steps; option2 = pct(steps, 10); option3 = pct(steps, 20); option4 = null;
+      } else if (sym === 3) {
+        option1 = pct(steps, -10); option2 = steps; option3 = pct(steps, 10); option4 = null;
+      } else {
+        option1 = pct(steps, -20); option2 = pct(steps, -10); option3 = steps; option4 = null;
+      }
+    } else {
+      if (sym === 1 || sym === 2) {
+        option1 = pct(steps, -10); option2 = steps; option3 = pct(steps, 10); option4 = null;
+      } else {
+        option1 = pct(steps, -20); option2 = pct(steps, -10); option3 = steps; option4 = null;
+      }
+    }
+  }
+  // >=12000
+  else {
+    const fifty = pct(steps, -50);
+    if (met) {
+      if (sym === 1 || sym === 2) {
+        option1 = steps; option2 = pct(steps, 10); option3 = pct(steps, 20); option4 = fifty;
+      } else if (sym === 3) {
+        option1 = pct(steps, -10); option2 = steps; option3 = pct(steps, 10); option4 = fifty;
+      } else {
+        option1 = pct(steps, -20); option2 = pct(steps, -10); option3 = steps; option4 = fifty;
+      }
+    } else {
+      if (sym === 1 || sym === 2) {
+        option1 = pct(steps, -10); option2 = steps; option3 = pct(steps, 10); option4 = fifty;
+      } else {
+        option1 = pct(steps, -20); option2 = pct(steps, -10); option3 = steps; option4 = fifty;
+      }
+    }
+  }
+
+  const arr = [option1, option2, option3, option4].filter((n) => n != null && n >= FLOOR_STEPS);
+  const unique = [...new Set(arr)].sort((a, b) => a - b);
+  return unique;
+}
+
+// GET /api/activity/goal-options?symptomRating=1..5
+// Returns today's goal options based on Fit2ThriveMB Table 3 (yesterday steps, goal met, symptom 1-5).
+router.get('/goal-options', verifyTokenOrRefresh, async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+    const tz = getTimezoneFromRequest(req);
+    const today = getTodayInTimezone(tz);
+    const yesterday = subtractDays(today, 1);
+    const symptomRating = req.query.symptomRating != null ? Number(req.query.symptomRating) : null;
+    if (symptomRating == null || symptomRating < 1 || symptomRating > 5) {
+      return res.status(400).json({ message: 'symptomRating must be 1-5' });
+    }
+
+    const [stepRows] = await db.execute(
+      'SELECT steps FROM fitbit_daily_data WHERE user_id = ? AND date = ? ORDER BY updated_at DESC LIMIT 1',
+      [userId, yesterday]
+    );
+    const yesterdaySteps = stepRows[0] ? Number(stepRows[0].steps || 0) : null;
+
+    const [goalRows] = await db.execute(
+      'SELECT step_target, goal_met FROM daily_goals WHERE user_id = ? AND goal_date = ?',
+      [userId, yesterday]
+    );
+    const yesterdayGoalTarget = goalRows[0] ? goalRows[0].step_target : null;
+    const yesterdayGoalMet = goalRows[0] != null && goalRows[0].goal_met === 1;
+
+    let refSteps = yesterdaySteps;
+    if ((yesterdaySteps == null || yesterdaySteps < 2001) && userId) {
+      const [lastRows] = await db.execute(
+        'SELECT steps FROM fitbit_daily_data WHERE user_id = ? AND steps > 2000 ORDER BY date DESC LIMIT 1',
+        [userId]
+      );
+      refSteps = lastRows[0] ? Number(lastRows[0].steps) : 5000;
+    } else if (yesterdaySteps != null && yesterdaySteps >= 2001) {
+      refSteps = yesterdaySteps;
+    }
+
+    const options = computeGoalOptions(
+      symptomRating,
+      yesterdaySteps,
+      yesterdayGoalMet,
+      yesterdayGoalTarget,
+      refSteps
+    );
+
+    return res.json({ options: options.map((steps) => ({ steps })) });
+  } catch (err) {
+    console.error('Error computing goal options:', err);
+    return res.status(500).json({ message: 'Server Error' });
+  }
+});
+
 // GET /api/activity/goal-today
 // Returns today's goal for the user (or null)
 router.get('/goal-today', verifyTokenOrRefresh, async (req, res) => {
@@ -71,6 +221,7 @@ router.get('/goal-today', verifyTokenOrRefresh, async (req, res) => {
 
 // POST /api/activity/goal
 // Set today's goal. Body: { stepTarget, symptomRating?, completedYesterday? }
+// stepTarget must be >= 3000 (Fit2ThriveMB floor).
 router.post('/goal', verifyTokenOrRefresh, async (req, res) => {
   try {
     const userId = req.user?.userId;
@@ -79,8 +230,9 @@ router.post('/goal', verifyTokenOrRefresh, async (req, res) => {
     const today = getTodayInTimezone(tz);
     const { stepTarget, symptomRating, completedYesterday } = req.body || {};
 
-    if (!stepTarget || ![5000, 5500, 6000].includes(Number(stepTarget))) {
-      return res.status(400).json({ message: 'stepTarget must be 5000, 5500, or 6000' });
+    const target = Number(stepTarget);
+    if (!Number.isFinite(target) || target < FLOOR_STEPS || target > 50000) {
+      return res.status(400).json({ message: 'stepTarget must be between 3000 and 50000' });
     }
 
     const symptom = symptomRating != null ? Number(symptomRating) : null;
@@ -94,13 +246,13 @@ router.post('/goal', verifyTokenOrRefresh, async (req, res) => {
          symptom_rating = VALUES(symptom_rating),
          completed_yesterday = VALUES(completed_yesterday),
          updated_at = CURRENT_TIMESTAMP`,
-      [userId, today, Number(stepTarget), symptom, completed]
+      [userId, today, target, symptom, completed]
     );
 
     return res.status(201).json({
       success: true,
       message: 'Goal set successfully',
-      goal: { goalDate: today, stepTarget: Number(stepTarget), symptomRating: symptom, completedYesterday: completed === 1 },
+      goal: { goalDate: today, stepTarget: target, symptomRating: symptom, completedYesterday: completed === 1 },
     });
   } catch (err) {
     console.error('Error setting goal:', err);

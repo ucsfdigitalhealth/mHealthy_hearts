@@ -13,7 +13,7 @@ const SymptomBurdenStepScreen: React.FC = () => {
   const params = route.params as GoalStep3Params | undefined;
   const completedYesterday = params?.completedYesterday ?? false;
 
-  const [rating, setRating] = useState<number>(5);
+  const [rating, setRating] = useState<number>(3);
 
   const handleNext = () => {
     navigation.navigate('GoalStep4', { completedYesterday, symptomRating: rating });
@@ -26,11 +26,14 @@ const SymptomBurdenStepScreen: React.FC = () => {
           <Ionicons name="chevron-back" size={24} color="#007AFF" />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Symptom Burden</Text>
-        <Text style={styles.question}>How able are you to do everyday activities today?</Text>
-        <Text style={styles.scaleLabel}>1 = Not at all · 10 = Fully able</Text>
+        <Text style={styles.title}>Symptom burden</Text>
+        <Text style={styles.question}>
+          To what extent are you able to carry out your everyday physical activities such as walking, climbing stairs,
+          carrying groceries, or moving a chair?
+        </Text>
+        <Text style={styles.scaleLabel}>1 = Not at all · 5 = Fully able</Text>
         <View style={styles.sliderRow}>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+          {[1, 2, 3, 4, 5].map((n) => (
             <TouchableOpacity
               key={n}
               style={[styles.sliderDot, rating === n && styles.sliderDotActive]}

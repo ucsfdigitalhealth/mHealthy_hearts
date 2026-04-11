@@ -12,13 +12,58 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { VictoryChart, VictoryLine, VictoryAxis, VictoryScatter, VictoryArea } from 'victory-native';
+import Svg, { Polyline, Circle, Rect } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_PADDING = 16;
 const CHART_WIDTH = SCREEN_WIDTH - 40 - CARD_PADDING * 2; // screen minus scroll padding minus card padding
+const CHART_LEFT_PAD = 52;
+const CHART_RIGHT_PAD = 12;
+const CHART_TOP_PAD = 12;
+const PLOT_W = CHART_WIDTH - CHART_LEFT_PAD - CHART_RIGHT_PAD;
+const PLOT_H = 142;
 const API_BASE = 'http://localhost:3000';
+
+type Scales = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  xPx: (x: number) => number;
+  yPx: (y: number) => number;
+};
+
+function computeScales(points: ChartPoint[], plotW: number, plotH: number, metric: MetricKey): Scales {
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  let minY = Math.min(...ys);
+  let maxY = Math.max(...ys);
+  if (metric === 'Sleep') {
+    minY = Math.min(minY, 6);
+    maxY = Math.max(maxY, 10);
+  } else if (metric === 'PA') {
+    minY = 0;
+    maxY = Math.max(maxY * 1.08, maxY + 1);
+  }
+  if (!Number.isFinite(minY) || !Number.isFinite(maxY)) {
+    minY = 0;
+    maxY = 1;
+  }
+  if (maxY <= minY) {
+    maxY = minY + 1;
+  }
+  const range = maxY - minY;
+  minY -= range * 0.08;
+  maxY += range * 0.08;
+  const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
+  const xPx = (x: number) => ((x - minX) / spanX) * plotW;
+  const yPx = (y: number) => plotH - ((y - minY) / spanY) * plotH;
+  return { minX, maxX, minY, maxY, xPx, yPx };
+}
 
 type MetricKey = 'Sleep' | 'Diet' | 'Nico' | 'BMI' | 'PA' | 'BP';
 
@@ -206,34 +251,21 @@ const CardioHistoricalDataScreen: React.FC = () => {
       .finally(() => setIsLoading(false));
   }, [selectedMetric, selectedTimeRange, accessToken, hasFitbitData]);
 
-  // Sleep healthy range band (7–9 hrs) spanning full x range
-  const sleepBand =
-    selectedMetric === 'Sleep' && chartData.length >= 2
-      ? [
-          { x: chartData[0].x,                      y: 9, y0: 7 },
-          { x: chartData[chartData.length - 1].x,   y: 9, y0: 7 },
-        ]
-      : [];
-
-  // Chart left/right padding must match the VictoryChart padding values below
-  const CHART_LEFT_PAD  = 52;
-  const CHART_RIGHT_PAD = 12;
-
-  // Maps a raw touch x-coordinate (within the chart card) to the nearest data point.
-  // Called on every finger move so the tooltip tracks the finger in real time.
-  const handleChartTouch = useCallback((e: { nativeEvent: { locationX: number } }) => {
-    if (chartData.length === 0) return;
-    const { locationX } = e.nativeEvent;
-    const plotWidth = CHART_WIDTH - CHART_LEFT_PAD - CHART_RIGHT_PAD;
-    const minX     = chartData[0].x;
-    const maxX     = chartData[chartData.length - 1].x;
-    const fraction = Math.max(0, Math.min(1, (locationX - CHART_LEFT_PAD) / plotWidth));
-    const dataX    = minX + fraction * (maxX - minX);
-    const nearest  = chartData.reduce((best, p) =>
-      Math.abs(p.x - dataX) < Math.abs(best.x - dataX) ? p : best,
-    );
-    setSelectedPoint(nearest);
-  }, [chartData]);
+  // Maps touch x (relative to plot overlay, 0..PLOT_W) to the nearest data point.
+  const handleChartTouch = useCallback(
+    (e: { nativeEvent: { locationX: number } }) => {
+      if (chartData.length === 0) return;
+      const { locationX } = e.nativeEvent;
+      const scales = computeScales(chartData, PLOT_W, PLOT_H, selectedMetric);
+      const fraction = Math.max(0, Math.min(1, locationX / PLOT_W));
+      const dataX = scales.minX + fraction * (scales.maxX - scales.minX);
+      const nearest = chartData.reduce((best, p) =>
+        Math.abs(p.x - dataX) < Math.abs(best.x - dataX) ? p : best,
+      );
+      setSelectedPoint(nearest);
+    },
+    [chartData, selectedMetric],
+  );
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -337,7 +369,6 @@ const CardioHistoricalDataScreen: React.FC = () => {
         {/* ── Live chart ── */}
         {!isLoading && !fetchError && hasFitbitData && chartData.length > 0 && (
           <View style={styles.chartCard}>
-
             {/* Tooltip row — visible only while a point is pressed */}
             <View style={styles.tooltipRow}>
               {selectedPoint && (
@@ -350,88 +381,98 @@ const CardioHistoricalDataScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Chart + transparent touch overlay in a relative container */}
-            <View style={{ position: 'relative' }}>
-              <VictoryChart
-                width={CHART_WIDTH}
-                height={190}
-                padding={{ top: 12, bottom: 36, left: CHART_LEFT_PAD, right: CHART_RIGHT_PAD }}
-              >
-                {/* X-axis — day names / Wk N / month abbrevs */}
-                <VictoryAxis
-                  tickValues={chartData.map((p) => p.x)}
-                  tickFormat={chartData.map((p) => p.xLabel)}
-                  style={{
-                    axis:       { stroke: '#E5E7EB' },
-                    ticks:      { stroke: '#E5E7EB', size: 4 },
-                    tickLabels: { fontSize: 10, fill: '#9CA3AF', padding: 6 },
-                    grid:       { stroke: 'transparent' },
-                  }}
+            <View style={[styles.chartRow, { width: CHART_WIDTH }]}>
+              <View style={styles.yAxisColumn}>
+                {(() => {
+                  const s = computeScales(chartData, PLOT_W, PLOT_H, selectedMetric);
+                  return [3, 2, 1, 0].map((i) => {
+                    const t = s.minY + ((s.maxY - s.minY) * i) / 3;
+                    const label =
+                      selectedMetric === 'Sleep'
+                        ? `${t.toFixed(1)}`
+                        : selectedMetric === 'PA'
+                          ? `${Math.round(t)}`
+                          : `${Math.round(t * 10) / 10}`;
+                    return (
+                      <Text key={i} style={styles.yAxisTick}>
+                        {label}
+                      </Text>
+                    );
+                  });
+                })()}
+              </View>
+
+              <View style={styles.plotWrap}>
+                <Svg width={PLOT_W} height={CHART_TOP_PAD + PLOT_H}>
+                  {(() => {
+                    const s = computeScales(chartData, PLOT_W, PLOT_H, selectedMetric);
+                    const y0 = CHART_TOP_PAD + s.yPx(7);
+                    const y1 = CHART_TOP_PAD + s.yPx(9);
+                    const bandTop = Math.min(y0, y1);
+                    const bandH = Math.abs(y1 - y0);
+                    const linePts = chartData
+                      .map((p) => `${s.xPx(p.x)},${CHART_TOP_PAD + s.yPx(p.y)}`)
+                      .join(' ');
+                    return (
+                      <>
+                        {selectedMetric === 'Sleep' && chartData.length >= 1 && (
+                          <Rect
+                            x={0}
+                            y={bandTop}
+                            width={PLOT_W}
+                            height={bandH}
+                            fill="rgba(167, 243, 208, 0.35)"
+                            stroke="rgba(34, 197, 94, 0.25)"
+                            strokeWidth={1}
+                          />
+                        )}
+                        <Polyline
+                          points={linePts}
+                          fill="none"
+                          stroke="#3B82F6"
+                          strokeWidth={2.5}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        {chartData.map((p) => {
+                          const cx = s.xPx(p.x);
+                          const cy = CHART_TOP_PAD + s.yPx(p.y);
+                          const sel = selectedPoint?.x === p.x;
+                          return (
+                            <Circle
+                              key={p.x}
+                              cx={cx}
+                              cy={cy}
+                              r={sel ? 7 : 5}
+                              fill={sel ? '#1D4ED8' : '#3B82F6'}
+                              stroke="#FFFFFF"
+                              strokeWidth={sel ? 3 : 2}
+                            />
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </Svg>
+
+                <View
+                  style={[styles.chartOverlay, { width: PLOT_W, height: CHART_TOP_PAD + PLOT_H }]}
+                  onStartShouldSetResponder={() => true}
+                  onResponderGrant={handleChartTouch}
+                  onResponderMove={handleChartTouch}
+                  onResponderRelease={() => setSelectedPoint(null)}
+                  onResponderTerminate={() => setSelectedPoint(null)}
                 />
-                {/* Y-axis */}
-                <VictoryAxis
-                  dependentAxis
-                  style={{
-                    axis:       { stroke: 'transparent' },
-                    ticks:      { stroke: 'transparent' },
-                    tickLabels: { fontSize: 10, fill: '#9CA3AF', padding: 8 },
-                    grid:       { stroke: '#F3F4F6', strokeDasharray: '4,4' },
-                  }}
-                />
 
-                {/* Healthy range band (Sleep only) */}
-                {selectedMetric === 'Sleep' && sleepBand.length === 2 && (
-                  <VictoryArea
-                    data={sleepBand}
-                    style={{
-                      data: {
-                        fill: 'rgba(167, 243, 208, 0.35)',
-                        stroke: 'rgba(34, 197, 94, 0.3)',
-                        strokeWidth: 1,
-                      },
-                    }}
-                  />
-                )}
-
-                {/* Line */}
-                <VictoryLine
-                  data={chartData}
-                  interpolation="monotoneX"
-                  style={{ data: { stroke: '#3B82F6', strokeWidth: 2.5 } }}
-                />
-
-                {/* Dots — unselected */}
-                <VictoryScatter
-                  data={chartData.filter((p) => p.x !== selectedPoint?.x)}
-                  size={5}
-                  style={{ data: { fill: '#3B82F6', stroke: '#FFFFFF', strokeWidth: 2 } }}
-                />
-
-                {/* Dot — selected / highlighted */}
-                {selectedPoint && (
-                  <VictoryScatter
-                    data={[selectedPoint]}
-                    size={7}
-                    style={{ data: { fill: '#1D4ED8', stroke: '#DBEAFE', strokeWidth: 3 } }}
-                  />
-                )}
-              </VictoryChart>
-
-              {/*
-                Transparent overlay that sits on top of the chart.
-                Claiming the responder here (onStartShouldSetResponder) means
-                all finger events come here — no victory internals are involved.
-                onResponderGrant / onResponderMove  → find nearest point → show tooltip
-                onResponderRelease / onResponderTerminate → hide tooltip
-              */}
-              <View
-                style={styles.chartOverlay}
-                onStartShouldSetResponder={() => true}
-                onResponderGrant={handleChartTouch}
-                onResponderMove={handleChartTouch}
-                onResponderRelease={() => setSelectedPoint(null)}
-                onResponderTerminate={() => setSelectedPoint(null)}
-              />
+                <View style={styles.xAxisRow}>
+                  {chartData.map((p) => (
+                    <Text key={`${p.x}-${p.xLabel}`} style={styles.xAxisTick} numberOfLines={1}>
+                      {p.xLabel}
+                    </Text>
+                  ))}
+                </View>
+              </View>
+              <View style={{ width: CHART_RIGHT_PAD }} />
             </View>
 
             {/* Legend row */}
@@ -618,13 +659,44 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
-  // Transparent overlay covering the chart for touch tracking
+  chartRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  yAxisColumn: {
+    width: CHART_LEFT_PAD,
+    height: CHART_TOP_PAD + PLOT_H,
+    justifyContent: 'space-between',
+    paddingTop: CHART_TOP_PAD + 2,
+    paddingBottom: 2,
+    paddingRight: 4,
+  },
+  yAxisTick: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    textAlign: 'right',
+  },
+  plotWrap: {
+    width: PLOT_W,
+    position: 'relative',
+  },
+  xAxisRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    width: PLOT_W,
+  },
+  xAxisTick: {
+    flex: 1,
+    fontSize: 10,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  // Transparent overlay covering the plot for touch tracking
   chartOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
-    right: 0,
-    bottom: 0,
   },
 
   // Tooltip row (fixed height so chart doesn't jump)

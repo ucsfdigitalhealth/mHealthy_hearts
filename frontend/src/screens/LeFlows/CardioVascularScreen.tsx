@@ -19,6 +19,7 @@ import { getCachedBmi, setCachedBmi } from '../../utils/bmiCache';
 import { getCachedDiet, setCachedDiet } from '../../utils/dietCache';
 import { getCachedBloodLipids, setCachedBloodLipids } from '../../utils/bloodLipidsCache';
 import { getCachedSmoking, setCachedSmoking } from '../../utils/smokingCache';
+import type { Le8MetricId } from './le8MetricTypes';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -236,24 +237,8 @@ const CardioVascularScreen: React.FC = () => {
     calculateHeartScore();
   }, [calculateHeartScore]);
 
-  const handleBloodSugarPress = () => {
-    navigation.navigate('BloodSugar');
-  };
-
-  const handleBloodLipidsPress = () => {
-    navigation.navigate('BloodLipids');
-  };
-
-  const handleBmiPress = () => {
-    navigation.navigate('Bmi');
-  };
-
-  const handleDietPress = () => {
-    navigation.navigate('Diet');
-  };
-
-  const handleSmokingPress = () => {
-    navigation.navigate('Smoking');
+  const openLe8Detail = (metric: Le8MetricId) => () => {
+    navigation.navigate('Le8MetricDetail', { metric });
   };
 
   const handleViewHistoricalDataPress = () => {
@@ -488,6 +473,7 @@ const CardioVascularScreen: React.FC = () => {
             status={getStatusFromScore(activityScore)}
             showNotCalculated={true}
             isFirstInSection={true}
+            onPress={openLe8Detail('physicalActivity')}
           />
 
           <MetricItem
@@ -497,6 +483,7 @@ const CardioVascularScreen: React.FC = () => {
             badge={sleepScore !== null ? String(sleepScore) : undefined}
             status={getStatusFromScore(sleepScore)}
             showNotCalculated={true}
+            onPress={openLe8Detail('sleep')}
           />
           
           <MetricItem 
@@ -504,7 +491,7 @@ const CardioVascularScreen: React.FC = () => {
             score={null}
             unit="mmHg"
             showNotCalculated={true}
-            onPress={handleBloodSugarPress}
+            onPress={openLe8Detail('bloodPressure')}
           />
           
           <MetricItem
@@ -514,7 +501,7 @@ const CardioVascularScreen: React.FC = () => {
             badge={bloodSugarScore !== null ? String(bloodSugarScore) : undefined}
             status={getBloodSugarRangeLabel(bloodSugarScore)}
             showNotCalculated={bloodSugarScore === null}
-            onPress={handleBloodSugarPress}
+            onPress={openLe8Detail('bloodSugar')}
           />
           
           <MetricItem 
@@ -524,7 +511,7 @@ const CardioVascularScreen: React.FC = () => {
             badge={bloodLipidScore !== null ? String(bloodLipidScore) : undefined}
             status={getBloodLipidRangeLabel(bloodLipidScore)}
             showNotCalculated={bloodLipidScore === null}
-            onPress={handleBloodLipidsPress}
+            onPress={openLe8Detail('bloodLipids')}
           />
           
           <MetricItem
@@ -533,7 +520,7 @@ const CardioVascularScreen: React.FC = () => {
             unit="BMI"
             badge={bmiScore !== null ? String(bmiScore) : undefined}
             showNotCalculated={bmiScore === null}
-            onPress={handleBmiPress}
+            onPress={openLe8Detail('bmi')}
             status={getBMIRangeLabel(bmiValue)}
           />
           
@@ -544,7 +531,7 @@ const CardioVascularScreen: React.FC = () => {
             badge={dietScore !== null ? String(dietScore) : undefined}
             status={getDietRangeLabel(dietMepaScore)}
             showNotCalculated={dietScore === null}
-            onPress={handleDietPress}
+            onPress={openLe8Detail('diet')}
           />
           
           <MetricItem
@@ -553,7 +540,7 @@ const CardioVascularScreen: React.FC = () => {
             badge={smokingScore !== null ? String(smokingScore) : undefined}
             showNotCalculated={smokingScore === null}
             status={getSmokingRangeLabel(smokingScore)}
-            onPress={handleSmokingPress}
+            onPress={openLe8Detail('smoking')}
           />
         </View>
 

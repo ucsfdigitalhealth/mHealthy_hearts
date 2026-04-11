@@ -18,6 +18,8 @@ import DailyCheckInStepScreen from './src/screens/GoalFlow/DailyCheckInStepScree
 import YesterdayStepsStepScreen from './src/screens/GoalFlow/YesterdayStepsStepScreen';
 import SymptomBurdenStepScreen from './src/screens/GoalFlow/SymptomBurdenStepScreen';
 import GoalSelectionStepScreen from './src/screens/GoalFlow/GoalSelectionStepScreen';
+import Le8MetricDetailScreen from './src/screens/LeFlows/Le8MetricDetailScreen';
+import type { Le8MetricId } from './src/screens/LeFlows/le8MetricTypes';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -36,6 +38,7 @@ export type RootStackParamList = {
   GoalStep2: undefined;
   GoalStep3: { completedYesterday: boolean };
   GoalStep4: { completedYesterday: boolean; symptomRating: number };
+  Le8MetricDetail: { metric: Le8MetricId };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -66,6 +69,7 @@ export default function App() {
             <Stack.Screen name="GoalStep2" component={YesterdayStepsStepScreen} />
             <Stack.Screen name="GoalStep3" component={SymptomBurdenStepScreen} />
             <Stack.Screen name="GoalStep4" component={GoalSelectionStepScreen} />
+            <Stack.Screen name="Le8MetricDetail" component={Le8MetricDetailScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </FitbitAuthProvider>
