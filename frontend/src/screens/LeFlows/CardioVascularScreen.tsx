@@ -19,6 +19,10 @@ import { getCachedBmi, setCachedBmi } from '../../utils/bmiCache';
 import { getCachedDiet, setCachedDiet } from '../../utils/dietCache';
 import { getCachedBloodLipids, setCachedBloodLipids } from '../../utils/bloodLipidsCache';
 import { getCachedSmoking, setCachedSmoking } from '../../utils/smokingCache';
+import { getDeviceTimezone } from '../../utils/localDate';
+
+const HEALTH_SCORES_BASE = 'http://localhost:3000/api/health-scores';
+const FITBIT_STEPS_BASE = 'http://localhost:3000/api/fitbitAuth/fitbit/steps';
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -134,6 +138,8 @@ const getBloodLipidRangeLabel = (score: number | null): string | null => {
   return entry ? entry[0] : null;
 };
 
+const DEFAULT_NOT_CALCULATED = 'Calculate your score';
+
 const MetricItem: React.FC<{
   title: string;
   score: number | null;
@@ -143,8 +149,20 @@ const MetricItem: React.FC<{
   status?: string | null;
   isFirstInSection?: boolean;
   showNotCalculated?: boolean;
+  notCalculatedMessage?: string;
   colorValueByStatus?: boolean;
-}> = ({ title, score, unit, badge, onPress, status, isFirstInSection, showNotCalculated, colorValueByStatus }) => {
+}> = ({
+  title,
+  score,
+  unit,
+  badge,
+  onPress,
+  status,
+  isFirstInSection,
+  showNotCalculated,
+  notCalculatedMessage = DEFAULT_NOT_CALCULATED,
+  colorValueByStatus,
+}) => {
   const calculatedStatus = status || getStatusFromScore(score !== null && score !== undefined ? score : null);
   const statusColor = getStatusColor(calculatedStatus || null);
   const valueColor = colorValueByStatus && calculatedStatus ? statusColor : undefined;
@@ -167,7 +185,7 @@ const MetricItem: React.FC<{
           </>
         ) : (
           showNotCalculated && (
-            <Text style={styles.notCalculatedText}>Calculate your score</Text>
+            <Text style={styles.notCalculatedText}>{notCalculatedMessage}</Text>
           )
         )}
         {calculatedStatus && (
@@ -237,11 +255,11 @@ const CardioVascularScreen: React.FC = () => {
   }, [calculateHeartScore]);
 
   const handleBloodSugarPress = () => {
-    navigation.navigate('BloodSugar');
+    navigation.navigate('AssessmentLanding', { title: 'Blood Sugar', targetScreen: 'BloodSugar' });
   };
 
   const handleBloodLipidsPress = () => {
-    navigation.navigate('BloodLipids');
+    navigation.navigate('BloodLipidsLanding');
   };
 
   const handleBmiPress = () => {
@@ -249,11 +267,11 @@ const CardioVascularScreen: React.FC = () => {
   };
 
   const handleDietPress = () => {
-    navigation.navigate('Diet');
+    navigation.navigate('AssessmentLanding', { title: 'Diet', targetScreen: 'Diet' });
   };
 
   const handleSmokingPress = () => {
-    navigation.navigate('Smoking');
+    navigation.navigate('SmokingLanding');
   };
 
   const handleViewHistoricalDataPress = () => {
@@ -297,7 +315,11 @@ const CardioVascularScreen: React.FC = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:3000/api/health-scores', {
+      const tz = getDeviceTimezone();
+      const healthScoresUrl = tz
+        ? `${HEALTH_SCORES_BASE}?timezone=${encodeURIComponent(tz)}`
+        : HEALTH_SCORES_BASE;
+      const response = await fetch(healthScoresUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -343,9 +365,30 @@ const CardioVascularScreen: React.FC = () => {
           score: data.smoking?.score ?? null,
           category: data.smoking?.category ?? null,
         });
-        // Physical Activity — from fitbit_daily_data (no persistent cache needed; Fitbit hooks handle it)
+        // Physical Activity — from health-scores (fitbit_daily_data); refresh from Fitbit if missing
         setActivityScore(data.physicalActivity?.score ?? null);
         setActivitySteps(data.physicalActivity?.steps ?? null);
+        if (data.physicalActivity?.steps == null) {
+          try {
+            const stepsUrl = tz
+              ? `${FITBIT_STEPS_BASE}?timezone=${encodeURIComponent(tz)}`
+              : FITBIT_STEPS_BASE;
+            const stepsRes = await fetch(stepsUrl, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if (stepsRes.ok) {
+              const stepsData = await stepsRes.json();
+              if (stepsData.steps != null) {
+                setActivitySteps(Number(stepsData.steps));
+              }
+              if (stepsData.score != null) {
+                setActivityScore(Number(stepsData.score));
+              }
+            }
+          } catch (stepsErr) {
+            console.error('Error fetching Fitbit steps for cardiovascular screen:', stepsErr);
+          }
+        }
         // Sleep — from fitbit_sleep_data
         setSleepScore(data.sleep?.score ?? null);
         setSleepDisplayHours(data.sleep?.hours ?? null);
@@ -497,6 +540,7 @@ const CardioVascularScreen: React.FC = () => {
             badge={sleepScore !== null ? String(sleepScore) : undefined}
             status={getStatusFromScore(sleepScore)}
             showNotCalculated={true}
+            notCalculatedMessage="Please update your sleep on the Fitbit App"
           />
           
           <MetricItem 
@@ -504,7 +548,7 @@ const CardioVascularScreen: React.FC = () => {
             score={null}
             unit="mmHg"
             showNotCalculated={true}
-            onPress={handleBloodSugarPress}
+            notCalculatedMessage="Please measure your blood pressure via your Omron device"
           />
           
           <MetricItem

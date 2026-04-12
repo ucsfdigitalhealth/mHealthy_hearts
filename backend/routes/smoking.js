@@ -148,4 +148,46 @@ router.get("/score", verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/smoking/stats
+// Returns the most recent record, last 3 records with scores, and their average score
+router.get("/stats", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const [rows] = await db.execute(
+      `SELECT category, score, created_at
+       FROM smoking_assessments
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 3`,
+      [userId]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(200).json({ mostRecent: null, recentRecords: [], average: null });
+    }
+
+    const recentRecords = rows.map(r => ({
+      category: r.category,
+      score: Number(r.score),
+      date: r.created_at,
+    }));
+
+    const mostRecent = recentRecords[0];
+
+    const average =
+      recentRecords.reduce((sum, r) => sum + r.score, 0) / recentRecords.length;
+
+    return res.status(200).json({
+      mostRecent,
+      recentRecords,
+      average: Math.round(average * 10) / 10,
+    });
+  } catch (error) {
+    console.error("[GET /api/smoking/stats] Error:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
+});
+
 module.exports = { router };

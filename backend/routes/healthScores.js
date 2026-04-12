@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require("../db.js");
 const { verifyToken } = require("../auth.js");
 const { getBloodGlucoseScore, getBMIScore, getDietScore, getNicotineScore, getPhysicalActivityScore, getSleepScore } = require("../metricCalc.js");
+const { getTimezoneFromRequest, getTodayInTimezone } = require("../utils/dateHelpers.js");
 
 // GET /api/health-scores
 // Gets all health scores (blood lipids, blood sugar, BMI, diet, smoking) for the authenticated user
@@ -100,8 +101,9 @@ router.get("/", verifyToken, async (req, res) => {
       });
     }
 
-    // Physical Activity — today's steps from fitbit_daily_data
-    const today = new Date().toISOString().slice(0, 10);
+    // Physical Activity — today's steps from fitbit_daily_data (same "today" as Fitbit routes when timezone is sent)
+    const tz = getTimezoneFromRequest(req);
+    const today = getTodayInTimezone(tz);
     const [activityRows] = await db.execute(
       "SELECT steps FROM fitbit_daily_data WHERE user_id = ? AND date = ? ORDER BY updated_at DESC LIMIT 1",
       [userId, today]
