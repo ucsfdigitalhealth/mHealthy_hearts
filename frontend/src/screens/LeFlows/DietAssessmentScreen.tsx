@@ -111,6 +111,7 @@ type Phase = 'intro' | 'questions' | 'commitment' | 'importance' | 'confidence' 
 function calcDietScoreLocal(ans: Answers): { mepaScore: number; displayScore: number } {
   let mepa = 0;
 
+  
   const vegsPerDay      = perDay(ans[2]);
   const fruitPerDay     = perDay(ans[3]);
   const redMeatPerWeek  = perWeek(ans[9]);
@@ -359,6 +360,12 @@ const DietAssessmentScreen: React.FC = () => {
               {introStep === 0 ? 'Cancel' : 'Back'}
             </Text>
           </TouchableOpacity>
+          <View style={styles.progressBarContainer}>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: '0%' }]} />
+            </View>
+            <Text style={styles.progressText}>Step 1 of {questions.length}</Text>
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.introContent} showsVerticalScrollIndicator={false}>
@@ -594,7 +601,7 @@ const DietAssessmentScreen: React.FC = () => {
             <View style={[styles.progressFill, { width: `${progress}%` }]} />
           </View>
           <Text style={styles.progressText}>
-            Question {currentQuestion + 1} of {questions.length}
+            Step {currentQuestion + 1} of {questions.length}
           </Text>
         </View>
       </View>
@@ -804,14 +811,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   blueButton: {
-    backgroundColor: '#224694',
-    borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: '#2084a4',
+    borderRadius: 17,
+    paddingVertical: 20,
     alignItems: 'center',
   },
   blueButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   resultsContainer: {
@@ -863,13 +870,13 @@ const styles = StyleSheet.create({
   },
   doneButton: {
     backgroundColor: '#000',
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 17,
+    paddingVertical: 20,
     alignItems: 'center',
   },
   doneButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   // Intro screens
@@ -906,7 +913,7 @@ const styles = StyleSheet.create({
     fontSize: 120,
   },
   introStartButton: {
-    backgroundColor: '#000000',
+    backgroundColor: '#2084a4',
     borderRadius: 17,
     paddingVertical: 20,
     width: '100%',

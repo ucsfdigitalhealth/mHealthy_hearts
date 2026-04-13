@@ -499,12 +499,11 @@ const CardioVascularScreen: React.FC = () => {
             showNotCalculated={true}
           />
           
-          <MetricItem 
-            title="Blood Pressure" 
+          <MetricItem
+            title="Blood Pressure"
             score={null}
             unit="mmHg"
             showNotCalculated={true}
-            onPress={handleBloodSugarPress}
           />
           
           <MetricItem

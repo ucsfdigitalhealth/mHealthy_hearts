@@ -65,7 +65,7 @@ router.post("/", verifyToken, async (req, res) => {
       [dataId, userId, testType, numericValue, hasDiabetesBool, commitBool, importanceVal, confidenceVal]
     );
 
-    const score = getBloodGlucoseScore({ testType, value: numericValue });
+    const score = getBloodGlucoseScore({ testType, value: numericValue, hasDiabetes: hasDiabetesBool === 1 });
 
     // Write daily score to daily_scores table
     const scoreDate = new Date().toISOString().slice(0, 10);
@@ -96,7 +96,7 @@ router.get("/score", verifyToken, async (req, res) => {
     const userId = req.user?.userId || null;
 
     const [rows] = await db.execute(
-      `SELECT test_type, value FROM blood_sugar_assessments
+      `SELECT test_type, value, has_diabetes FROM blood_sugar_assessments
        WHERE user_id = ? AND value IS NOT NULL
        ORDER BY created_at DESC LIMIT 1`,
       [userId]
@@ -106,8 +106,8 @@ router.get("/score", verifyToken, async (req, res) => {
       return res.status(200).json({ score: null, value: null, testType: null });
     }
 
-    const { test_type: testType, value } = rows[0];
-    const score = getBloodGlucoseScore({ testType, value: Number(value) });
+    const { test_type: testType, value, has_diabetes } = rows[0];
+    const score = getBloodGlucoseScore({ testType, value: Number(value), hasDiabetes: has_diabetes === 1 });
 
     return res.status(200).json({ score, value: Number(value), testType });
   } catch (error) {

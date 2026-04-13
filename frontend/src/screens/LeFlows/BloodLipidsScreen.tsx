@@ -103,12 +103,13 @@ const CustomSlider: React.FC<{
     <View style={sliderStyles.container}>
       <Text style={sliderStyles.valueDisplay}>{value}</Text>
       <View
-        style={sliderStyles.track}
+        style={sliderStyles.trackWrapper}
         onLayout={(e: LayoutChangeEvent) => {
           trackWidthRef.current = e.nativeEvent.layout.width;
         }}
         {...panResponder.panHandlers}
       >
+        <View style={sliderStyles.trackLine} />
         <View style={[sliderStyles.thumb, { left: `${thumbPercent}%` as any }]} />
       </View>
       <View style={sliderStyles.labels}>
@@ -131,31 +132,37 @@ const CustomSlider: React.FC<{
 
 const sliderStyles = StyleSheet.create({
   container: {
-    marginBottom: 40,
+    marginVertical: 16,
     alignItems: 'center',
+    width: '100%',
   },
   valueDisplay: {
-    fontSize: 80,
+    fontSize: 64,
     fontWeight: '700',
-    color: '#212529',
-    marginBottom: 16,
+    color: '#000',
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  track: {
+  trackWrapper: {
     width: '90%',
-    height: 34,
-    backgroundColor: '#D9D9D9',
-    borderRadius: 17,
+    height: 40,
     justifyContent: 'center',
     position: 'relative',
   },
+  trackLine: {
+    width: '100%',
+    height: 4,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 2,
+  },
   thumb: {
     position: 'absolute',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#212529',
-    top: -1,
-    marginLeft: -18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#000',
+    top: 6,
+    marginLeft: -14,
   },
   labels: {
     flexDirection: 'row',
@@ -163,18 +170,9 @@ const sliderStyles = StyleSheet.create({
     width: '90%',
     marginTop: 8,
   },
-  labelItem: {
-    alignItems: 'center',
-  },
-  labelNum: {
-    fontSize: 18,
-    color: '#A2A2A2',
-    fontWeight: '500',
-  },
-  labelText: {
-    fontSize: 13,
-    color: '#A2A2A2',
-  },
+  labelItem: { alignItems: 'center' },
+  labelNum: { fontSize: 12, color: '#666', fontWeight: '500' },
+  labelText: { fontSize: 12, color: '#666' },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -225,11 +223,9 @@ const BloodLipidsFlowScreen: React.FC = () => {
         goToStep(3);
         break;
       case 5:
-        // Result screen — came from step 4 (value input)
         goToStep(4);
         break;
       case 6:
-        // Medication — came from step 5 (result) or step 3 (no-results)
         if (measureType === 'no-results') goToStep(3);
         else goToStep(5);
         break;
@@ -240,16 +236,13 @@ const BloodLipidsFlowScreen: React.FC = () => {
         goToStep(7);
         break;
       case 9:
-        // Confidence — came from step 8 (importance)
         goToStep(8);
         break;
       case 10:
-        // Score summary — came from step 9 (confidence) or step 7 (commitment=No)
         if (commitment) goToStep(9);
         else goToStep(7);
         break;
       case 11:
-        // Resources — came from step 2 (check later), step 10, or step 9/7
         if (checkLater) {
           setCheckLater(false);
           goToStep(2);
@@ -266,7 +259,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
   const handleMeasureSelect = (type: string) => {
     setMeasureType(type);
     if (type === 'no-results') {
-      goToStep(6); // skip value input and result screen, go to medication
+      goToStep(6);
     } else {
       goToStep(4);
     }
@@ -282,9 +275,8 @@ const BloodLipidsFlowScreen: React.FC = () => {
 
   const handleCommitmentNext = () => {
     if (commitment) {
-      goToStep(8); // importance slider
+      goToStep(8);
     } else {
-      // Skip sliders — go to score summary if value exists, else resources
       if (value) goToStep(10);
       else goToStep(11);
     }
@@ -340,51 +332,80 @@ const BloodLipidsFlowScreen: React.FC = () => {
     navigation.goBack();
   };
 
+  // ── Footer button props ───────────────────────────────────────────────────────
+  const getFooterButton = (): {
+    label: string;
+    onPress: () => void;
+    disabled: boolean;
+    dark: boolean;
+    show: boolean;
+  } | null => {
+    switch (currentStep) {
+      case 1:
+        return { label: 'Start', onPress: () => goToStep(2), disabled: false, dark: false, show: true };
+      case 2:
+        return null; // auto-navigates on choice
+      case 3:
+        return null; // auto-navigates on measure select
+      case 4:
+        return { label: 'Next', onPress: () => goToStep(5), disabled: !value, dark: false, show: true };
+      case 5:
+        return { label: 'Next', onPress: handleResultNext, disabled: false, dark: false, show: true };
+      case 6:
+        return { label: 'Next', onPress: () => goToStep(7), disabled: medication === null, dark: false, show: true };
+      case 7:
+        return { label: 'Next', onPress: handleCommitmentNext, disabled: commitment === null, dark: false, show: true };
+      case 8:
+        return { label: 'Next', onPress: handleImportanceNext, disabled: false, dark: false, show: true };
+      case 9:
+        return { label: 'Next', onPress: handleConfidenceNext, disabled: false, dark: false, show: true };
+      case 10:
+        return { label: 'Next', onPress: handleScoreSummaryNext, disabled: false, dark: false, show: true };
+      case 11:
+        return { label: 'Done', onPress: handleDone, disabled: false, dark: true, show: true };
+      default:
+        return null;
+    }
+  };
+
   // ── Step renderers ───────────────────────────────────────────────────────────
 
   // Step 1: Welcome / intro
   const renderWelcome = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Let's assess your blood lipids</Text>
-      <Text style={styles.welcomeSubtitle}>
+    <View style={styles.introContent}>
+      <Text style={styles.introTitle}>Let's assess your blood lipids</Text>
+      <Text style={styles.introSubtitle}>
         {"We'll ask about your most recent cholesterol or lipid panel so we can calculate your score"}
       </Text>
-      <View style={styles.welcomeMascotContainer}>
+      <View style={styles.introImageContainer}>
         <Image
           source={MASCOT_IMAGE}
           style={styles.mascotImage}
           resizeMode="contain"
         />
-        <Text style={styles.mascotLabel}>BLOOD LIPIDS</Text>
       </View>
-      <TouchableOpacity
-        style={styles.startButton}
-        onPress={() => goToStep(2)}
-      >
-        <Text style={styles.startButtonText}>Start</Text>
-      </TouchableOpacity>
     </View>
   );
 
   // Step 2: I found my results / I'll check later
   const renderStep1 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Let's assess your blood lipids</Text>
-      <Text style={styles.checkLaterDescription}>
-        {"If you're not sure, that's totally fine. If you can check your latest blood test results from your doctor or online portal, the value is usually listed under 'non‑HDL cholesterol' or 'lipid panel."}
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Let's assess your blood lipids</Text>
+      <Text style={styles.phaseSubtitle}>
+        {"If you're not sure, that's totally fine. If you can check your latest blood test results from your doctor or online portal, the value is usually listed under 'non‑HDL cholesterol' or 'lipid panel'."}
       </Text>
-      <View style={styles.checkLaterButtons}>
+      <View style={styles.commitmentButtons}>
         <TouchableOpacity
-          style={styles.checkLaterButton}
+          style={styles.commitmentButton}
           onPress={() => { setCheckLater(false); goToStep(3); }}
         >
-          <Text style={styles.checkLaterButtonText}>I found my results</Text>
+          <Text style={styles.commitmentButtonText}>I found my results</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.checkLaterButton}
+          style={styles.commitmentButton}
           onPress={() => { setCheckLater(true); goToStep(11); }}
         >
-          <Text style={styles.checkLaterButtonText}>I'll check later</Text>
+          <Text style={styles.commitmentButtonText}>I'll check later</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -398,8 +419,8 @@ const BloodLipidsFlowScreen: React.FC = () => {
       { id: 'no-results', title: "I don't have recent results or not Sure", subtitle: null },
     ];
     return (
-      <View style={styles.stepContainer}>
-        <Text style={styles.stepTitle}>Which measure do you have available?</Text>
+      <View style={styles.phaseContent}>
+        <Text style={styles.phaseTitle}>Which measure do you have available?</Text>
         <View style={styles.optionsContainer}>
           {options.map((opt) => (
             <TouchableOpacity
@@ -419,7 +440,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
                   )}
                 </View>
                 {measureType === opt.id && (
-                  <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                  <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
                 )}
               </View>
             </TouchableOpacity>
@@ -433,9 +454,8 @@ const BloodLipidsFlowScreen: React.FC = () => {
   const renderStep3 = () => {
     const typeLabel = measureType === 'total-cholesterol' ? 'total cholesterol' : 'non-HDL cholesterol';
     return (
-      <View style={styles.stepContainer}>
-        <Text style={styles.stepTitle}>Enter your most recent {typeLabel} result</Text>
-        <Text style={styles.measureUnit}>mg/dL</Text>
+      <View style={styles.phaseContent}>
+        <Text style={styles.phaseTitle}>Enter your most recent {typeLabel} result</Text>
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
@@ -471,22 +491,15 @@ const BloodLipidsFlowScreen: React.FC = () => {
             </View>
           </View>
         </View>
-        <TouchableOpacity
-          style={[styles.primaryButton, !value && styles.buttonDisabled]}
-          onPress={() => goToStep(5)}
-          disabled={!value}
-        >
-          <Text style={styles.primaryButtonText}>Continue</Text>
-        </TouchableOpacity>
       </View>
     );
   };
 
   // Step 6: Medication
   const renderStep4 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.sectionLabel}>Medication</Text>
-      <Text style={styles.stepTitle}>Are you currently taking medication to lower cholesterol?</Text>
+    <View style={styles.phaseContent}>
+      <Text style={styles.categoryLabel}>MEDICATION</Text>
+      <Text style={styles.phaseTitle}>Are you currently taking medication to lower cholesterol?</Text>
       <View style={styles.yesNoContainer}>
         <TouchableOpacity
           style={[styles.yesNoCard, medication === true && styles.yesNoCardSelected]}
@@ -501,21 +514,14 @@ const BloodLipidsFlowScreen: React.FC = () => {
           <Text style={[styles.yesNoText, medication === false && styles.yesNoTextSelected]}>No</Text>
         </TouchableOpacity>
       </View>
-      <TouchableOpacity
-        style={[styles.navButton, medication === null && styles.buttonDisabled]}
-        onPress={() => goToStep(7)}
-        disabled={medication === null}
-      >
-        <Text style={styles.navButtonText}>Next</Text>
-      </TouchableOpacity>
     </View>
   );
 
   // Step 7: Commitment
   const renderStep5 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.sectionLabel}>Commitment to Healthy Change</Text>
-      <Text style={styles.stepTitle}>Do you plan to improve this area?</Text>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Commitment to Healthy Change</Text>
+      <Text style={styles.phaseSubtitle}>Do you plan to improve this area?</Text>
       <View style={styles.yesNoContainer}>
         <TouchableOpacity
           style={[styles.yesNoCard, commitment === true && styles.yesNoCardSelected]}
@@ -530,37 +536,24 @@ const BloodLipidsFlowScreen: React.FC = () => {
           <Text style={[styles.yesNoText, commitment === false && styles.yesNoTextSelected]}>No</Text>
         </TouchableOpacity>
       </View>
-      <TouchableOpacity
-        style={[styles.navButton, commitment === null && styles.buttonDisabled]}
-        onPress={handleCommitmentNext}
-        disabled={commitment === null}
-      >
-        <Text style={styles.navButtonText}>Next</Text>
-      </TouchableOpacity>
     </View>
   );
 
   // Step 8: Importance
   const renderStep6 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.sectionLabel}>Importance</Text>
-      <Text style={styles.stepTitle}>How important is this change to you right now?</Text>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Importance</Text>
+      <Text style={styles.phaseSubtitle}>How important is this change to you right now?</Text>
       <CustomSlider value={importance} onValueChange={setImportance} />
-      <TouchableOpacity style={styles.navButton} onPress={handleImportanceNext}>
-        <Text style={styles.navButtonText}>Next</Text>
-      </TouchableOpacity>
     </View>
   );
 
   // Step 9: Confidence
   const renderStep7 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.sectionLabel}>Confidence</Text>
-      <Text style={styles.stepTitle}>How confident are you about making this change?</Text>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Confidence</Text>
+      <Text style={styles.phaseSubtitle}>How confident are you about making this change?</Text>
       <CustomSlider value={confidence} onValueChange={setConfidence} />
-      <TouchableOpacity style={styles.navButton} onPress={handleConfidenceNext}>
-        <Text style={styles.navButtonText}>Next</Text>
-      </TouchableOpacity>
     </View>
   );
 
@@ -571,21 +564,17 @@ const BloodLipidsFlowScreen: React.FC = () => {
     const typeLabel = getMeasureTypeLabel(measureType);
 
     return (
-      <View style={styles.stepContainer}>
-        <Text style={styles.resultTitle}>
-          {`Your ${typeLabel} is ${value} mg/dL, that's in the `}
-          <Text style={styles.resultRangeLabel}>{rangeInfo?.label ?? ''}</Text>
-          {'.'}
+      <View style={styles.phaseContent}>
+        <Text style={styles.phaseTitle}>
+          {`Your ${typeLabel} is ${value} mg/dL`}
         </Text>
-        <View style={styles.mascotContainer}>
-          <Text style={styles.mascotEmoji}>🩸</Text>
+        <Text style={styles.phaseSubtitle}>{rangeInfo?.label ?? ''}</Text>
+        <View style={styles.introImageContainer}>
+          <Text style={styles.introEmoji}>🩸</Text>
         </View>
         <View style={styles.tipCard}>
           <Text style={styles.tipText}>{rangeInfo?.tip ?? ''}</Text>
         </View>
-        <TouchableOpacity style={styles.primaryButton} onPress={handleResultNext}>
-          <Text style={styles.primaryButtonText}>Next</Text>
-        </TouchableOpacity>
       </View>
     );
   };
@@ -595,58 +584,58 @@ const BloodLipidsFlowScreen: React.FC = () => {
     const numericValue = value ? Number(value) : null;
     const score = getNonHDLScoreLocal(numericValue);
     return (
-      <View style={styles.stepContainer}>
-        <Text style={styles.summaryTitle}>Blood Lipids Summary</Text>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summarySubtitle}>{"Here's your blood lipids score:"}</Text>
-          <View style={styles.scoreBox}>
+      <View style={styles.resultsContainer}>
+        <Text style={styles.resultsTitle}>Great Job!</Text>
+        <View style={styles.scoreCard}>
+          <Text style={styles.scoreLabel}>Based on your responses</Text>
+          <View style={styles.scoreCircle}>
+            <Text style={styles.scoreEmoji}>🎉</Text>
             <Text style={styles.scoreNumber}>{score ?? '--'}</Text>
-            <Text style={styles.scorePoints}>Points</Text>
+            <Text style={styles.scoreMax}>out of 100</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.navButton} onPress={handleScoreSummaryNext}>
-          <Text style={styles.navButtonText}>Next</Text>
-        </TouchableOpacity>
+        <Text style={styles.resultsDescription}>
+          Your blood lipids score reflects your cholesterol levels. A higher score indicates better alignment with heart-healthy ranges.
+        </Text>
       </View>
     );
   };
 
   // Step 11: Resources
   const renderStep10 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.sectionLabel}>Resources</Text>
-      <Text style={styles.resourcesMessage}>
-        {"You're on the right path!\n\nCheck out the Stress Management video and additional links for more support!"}
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Resources</Text>
+      <Text style={styles.phaseSubtitle}>
+        You're on the right path! Here are some heart-healthy tips to support your cholesterol levels.
       </Text>
-      <View style={styles.videoCard}>
-        <Text style={styles.videoEmoji}>🧘</Text>
-        <Text style={styles.videoLabel}>Stress Management</Text>
+      <View style={styles.introImageContainer}>
+        <Text style={styles.introEmoji}>🧘</Text>
       </View>
-      <TouchableOpacity style={styles.doneButton} onPress={handleDone}>
-        <Text style={styles.doneButtonText}>Done</Text>
-      </TouchableOpacity>
+      <Text style={styles.resourcesBody}>
+        Focus on eating more fiber-rich foods, choosing healthy fats, and staying active to support better cholesterol levels.
+      </Text>
     </View>
   );
 
   const renderCurrentStep = () => {
     switch (currentStep) {
-      case 1:  return renderWelcome();  // Welcome / intro
-      case 2:  return renderStep1();    // I found my results / I'll check later
-      case 3:  return renderStep2();    // Which measure?
-      case 4:  return renderStep3();    // Enter value
-      case 5:  return renderStep8();    // Result screen (right after value input)
-      case 6:  return renderStep4();    // Medication
-      case 7:  return renderStep5();    // Commitment
-      case 8:  return renderStep6();    // Importance
-      case 9:  return renderStep7();    // Confidence
-      case 10: return renderStep9();    // Score summary
-      case 11: return renderStep10();   // Resources
+      case 1:  return renderWelcome();
+      case 2:  return renderStep1();
+      case 3:  return renderStep2();
+      case 4:  return renderStep3();
+      case 5:  return renderStep8();
+      case 6:  return renderStep4();
+      case 7:  return renderStep5();
+      case 8:  return renderStep6();
+      case 9:  return renderStep7();
+      case 10: return renderStep9();
+      case 11: return renderStep10();
       default: return null;
     }
   };
 
-  // Progress: show position relative to total logical steps
   const progressPercent = ((currentStep - 1) / (TOTAL_STEPS - 1)) * 100;
+  const footerButton = getFooterButton();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -658,7 +647,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
         </TouchableOpacity>
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+            <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
           </View>
           <Text style={styles.progressText}>Step {currentStep} of {TOTAL_STEPS}</Text>
         </View>
@@ -667,16 +656,29 @@ const BloodLipidsFlowScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {renderCurrentStep()}
       </ScrollView>
+
+      {footerButton && (
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[
+              styles.footerButton,
+              footerButton.dark && styles.footerButtonDark,
+              footerButton.disabled && styles.footerButtonDisabled,
+            ]}
+            onPress={footerButton.onPress}
+            disabled={footerButton.disabled}
+          >
+            <Text style={styles.footerButtonText}>{footerButton.label}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
     backgroundColor: '#F8F9FA',
     paddingHorizontal: 16,
@@ -685,20 +687,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E9ECEF',
   },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  backText: {
-    color: '#007AFF',
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 4,
-  },
-  progressBarContainer: {
-    alignItems: 'center',
-  },
+  backButton: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  backText: { color: '#007AFF', fontSize: 16, fontWeight: '500', marginLeft: 4 },
+  progressBarContainer: { alignItems: 'center' },
   progressBar: {
     width: '100%',
     height: 6,
@@ -707,226 +698,130 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 8,
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#007AFF',
-    borderRadius: 3,
+  progressFill: { height: '100%', backgroundColor: '#34C759', borderRadius: 3 },
+  progressText: { fontSize: 14, color: '#6C757D', fontWeight: '500' },
+
+  content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 16 },
+
+  footer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
   },
-  progressText: {
-    fontSize: 14,
-    color: '#6C757D',
-    fontWeight: '500',
-  },
-  content: {
-    flexGrow: 1,
-    padding: 24,
-  },
-  stepContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 500,
-  },
-  // Welcome screen
-  welcomeSubtitle: {
-    fontSize: 24,
-    fontStyle: 'italic',
-    color: '#212529',
-    textAlign: 'center',
-    lineHeight: 34,
-    marginBottom: 24,
-  },
-  welcomeMascotContainer: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  mascotImage: {
-    width: 220,
-    height: 220,
-    marginBottom: 12,
-  },
-  mascotLabel: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#212529',
-    letterSpacing: 1,
-  },
-  startButton: {
-    backgroundColor: '#212529',
+  footerButton: {
+    backgroundColor: '#2084a4',
     borderRadius: 17,
-    paddingVertical: 22,
-    alignItems: 'center',
-    alignSelf: 'center',
-    width: '70%',
-  },
-  startButtonText: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '700',
-  },
-  // Check later screen
-  checkLaterDescription: {
-    fontSize: 24,
-    fontStyle: 'italic',
-    color: '#212529',
-    textAlign: 'center',
-    lineHeight: 34,
-    marginBottom: 48,
-  },
-  checkLaterButtons: {
-    gap: 16,
-  },
-  checkLaterButton: {
-    backgroundColor: '#212529',
-    borderRadius: 17,
-    paddingVertical: 22,
-    alignItems: 'center',
-    alignSelf: 'center',
-    width: '80%',
-  },
-  checkLaterButtonText: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  sectionLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#6C757D',
-    textAlign: 'center',
-    letterSpacing: 1,
-    marginBottom: 16,
-    textTransform: 'uppercase',
-  },
-  stepTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#212529',
-    marginBottom: 12,
-    lineHeight: 36,
-    textAlign: 'center',
-  },
-  // Buttons
-  primaryButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  buttonDisabled: {
-    opacity: 0.4,
-  },
-  navButton: {
-    backgroundColor: '#224694',
-    borderRadius: 16,
-    paddingVertical: 18,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  navButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  doneButton: {
-    backgroundColor: '#212529',
-    borderRadius: 16,
     paddingVertical: 20,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  doneButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  // Measure type options
-  optionsContainer: {
-    gap: 16,
-    marginBottom: 40,
-  },
-  optionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#E9ECEF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  optionCardSelected: {
-    borderColor: '#007AFF',
-    backgroundColor: '#F0F7FF',
-  },
-  optionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  optionTextContainer: {
-    flex: 1,
-  },
-  optionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#212529',
-    marginBottom: 4,
-  },
-  optionTitleSelected: {
-    color: '#007AFF',
-  },
-  optionSubtitle: {
-    fontSize: 16,
-    color: '#6C757D',
-  },
-  optionSubtitleSelected: {
-    color: '#0056B3',
-  },
-  // Value input
-  measureUnit: {
-    fontSize: 20,
-    color: '#007AFF',
+  footerButtonDark: { backgroundColor: '#000000' },
+  footerButtonDisabled: { backgroundColor: '#E5E5EA' },
+  footerButtonText: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
+
+  // Intro
+  introContent: { flexGrow: 1, paddingTop: 8, alignItems: 'center' },
+  introTitle: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#000',
     textAlign: 'center',
     marginBottom: 24,
-    fontWeight: '600',
+    lineHeight: 44,
   },
+  introSubtitle: {
+    fontSize: 22,
+    fontStyle: 'italic',
+    color: '#000',
+    textAlign: 'center',
+    lineHeight: 32,
+    marginBottom: 40,
+  },
+  introImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  introEmoji: { fontSize: 120 },
+  mascotImage: { width: 220, height: 220 },
+
+  // Phase screens
+  phaseContent: { flexGrow: 1, paddingTop: 8, alignItems: 'center', width: '100%' },
+  phaseTitle: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  phaseSubtitle: {
+    fontSize: 18,
+    color: '#3C3C43',
+    textAlign: 'center',
+    lineHeight: 26,
+    marginBottom: 40,
+  },
+  categoryLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#8E8E93',
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+
+  // Commitment / Yes-No buttons
+  commitmentButtons: { width: '100%', gap: 16 },
+  commitmentButton: {
+    backgroundColor: '#E5E5EA',
+    borderRadius: 14,
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  commitmentButtonText: { fontSize: 20, fontWeight: '700', color: '#555' },
+
+  yesNoContainer: { gap: 16, marginBottom: 8, width: '100%' },
+  yesNoCard: {
+    borderRadius: 14,
+    backgroundColor: '#E5E5EA',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  yesNoCardSelected: { backgroundColor: '#000000' },
+  yesNoText: { fontSize: 20, fontWeight: '700', color: '#555' },
+  yesNoTextSelected: { color: '#FFFFFF' },
+
+  // Option cards
+  optionsContainer: { gap: 12, marginBottom: 8, width: '100%' },
+  optionCard: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  optionCardSelected: { backgroundColor: '#212529', borderColor: '#212529' },
+  optionContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  optionTextContainer: { flex: 1 },
+  optionTitle: { fontSize: 17, fontWeight: '600', color: '#212529', marginBottom: 4 },
+  optionTitleSelected: { color: '#FFFFFF' },
+  optionSubtitle: { fontSize: 13, color: '#6C757D' },
+  optionSubtitleSelected: { color: '#ADB5BD' },
+
+  // Value input
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 14,
     paddingHorizontal: 20,
     paddingVertical: 16,
     marginBottom: 24,
     borderWidth: 2,
     borderColor: '#E9ECEF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    width: '100%',
   },
   input: {
     flex: 1,
@@ -936,185 +831,72 @@ const styles = StyleSheet.create({
     padding: 0,
     textAlign: 'center',
   },
-  inputUnitLabel: {
-    fontSize: 20,
-    color: '#6C757D',
-    marginLeft: 16,
-    fontWeight: '500',
-  },
+  inputUnitLabel: { fontSize: 20, color: '#6C757D', marginLeft: 16, fontWeight: '500' },
+
   referenceContainer: {
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
     padding: 16,
     marginBottom: 32,
+    width: '100%',
   },
-  referenceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  referenceIndicator: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  referenceBar: {
-    width: 48,
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 6,
-  },
-  referenceLabel: {
-    fontSize: 10,
-    color: '#6C757D',
-    marginBottom: 2,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  referenceValue: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#212529',
-    textAlign: 'center',
-  },
-  // Yes/No
-  yesNoContainer: {
-    gap: 16,
-    marginVertical: 32,
-  },
-  yesNoCard: {
-    backgroundColor: '#E4E1E1',
-    borderRadius: 17,
-    paddingVertical: 30,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  yesNoCardSelected: {
-    backgroundColor: '#212529',
-  },
-  yesNoText: {
-    fontSize: 40,
-    fontWeight: '700',
-    fontStyle: 'italic',
-    color: '#212529',
-  },
-  yesNoTextSelected: {
-    color: '#FFFFFF',
-  },
-  // Result screen
-  resultTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#D74B31',
-    textAlign: 'center',
-    lineHeight: 44,
-    marginBottom: 24,
-  },
-  resultRangeLabel: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#D74B31',
-  },
-  mascotContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  mascotEmoji: {
-    fontSize: 80,
-  },
+  referenceRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  referenceIndicator: { alignItems: 'center', flex: 1 },
+  referenceBar: { width: 48, height: 8, borderRadius: 4, marginBottom: 6 },
+  referenceLabel: { fontSize: 10, color: '#6C757D', marginBottom: 2, fontWeight: '500', textAlign: 'center' },
+  referenceValue: { fontSize: 11, fontWeight: '600', color: '#212529', textAlign: 'center' },
+
+  // Tip card (result screen)
   tipCard: {
-    backgroundColor: 'rgba(243,243,243,0.95)',
-    borderRadius: 17,
-    borderWidth: 2,
-    borderColor: '#000000',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 14,
     padding: 20,
     marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.1,
-    elevation: 4,
+    width: '100%',
   },
   tipText: {
-    fontSize: 20,
-    fontWeight: '600',
-    fontStyle: 'italic',
-    color: '#212529',
+    fontSize: 17,
+    color: '#3C3C43',
+    lineHeight: 24,
     textAlign: 'center',
-    lineHeight: 28,
   },
-  // Score summary screen
-  summaryTitle: {
-    fontSize: 36,
+
+  // Resources
+  resourcesBody: {
+    fontSize: 16,
+    color: '#3C3C43',
+    textAlign: 'center',
+    lineHeight: 24,
+    paddingHorizontal: 8,
+  },
+
+  // Results / score summary
+  resultsContainer: { width: '100%' },
+  resultsTitle: {
+    fontSize: 34,
     fontWeight: '700',
-    color: '#212529',
+    color: '#000',
+    marginTop: 24,
     textAlign: 'center',
-    marginBottom: 32,
   },
-  summaryCard: {
-    backgroundColor: '#F0ECEC',
-    borderRadius: 17,
+  scoreCard: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 16,
     padding: 32,
+    marginVertical: 32,
     alignItems: 'center',
-    marginBottom: 40,
   },
-  summarySubtitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    fontStyle: 'italic',
-    color: '#212529',
+  scoreLabel: { fontSize: 15, color: '#8E8E93', marginBottom: 16 },
+  scoreCircle: { alignItems: 'center' },
+  scoreEmoji: { fontSize: 60, marginBottom: 16 },
+  scoreNumber: { fontSize: 72, fontWeight: '700', color: '#000' },
+  scoreMax: { fontSize: 17, color: '#8E8E93', marginTop: 8 },
+  resultsDescription: {
+    fontSize: 17,
+    color: '#3C3C43',
+    lineHeight: 24,
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 32,
-  },
-  scoreBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#C4C4C4',
-    paddingVertical: 20,
-    paddingHorizontal: 32,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 12,
-  },
-  scoreNumber: {
-    fontSize: 64,
-    fontWeight: '700',
-    color: '#212529',
-  },
-  scorePoints: {
-    fontSize: 40,
-    fontWeight: '700',
-    color: '#212529',
-  },
-  // Resources screen
-  resourcesMessage: {
-    fontSize: 24,
-    color: '#212529',
-    textAlign: 'center',
-    lineHeight: 36,
     marginBottom: 32,
-  },
-  videoCard: {
-    backgroundColor: '#D9D9D9',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#212529',
-    paddingVertical: 40,
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  videoEmoji: {
-    fontSize: 64,
-    marginBottom: 12,
-  },
-  videoLabel: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#212529',
   },
 });
 
