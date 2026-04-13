@@ -102,12 +102,13 @@ const CustomSlider: React.FC<{
     <View style={sliderStyles.container}>
       <Text style={sliderStyles.valueDisplay}>{value}</Text>
       <View
-        style={sliderStyles.track}
+        style={sliderStyles.trackWrapper}
         onLayout={(e: LayoutChangeEvent) => {
           trackWidthRef.current = e.nativeEvent.layout.width;
         }}
         {...panResponder.panHandlers}
       >
+        <View style={sliderStyles.trackLine} />
         <View style={[sliderStyles.thumb, { left: `${thumbPercent}%` as any }]} />
       </View>
       <View style={sliderStyles.labels}>
@@ -130,32 +131,37 @@ const CustomSlider: React.FC<{
 
 const sliderStyles = StyleSheet.create({
   container: {
-    marginBottom: 40,
-    alignItems: 'center',
+    marginVertical: 16,
     width: '100%',
+    alignItems: 'center',
   },
   valueDisplay: {
-    fontSize: 80,
+    fontSize: 64,
     fontWeight: '700',
-    color: '#212529',
-    marginBottom: 16,
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  track: {
+  trackWrapper: {
     width: '90%',
-    height: 34,
-    backgroundColor: '#D9D9D9',
-    borderRadius: 17,
+    height: 40,
     justifyContent: 'center',
     position: 'relative',
   },
+  trackLine: {
+    width: '100%',
+    height: 4,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 2,
+  },
   thumb: {
     position: 'absolute',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#212529',
-    top: -1,
-    marginLeft: -18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#000',
+    top: 6,
+    marginLeft: -14,
   },
   labels: {
     flexDirection: 'row',
@@ -167,13 +173,13 @@ const sliderStyles = StyleSheet.create({
     alignItems: 'center',
   },
   labelNum: {
-    fontSize: 18,
-    color: '#A2A2A2',
+    fontSize: 12,
+    color: '#666',
     fontWeight: '500',
   },
   labelText: {
-    fontSize: 13,
-    color: '#A2A2A2',
+    fontSize: 12,
+    color: '#666',
   },
 });
 
@@ -359,13 +365,13 @@ const SmokingAssessmentScreen: React.FC = () => {
 
   const renderWelcome = () => (
     <View style={styles.stepContainer}>
-      <View style={styles.emojiContainer}>
-        <Text style={styles.emojiLarge}>🚭</Text>
-      </View>
-      <Text style={styles.stepTitle}>{"Let's assess your\nsmoking habits"}</Text>
-      <Text style={styles.stepSubtitle}>
+      <Text style={styles.introTitle}>{"Let's assess your\nsmoking habits"}</Text>
+      <Text style={styles.introSubtitle}>
         This assessment uses AHA Life's Essential 8 criteria to score your nicotine exposure and cardiovascular risk.
       </Text>
+      <View style={styles.introImageContainer}>
+        <Text style={styles.introEmoji}>🚭</Text>
+      </View>
     </View>
   );
 
@@ -377,7 +383,7 @@ const SmokingAssessmentScreen: React.FC = () => {
     ];
     return (
       <View style={styles.stepContainer}>
-        <Text style={styles.stepTitle}>Do you currently smoke or use tobacco products?</Text>
+        <Text style={styles.phaseTitle}>Do you currently smoke or use tobacco products?</Text>
         <View style={styles.optionsContainer}>
           {options.map((opt) => (
             <TouchableOpacity
@@ -406,8 +412,8 @@ const SmokingAssessmentScreen: React.FC = () => {
     ];
     return (
       <View style={styles.stepContainer}>
-        <Text style={styles.sectionLabel}>Current Smokers</Text>
-        <Text style={styles.stepTitle}>How often do you smoke or use tobacco?</Text>
+        <Text style={styles.categoryLabel}>CURRENT SMOKERS</Text>
+        <Text style={styles.phaseTitle}>How often do you smoke or use tobacco?</Text>
         <View style={styles.optionsContainer}>
           {options.map((opt) => (
             <TouchableOpacity
@@ -433,8 +439,8 @@ const SmokingAssessmentScreen: React.FC = () => {
     ];
     return (
       <View style={styles.stepContainer}>
-        <Text style={styles.sectionLabel}>Current Smokers</Text>
-        <Text style={styles.stepTitle}>What products do you currently use?</Text>
+        <Text style={styles.categoryLabel}>CURRENT SMOKERS</Text>
+        <Text style={styles.phaseTitle}>What products do you currently use?</Text>
         <View style={styles.optionsContainer}>
           {options.map((opt) => (
             <TouchableOpacity
@@ -460,7 +466,7 @@ const SmokingAssessmentScreen: React.FC = () => {
     ];
     return (
       <View style={styles.stepContainer}>
-        <Text style={styles.stepTitle}>Are you interested in cutting down or quitting?</Text>
+        <Text style={styles.phaseTitle}>Are you interested in cutting down or quitting?</Text>
         <View style={styles.optionsContainer}>
           {options.map((opt) => (
             <TouchableOpacity
@@ -486,8 +492,8 @@ const SmokingAssessmentScreen: React.FC = () => {
     ];
     return (
       <View style={styles.stepContainer}>
-        <Text style={styles.sectionLabel}>Former Smokers</Text>
-        <Text style={styles.stepTitle}>How long has it been since you quit smoking?</Text>
+        <Text style={styles.categoryLabel}>FORMER SMOKERS</Text>
+        <Text style={styles.phaseTitle}>How long has it been since you quit smoking?</Text>
         <View style={styles.optionsContainer}>
           {options.map((opt) => (
             <TouchableOpacity
@@ -507,8 +513,8 @@ const SmokingAssessmentScreen: React.FC = () => {
 
   const renderSecondhand = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.sectionLabel}>Secondhand Exposure</Text>
-      <Text style={styles.stepTitle}>Does anyone smoke inside your home?</Text>
+      <Text style={styles.phaseTitle}>Secondhand Exposure</Text>
+      <Text style={styles.phaseSubtitle}>Does anyone smoke inside your home?</Text>
       <View style={styles.yesNoContainer}>
         <TouchableOpacity
           style={[styles.yesNoCard, secondHand === true && styles.yesNoCardSelected]}
@@ -532,8 +538,8 @@ const SmokingAssessmentScreen: React.FC = () => {
 
   const renderCommitment = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.sectionLabel}>Commitment to Healthy Change</Text>
-      <Text style={styles.stepTitle}>Do you plan to improve this area?</Text>
+      <Text style={styles.phaseTitle}>Commitment to Healthy Change</Text>
+      <Text style={styles.phaseSubtitle}>Do you plan to improve this area?</Text>
       <View style={styles.yesNoContainer}>
         <TouchableOpacity
           style={[styles.yesNoCard, commitment === true && styles.yesNoCardSelected]}
@@ -557,53 +563,50 @@ const SmokingAssessmentScreen: React.FC = () => {
 
   const renderImportance = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.sectionLabel}>Importance</Text>
-      <Text style={styles.stepTitle}>How important is this change to you right now?</Text>
+      <Text style={styles.phaseTitle}>Importance</Text>
+      <Text style={styles.phaseSubtitle}>How important is this change to you right now?</Text>
       <CustomSlider value={importance} onValueChange={setImportance} />
     </View>
   );
 
   const renderConfidence = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.sectionLabel}>Confidence</Text>
-      <Text style={styles.stepTitle}>How confident are you about making this change?</Text>
+      <Text style={styles.phaseTitle}>Confidence</Text>
+      <Text style={styles.phaseSubtitle}>How confident are you about making this change?</Text>
       <CustomSlider value={confidence} onValueChange={setConfidence} />
     </View>
   );
 
   const renderScore = () => {
     const msg = getScoreMessage(score, smokingStatus);
-    const categoryLabel =
-      smokingStatus === 'never' ? 'Never Smoker' :
-      smokingStatus === 'former' ? 'Former Smoker' :
-      'Current Smoker';
-
     return (
       <View style={styles.stepContainer}>
-        <Text style={styles.sectionLabel}>{categoryLabel}</Text>
-        <Text style={styles.resultTitle}>{msg.title}</Text>
+        <Text style={styles.resultsTitle}>{msg.title}</Text>
         <View style={styles.scoreCard}>
-          <Text style={styles.scoreLabel}>Your nicotine score</Text>
-          <View style={styles.scoreBox}>
+          <Text style={styles.scoreLabel}>Based on your responses</Text>
+          <View style={styles.scoreCircle}>
+            <Text style={styles.scoreEmoji}>🚭</Text>
             <Text style={styles.scoreNumber}>{score ?? '--'}</Text>
-            <Text style={styles.scorePoints}>Points</Text>
+            <Text style={styles.scoreMax}>out of 100</Text>
           </View>
         </View>
-        <Text style={styles.resultBody}>{msg.body}</Text>
+        <Text style={styles.resultsDescription}>{msg.body}</Text>
       </View>
     );
   };
 
   const renderResources = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.sectionLabel}>Resources</Text>
-      <Text style={styles.resourcesMessage}>
-        {"You're on the right path!\n\nCheck out the Stress Management video and additional links for more support!"}
+      <Text style={styles.phaseTitle}>Resources</Text>
+      <Text style={styles.phaseSubtitle}>
+        You're on the right path! Here are some resources to support a smoke-free lifestyle.
       </Text>
-      <View style={styles.videoCard}>
-        <Text style={styles.videoEmoji}>🧘</Text>
-        <Text style={styles.videoLabel}>Stress Management</Text>
+      <View style={styles.introImageContainer}>
+        <Text style={styles.introEmoji}>🧘</Text>
       </View>
+      <Text style={styles.resourcesBody}>
+        Focusing on stress management and healthy coping strategies can significantly support your journey to better cardiovascular health.
+      </Text>
     </View>
   );
 
@@ -651,7 +654,11 @@ const SmokingAssessmentScreen: React.FC = () => {
       {/* Footer with Next button */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.navButton, isNextDisabled() && styles.buttonDisabled]}
+          style={[
+            styles.navButton,
+            nextLabel === 'Done' && styles.navButtonDark,
+            isNextDisabled() && styles.buttonDisabled,
+          ]}
           onPress={handleNext}
           disabled={isNextDisabled()}
         >
@@ -679,7 +686,7 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   backText: {
     color: '#007AFF',
@@ -696,16 +703,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#E9ECEF',
     borderRadius: 3,
     overflow: 'hidden',
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#224694',
+    backgroundColor: '#34C759',
     borderRadius: 3,
   },
   progressText: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#6C757D',
-    marginTop: 4,
+    fontWeight: '500',
   },
   content: {
     flexGrow: 1,
@@ -724,40 +732,59 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Section label (e.g. "Secondhand Exposure", "Commitment to Healthy Change")
-  sectionLabel: {
-    fontSize: 22,
+  // Small uppercase category label above a question
+  categoryLabel: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#212529',
+    color: '#8E8E93',
     textAlign: 'center',
-    marginBottom: 12,
+    letterSpacing: 0.5,
+    marginBottom: 8,
   },
 
-  // Main question title
-  stepTitle: {
-    fontSize: 26,
+  // Phase title (commitment, importance, confidence, etc.)
+  phaseTitle: {
+    fontSize: 30,
     fontWeight: '700',
-    color: '#212529',
+    color: '#000',
     textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 34,
+    marginBottom: 16,
   },
 
-  stepSubtitle: {
-    fontSize: 16,
-    color: '#6C757D',
+  // Phase subtitle
+  phaseSubtitle: {
+    fontSize: 18,
+    color: '#3C3C43',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 26,
+    marginBottom: 40,
+  },
+
+  // Intro screens
+  introTitle: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
     marginBottom: 24,
+    lineHeight: 44,
   },
-
-  // Welcome emoji
-  emojiContainer: {
+  introSubtitle: {
+    fontSize: 22,
+    fontStyle: 'italic',
+    color: '#000',
+    textAlign: 'center',
+    lineHeight: 32,
+    marginBottom: 40,
+  },
+  introImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 32,
+    marginBottom: 40,
   },
-  emojiLarge: {
-    fontSize: 90,
+  introEmoji: {
+    fontSize: 120,
   },
 
   // Multi-option selector cards
@@ -783,8 +810,7 @@ const styles = StyleSheet.create({
   },
   optionTitleItalic: {
     fontSize: 17,
-    fontWeight: '700',
-    fontStyle: 'italic',
+    fontWeight: '600',
     color: '#212529',
     textAlign: 'center',
   },
@@ -800,42 +826,39 @@ const styles = StyleSheet.create({
     color: '#ADB5BD',
   },
 
-  // Yes/No binary buttons (Figma-matched)
+  // Yes/No binary buttons
   yesNoContainer: {
-    gap: 14,
+    gap: 16,
     marginBottom: 8,
   },
   yesNoCard: {
-    height: 100,
-    borderRadius: 17,
-    backgroundColor: '#E4E1E1',
+    borderRadius: 14,
+    backgroundColor: '#E5E5EA',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingVertical: 20,
   },
   yesNoCardSelected: {
-    backgroundColor: '#212529',
+    backgroundColor: '#000000',
   },
   yesNoText: {
-    fontSize: 36,
+    fontSize: 20,
     fontWeight: '700',
-    fontStyle: 'italic',
-    color: '#212529',
+    color: '#555',
   },
   yesNoTextSelected: {
     color: '#FFFFFF',
   },
 
-  // Navigation button (blue, matches Figma)
+  // Navigation button (teal for Next, dark for Start/Done)
   navButton: {
-    backgroundColor: '#224694',
+    backgroundColor: '#2084a4',
     borderRadius: 17,
     paddingVertical: 20,
     alignItems: 'center',
+  },
+  navButtonDark: {
+    backgroundColor: '#000000',
   },
   navButtonText: {
     fontSize: 22,
@@ -843,77 +866,61 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   buttonDisabled: {
-    backgroundColor: '#C5C5C5',
+    backgroundColor: '#E5E5EA',
   },
 
-  // Score screen
-  resultTitle: {
-    fontSize: 30,
+  // Results screen
+  resultsTitle: {
+    fontSize: 34,
     fontWeight: '700',
-    color: '#212529',
+    color: '#000',
+    marginTop: 24,
     textAlign: 'center',
-    marginBottom: 24,
   },
   scoreCard: {
     backgroundColor: '#F2F2F7',
     borderRadius: 16,
     padding: 32,
-    marginBottom: 24,
+    marginVertical: 32,
     alignItems: 'center',
   },
   scoreLabel: {
     fontSize: 15,
     color: '#8E8E93',
-    marginBottom: 12,
-    textAlign: 'center',
+    marginBottom: 16,
   },
-  scoreBox: {
+  scoreCircle: {
     alignItems: 'center',
+  },
+  scoreEmoji: {
+    fontSize: 60,
+    marginBottom: 16,
   },
   scoreNumber: {
     fontSize: 72,
     fontWeight: '700',
-    color: '#212529',
+    color: '#000',
   },
-  scorePoints: {
-    fontSize: 16,
+  scoreMax: {
+    fontSize: 17,
     color: '#8E8E93',
-    marginTop: 4,
+    marginTop: 8,
   },
-  resultBody: {
+  resultsDescription: {
     fontSize: 17,
     color: '#3C3C43',
     lineHeight: 24,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 32,
   },
 
   // Resources screen
-  resourcesMessage: {
-    fontSize: 20,
-    color: '#212529',
-    textAlign: 'center',
-    lineHeight: 30,
-    marginBottom: 28,
-  },
-  videoCard: {
-    backgroundColor: '#F2F2F7',
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: '#212529',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 32,
-    marginBottom: 32,
-  },
-  videoEmoji: {
-    fontSize: 64,
-    marginBottom: 8,
-  },
-  videoLabel: {
+  resourcesBody: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#212529',
+    color: '#3C3C43',
+    textAlign: 'center',
+    lineHeight: 24,
+    paddingHorizontal: 8,
   },
 });
 

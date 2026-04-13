@@ -52,7 +52,7 @@ async function fetchAllHistory(userId, fromDate) {
     [userId]
   );
   const [bsRows] = await db.execute(
-    `SELECT value, test_type, DATE(created_at) AS day
+    `SELECT value, test_type, has_diabetes, DATE(created_at) AS day
      FROM blood_sugar_assessments
      WHERE user_id = ? AND value IS NOT NULL
      ORDER BY created_at ASC`,
@@ -136,7 +136,7 @@ function computeCompositeForDate(date, { blRows, bsRows, bmiRows, dietRows, smok
   // Blood sugar
   const bs = mostRecentOnOrBefore(bsRows, "day", date);
   if (bs && bs.value != null) {
-    const s = getBloodGlucoseScore({ testType: bs.test_type, value: Number(bs.value) });
+    const s = getBloodGlucoseScore({ testType: bs.test_type, value: Number(bs.value), hasDiabetes: bs.has_diabetes === 1 });
     if (s !== null) scores.push(s);
   }
 
@@ -221,7 +221,7 @@ router.get("/", verifyToken, async (req, res) => {
 
     // Get latest blood sugar value
     const [bloodSugarRows] = await db.execute(
-      "SELECT value, test_type FROM blood_sugar_assessments WHERE user_id = ? AND value IS NOT NULL ORDER BY created_at DESC LIMIT 1",
+      "SELECT value, test_type, has_diabetes FROM blood_sugar_assessments WHERE user_id = ? AND value IS NOT NULL ORDER BY created_at DESC LIMIT 1",
       [userId]
     );
 
@@ -231,7 +231,7 @@ router.get("/", verifyToken, async (req, res) => {
     if (bloodSugarRows && bloodSugarRows.length > 0 && bloodSugarRows[0].value !== null) {
       bloodSugarValue = Number(bloodSugarRows[0].value);
       bloodSugarTestType = bloodSugarRows[0].test_type;
-      bloodSugarScore = getBloodGlucoseScore({ testType: bloodSugarTestType, value: bloodSugarValue });
+      bloodSugarScore = getBloodGlucoseScore({ testType: bloodSugarTestType, value: bloodSugarValue, hasDiabetes: bloodSugarRows[0].has_diabetes === 1 });
     }
 
     // Get latest BMI value

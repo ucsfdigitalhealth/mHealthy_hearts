@@ -6,17 +6,17 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  SafeAreaView,
   PanResponder,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { getCachedBmi, setCachedBmi } from '../../utils/bmiCache';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SLIDER_TRACK_WIDTH = SCREEN_WIDTH - 64;
+const SLIDER_TRACK_WIDTH = SCREEN_WIDTH - 80;
 
 // ─── Local scoring (mirrors backend metricCalc.js) ─────────────────────────
 function getBMIScoreLocal(bmi: number | null): number | null {
@@ -41,7 +41,6 @@ const CustomSlider: React.FC<{
   value: number;
   onValueChange: (v: number) => void;
 }> = ({ value, onValueChange }) => {
-  // Use ref so PanResponder always reads the latest callback (avoids stale closure)
   const onValueChangeRef = useRef(onValueChange);
   onValueChangeRef.current = onValueChange;
 
@@ -64,14 +63,14 @@ const CustomSlider: React.FC<{
     })
   ).current;
 
-  const thumbPosition = (value / 10) * SLIDER_TRACK_WIDTH - 18;
+  const thumbPercent = (value / 10) * 100;
 
   return (
     <View style={sliderStyles.container}>
       <Text style={sliderStyles.valueText}>{value}</Text>
       <View style={sliderStyles.trackWrapper} {...panResponder.panHandlers}>
-        <View style={sliderStyles.track} />
-        <View style={[sliderStyles.thumb, { left: Math.max(0, thumbPosition) }]} />
+        <View style={sliderStyles.trackLine} />
+        <View style={[sliderStyles.thumb, { left: `${thumbPercent}%` as any }]} />
       </View>
       <View style={sliderStyles.labelsRow}>
         <View style={sliderStyles.labelItem}>
@@ -92,37 +91,38 @@ const CustomSlider: React.FC<{
 };
 
 const sliderStyles = StyleSheet.create({
-  container: { width: '100%', alignItems: 'center', paddingHorizontal: 16, marginBottom: 24 },
-  valueText: { fontSize: 72, fontWeight: '400', color: '#212529', marginBottom: 8 },
+  container: { width: '100%', alignItems: 'center', marginVertical: 16 },
+  valueText: { fontSize: 64, fontWeight: '700', color: '#000', marginBottom: 8, textAlign: 'center' },
   trackWrapper: {
     width: SLIDER_TRACK_WIDTH,
-    height: 36,
+    height: 40,
     justifyContent: 'center',
     position: 'relative',
   },
-  track: {
+  trackLine: {
     width: '100%',
-    height: 36,
-    backgroundColor: '#d9d9d9',
-    borderRadius: 18,
+    height: 4,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 2,
   },
   thumb: {
     position: 'absolute',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#000000',
-    top: 0,
+    top: 6,
+    marginLeft: -14,
   },
   labelsRow: {
     width: SLIDER_TRACK_WIDTH,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 10,
+    marginTop: 8,
   },
   labelItem: { alignItems: 'center' },
-  labelNumber: { fontSize: 18, color: '#a2a2a2', fontWeight: '400' },
-  labelText: { fontSize: 14, color: '#a2a2a2' },
+  labelNumber: { fontSize: 12, color: '#666', fontWeight: '500' },
+  labelText: { fontSize: 12, color: '#666' },
 });
 
 // ─── Step Identifiers ───────────────────────────────────────────────────────
@@ -136,6 +136,20 @@ type StepId =
   | 'confidence'
   | 'resources'
   | 'summary';
+
+const TOTAL_STEPS = 8;
+
+const STEP_NUMBERS: Record<StepId, number> = {
+  intro: 1,
+  knowsBmi: 2,
+  directBmiInput: 3,
+  heightWeightInput: 3,
+  commitment: 4,
+  importance: 5,
+  confidence: 6,
+  resources: 7,
+  summary: 8,
+};
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 const BMIFlowScreen: React.FC = () => {
@@ -249,59 +263,91 @@ const BMIFlowScreen: React.FC = () => {
       await setCachedBmi({ score: savedScore, value: savedValue });
     } catch (error) {
       console.error('Error saving BMI assessment:', error);
-      // Still cache locally if API fails
       await setCachedBmi({ score: finalScore, value: finalBmi });
     }
 
     navigation.goBack();
   };
 
+  // ── Footer button props ────────────────────────────────────────────────────
+  const getFooterButton = (): {
+    label: string;
+    onPress: () => void;
+    disabled: boolean;
+    dark: boolean;
+    show: boolean;
+  } | null => {
+    switch (currentStep) {
+      case 'intro':
+        return { label: 'Start', onPress: () => goToStep('knowsBmi'), disabled: false, dark: false, show: true };
+      case 'knowsBmi':
+        return null; // auto-navigates on choice tap
+      case 'directBmiInput':
+        return { label: 'Next', onPress: () => goToStep('commitment'), disabled: !directBmiValue, dark: false, show: true };
+      case 'heightWeightInput':
+        return { label: 'Next', onPress: () => goToStep('commitment'), disabled: computedBmi === null, dark: false, show: true };
+      case 'commitment':
+        return {
+          label: 'Next',
+          onPress: () => commitment === 'Yes' ? goToStep('importance') : goToStep('resources'),
+          disabled: commitment === null,
+          dark: false,
+          show: true,
+        };
+      case 'importance':
+        return { label: 'Next', onPress: () => goToStep('confidence'), disabled: false, dark: false, show: true };
+      case 'confidence':
+        return { label: 'Next', onPress: () => goToStep('resources'), disabled: false, dark: false, show: true };
+      case 'resources':
+        return { label: 'Next', onPress: () => goToStep('summary'), disabled: false, dark: false, show: true };
+      case 'summary':
+        return { label: 'Done', onPress: handleDone, disabled: false, dark: true, show: true };
+      default:
+        return null;
+    }
+  };
+
   // ── Step renderers ────────────────────────────────────────────────────────
 
   const renderIntro = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.mainTitle}>
-        Let's calculate your Body Mass Index (BMI)
-      </Text>
-      <Text style={styles.subtitle}>
+    <View style={styles.introContent}>
+      <Text style={styles.introTitle}>Let's calculate your Body Mass Index (BMI)</Text>
+      <Text style={styles.introSubtitle}>
         We'll ask for your height and weight so we can calculate your BMI and determine your score.
       </Text>
-      <TouchableOpacity style={styles.blackButton} onPress={() => goToStep('knowsBmi')}>
-        <Text style={styles.blackButtonText}>Start</Text>
-      </TouchableOpacity>
+      <View style={styles.introImageContainer}>
+        <Text style={styles.introEmoji}>⚖️</Text>
+      </View>
     </View>
   );
 
   const renderKnowsBmi = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.subtitleItalic}>Let's check your BMI status.</Text>
-      <Text style={styles.mainTitle}>Do you know your most recent BMI score?</Text>
-      <View style={styles.optionsGap}>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Do you know your most recent BMI score?</Text>
+      <View style={styles.commitmentButtons}>
         <TouchableOpacity
-          style={[styles.orangeButton, knowsBmi === 'Yes' && styles.orangeButtonSelected]}
-          onPress={() => {
-            setKnowsBmi('Yes');
-            goToStep('directBmiInput');
-          }}
+          style={[styles.commitmentButton, knowsBmi === 'Yes' && styles.commitmentButtonSelected]}
+          onPress={() => { setKnowsBmi('Yes'); goToStep('directBmiInput'); }}
         >
-          <Text style={styles.whiteButtonText}>Yes</Text>
+          <Text style={[styles.commitmentButtonText, knowsBmi === 'Yes' && styles.commitmentButtonTextSelected]}>
+            Yes
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.outlineButton, knowsBmi === 'No' && styles.outlineButtonSelected]}
-          onPress={() => {
-            setKnowsBmi('No');
-            goToStep('heightWeightInput');
-          }}
+          style={[styles.commitmentButton, knowsBmi === 'No' && styles.commitmentButtonSelected]}
+          onPress={() => { setKnowsBmi('No'); goToStep('heightWeightInput'); }}
         >
-          <Text style={[styles.outlineButtonText, knowsBmi === 'No' && styles.whiteButtonText]}>No</Text>
+          <Text style={[styles.commitmentButtonText, knowsBmi === 'No' && styles.commitmentButtonTextSelected]}>
+            No
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
   const renderDirectBmiInput = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.questionTitle}>Enter your most recent BMI result:</Text>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Enter your most recent BMI result:</Text>
       <View style={styles.inputRow}>
         <View style={styles.inputBox}>
           <TextInput
@@ -318,28 +364,16 @@ const BMIFlowScreen: React.FC = () => {
           <Text style={styles.unitSuper}>2</Text>
         </View>
       </View>
-      <TouchableOpacity
-        style={[styles.blackButton, !directBmiValue && styles.disabledButton]}
-        onPress={() => goToStep('commitment')}
-        disabled={!directBmiValue}
-      >
-        <Text style={styles.blackButtonText}>Next</Text>
-      </TouchableOpacity>
     </View>
   );
 
   const renderHeightWeightInput = () => {
-    const w = parseFloat(weight);
-    const h = parseFloat(height);
-    const previewBmi = !isNaN(w) && !isNaN(h) && h > 0 ? calcBMI(w, h) : null;
-    const canProceed = !isNaN(w) && !isNaN(h) && h > 0;
+    const previewBmi = computedBmi;
 
     return (
-      <View style={styles.stepContainer}>
-        <Text style={styles.questionTitle}>
-          We'll use your height and weight to calculate your BMI.
-        </Text>
-        <View style={styles.pinkCard}>
+      <View style={styles.phaseContent}>
+        <Text style={styles.phaseTitle}>We'll use your height and weight to calculate your BMI.</Text>
+        <View style={styles.inputCard}>
           <Text style={styles.cardLabel}>Enter your weight:</Text>
           <View style={styles.inputRow}>
             <View style={styles.inputBox}>
@@ -355,7 +389,7 @@ const BMIFlowScreen: React.FC = () => {
             <Text style={styles.unitMainDark}>lb</Text>
           </View>
         </View>
-        <View style={styles.pinkCard}>
+        <View style={styles.inputCard}>
           <Text style={styles.cardLabel}>Enter your height:</Text>
           <View style={styles.inputRow}>
             <View style={styles.inputBox}>
@@ -371,139 +405,89 @@ const BMIFlowScreen: React.FC = () => {
             <Text style={styles.unitMainDark}>in</Text>
           </View>
         </View>
-        <View style={styles.pinkCard}>
+        <View style={styles.inputCard}>
           <View style={styles.bmiPreviewRow}>
             <Text style={styles.cardLabel}>Your BMI is</Text>
-            <Text style={styles.bmiPreviewValue}>
-              {previewBmi !== null ? previewBmi : '—'}
-            </Text>
+            <Text style={styles.bmiPreviewValue}>{previewBmi !== null ? previewBmi : '—'}</Text>
           </View>
         </View>
-        <TouchableOpacity
-          style={[styles.blackButton, !canProceed && styles.disabledButton]}
-          onPress={() => goToStep('commitment')}
-          disabled={!canProceed}
-        >
-          <Text style={styles.blackButtonText}>Next</Text>
-        </TouchableOpacity>
       </View>
     );
   };
 
   const renderCommitment = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.mainTitle}>
-        Commitment to Healthy Change{'\n\n'}Do you plan to improve this area?
-      </Text>
-      <View style={styles.commitmentOptions}>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Commitment to Healthy Change</Text>
+      <Text style={styles.phaseSubtitle}>Do you plan to improve this area?</Text>
+      <View style={styles.commitmentButtons}>
         <TouchableOpacity
-          style={[
-            styles.commitmentButton,
-            commitment === 'Yes' ? styles.commitmentSelected : styles.commitmentUnselected,
-          ]}
+          style={[styles.commitmentButton, commitment === 'Yes' && styles.commitmentButtonSelected]}
           onPress={() => setCommitment('Yes')}
         >
-          <Text
-            style={[
-              styles.commitmentText,
-              commitment === 'Yes' ? styles.commitmentTextSelected : styles.commitmentTextUnselected,
-            ]}
-          >
+          <Text style={[styles.commitmentButtonText, commitment === 'Yes' && styles.commitmentButtonTextSelected]}>
             Yes
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[
-            styles.commitmentButton,
-            commitment === 'No' ? styles.commitmentSelected : styles.commitmentUnselected,
-          ]}
+          style={[styles.commitmentButton, commitment === 'No' && styles.commitmentButtonSelected]}
           onPress={() => setCommitment('No')}
         >
-          <Text
-            style={[
-              styles.commitmentText,
-              commitment === 'No' ? styles.commitmentTextSelected : styles.commitmentTextUnselected,
-            ]}
-          >
+          <Text style={[styles.commitmentButtonText, commitment === 'No' && styles.commitmentButtonTextSelected]}>
             No
           </Text>
         </TouchableOpacity>
       </View>
-      <TouchableOpacity
-        style={[styles.blueButton, commitment === null && styles.disabledButton]}
-        onPress={() => {
-          if (commitment === 'Yes') {
-            goToStep('importance');
-          } else {
-            goToStep('resources');
-          }
-        }}
-        disabled={commitment === null}
-      >
-        <Text style={styles.whiteButtonText}>Next</Text>
-      </TouchableOpacity>
     </View>
   );
 
   const renderImportance = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.mainTitle}>
-        Importance{'\n\n'}How important is this change to you right now?
-      </Text>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Importance</Text>
+      <Text style={styles.phaseSubtitle}>How important is this change to you right now?</Text>
       <CustomSlider value={importance} onValueChange={setImportance} />
-      <TouchableOpacity style={styles.blueButton} onPress={() => goToStep('confidence')}>
-        <Text style={styles.whiteButtonText}>Next</Text>
-      </TouchableOpacity>
     </View>
   );
 
   const renderConfidence = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.mainTitle}>
-        Confidence{'\n\n'}How confident are you about making this change?
-      </Text>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Confidence</Text>
+      <Text style={styles.phaseSubtitle}>How confident are you about making this change?</Text>
       <CustomSlider value={confidence} onValueChange={setConfidence} />
-      <TouchableOpacity style={styles.blueButton} onPress={() => goToStep('resources')}>
-        <Text style={styles.whiteButtonText}>Next</Text>
-      </TouchableOpacity>
     </View>
   );
 
   const renderResources = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.mainTitle}>Resources</Text>
-      <Text style={styles.resourcesBody}>
-        You're on the right path!{'\n\n'}Check out the Stress Management video and additional links for more support!
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Resources</Text>
+      <Text style={styles.phaseSubtitle}>
+        You're on the right path! Here are some tips to help you along the way.
       </Text>
-      <View style={styles.videoPlaceholder}>
-        <View style={styles.videoInner}>
-          <Text style={styles.videoPlayIcon}>▶</Text>
-        </View>
+      <View style={styles.introImageContainer}>
+        <Text style={styles.introEmoji}>🥦</Text>
       </View>
-      <TouchableOpacity style={styles.blueButton} onPress={() => goToStep('summary')}>
-        <Text style={styles.whiteButtonText}>Next</Text>
-      </TouchableOpacity>
+      <Text style={styles.resourcesBody}>
+        Focus on staying active, eating balanced meals, and maintaining a healthy weight to support your cardiovascular health.
+      </Text>
     </View>
   );
 
   const renderSummary = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.summaryTitle}>BMI Summary</Text>
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryCardTitle}>Here's your BMI score:</Text>
-        <View style={styles.summaryScoreBox}>
-          <Text style={styles.summaryScoreNumber}>
-            {finalScore !== null ? finalScore : '—'}
-          </Text>
-          <Text style={styles.summaryScoreLabel}> Points</Text>
+    <View style={styles.resultsContainer}>
+      <Text style={styles.resultsTitle}>Great Job!</Text>
+      <View style={styles.scoreCard}>
+        <Text style={styles.scoreLabel}>Based on your responses</Text>
+        <View style={styles.scoreCircle}>
+          <Text style={styles.scoreEmoji}>🎉</Text>
+          <Text style={styles.scoreNumber}>{finalScore !== null ? finalScore : '—'}</Text>
+          <Text style={styles.scoreMax}>out of 100</Text>
         </View>
         {finalBmi !== null && (
-          <Text style={styles.summaryBmiText}>BMI: {finalBmi}</Text>
+          <Text style={styles.scoreBmi}>BMI: {finalBmi}</Text>
         )}
       </View>
-      <TouchableOpacity style={styles.blackButton} onPress={handleDone}>
-        <Text style={styles.blackButtonText}>Done</Text>
-      </TouchableOpacity>
+      <Text style={styles.resultsDescription}>
+        Your BMI score reflects your body mass index. A higher score indicates a BMI in the healthy range for cardiovascular health.
+      </Text>
     </View>
   );
 
@@ -522,6 +506,9 @@ const BMIFlowScreen: React.FC = () => {
   };
 
   const isCancelStep = currentStep === 'intro';
+  const stepNumber = STEP_NUMBERS[currentStep];
+  const progressPercent = ((stepNumber - 1) / (TOTAL_STEPS - 1)) * 100;
+  const footerButton = getFooterButton();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -530,7 +517,14 @@ const BMIFlowScreen: React.FC = () => {
           <Ionicons name="chevron-back" size={24} color="#007AFF" />
           <Text style={styles.backText}>{isCancelStep ? 'Cancel' : 'Back'}</Text>
         </TouchableOpacity>
+        <View style={styles.progressBarContainer}>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+          </View>
+          <Text style={styles.progressText}>Step {stepNumber} of {TOTAL_STEPS}</Text>
+        </View>
       </View>
+
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -538,6 +532,22 @@ const BMIFlowScreen: React.FC = () => {
       >
         {renderCurrentStep()}
       </ScrollView>
+
+      {footerButton && (
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[
+              styles.footerButton,
+              footerButton.dark && styles.footerButtonDark,
+              footerButton.disabled && styles.footerButtonDisabled,
+            ]}
+            onPress={footerButton.onPress}
+            disabled={footerButton.disabled}
+          >
+            <Text style={styles.footerButtonText}>{footerButton.label}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -549,92 +559,112 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 12,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E9ECEF',
   },
-  backButton: { flexDirection: 'row', alignItems: 'center' },
+  backButton: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   backText: { color: '#007AFF', fontSize: 16, fontWeight: '500', marginLeft: 4 },
-  content: { flexGrow: 1, padding: 24 },
-  stepContainer: { flex: 1, justifyContent: 'center', minHeight: 500 },
+  progressBarContainer: { alignItems: 'center' },
+  progressBar: {
+    width: '100%',
+    height: 6,
+    backgroundColor: '#E9ECEF',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: { height: '100%', backgroundColor: '#34C759', borderRadius: 3 },
+  progressText: { fontSize: 14, color: '#6C757D', fontWeight: '500' },
 
-  // Typography
-  mainTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#212529',
-    textAlign: 'center',
-    marginBottom: 36,
-    lineHeight: 36,
-  },
-  subtitle: {
-    fontSize: 20,
-    fontStyle: 'italic',
-    color: '#212529',
-    textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 30,
-  },
-  subtitleItalic: {
-    fontSize: 18,
-    fontStyle: 'italic',
-    color: '#212529',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  questionTitle: {
-    fontSize: 24,
-    fontWeight: '400',
-    color: '#212529',
-    textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 32,
-  },
+  content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 16 },
 
-  // Buttons
-  blackButton: {
-    backgroundColor: '#000000',
-    borderRadius: 17,
-    paddingVertical: 20,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  blackButtonText: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
-  blueButton: {
-    backgroundColor: '#224694',
-    borderRadius: 17,
-    paddingVertical: 20,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  whiteButtonText: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
-  disabledButton: { opacity: 0.4 },
-
-  // Yes/No options (knows BMI step)
-  optionsGap: { gap: 16, marginBottom: 16 },
-  orangeButton: {
-    backgroundColor: '#e77517',
-    borderRadius: 17,
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  orangeButtonSelected: { backgroundColor: '#e77517' },
-  outlineButton: {
-    borderRadius: 17,
-    paddingVertical: 20,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#000000',
+  footer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
   },
-  outlineButtonSelected: { backgroundColor: '#000000' },
-  outlineButtonText: { color: '#000000', fontSize: 22, fontWeight: '700' },
+  footerButton: {
+    backgroundColor: '#2084a4',
+    borderRadius: 17,
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  footerButtonDark: { backgroundColor: '#000000' },
+  footerButtonDisabled: { backgroundColor: '#E5E5EA' },
+  footerButtonText: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
+
+  // Intro
+  introContent: {
+    flexGrow: 1,
+    paddingTop: 8,
+    alignItems: 'center',
+  },
+  introTitle: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 44,
+  },
+  introSubtitle: {
+    fontSize: 22,
+    fontStyle: 'italic',
+    color: '#000',
+    textAlign: 'center',
+    lineHeight: 32,
+    marginBottom: 40,
+  },
+  introImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  introEmoji: { fontSize: 120 },
+
+  // Phase screens
+  phaseContent: {
+    flexGrow: 1,
+    paddingTop: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  phaseTitle: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  phaseSubtitle: {
+    fontSize: 18,
+    color: '#3C3C43',
+    textAlign: 'center',
+    lineHeight: 26,
+    marginBottom: 40,
+  },
+
+  // Commitment buttons
+  commitmentButtons: { width: '100%', gap: 16 },
+  commitmentButton: {
+    backgroundColor: '#E5E5EA',
+    borderRadius: 14,
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  commitmentButtonSelected: { backgroundColor: '#000000' },
+  commitmentButtonText: { fontSize: 20, fontWeight: '700', color: '#555' },
+  commitmentButtonTextSelected: { color: '#FFFFFF' },
 
   // Input layout
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 16,
   },
   inputBox: {
     borderWidth: 1,
@@ -658,102 +688,56 @@ const styles = StyleSheet.create({
   unitSuper: { fontSize: 20, fontWeight: '700', color: '#212529', marginTop: -8 },
   unitMainDark: { fontSize: 36, fontWeight: '700', color: '#212529' },
 
-  // Height/Weight pink cards
-  pinkCard: {
-    backgroundColor: 'rgba(212,68,58,0.15)',
-    borderRadius: 17,
+  // Height/Weight input cards
+  inputCard: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 14,
     padding: 16,
     marginBottom: 12,
+    width: '100%',
   },
-  cardLabel: { fontSize: 20, color: '#212529', marginBottom: 8 },
+  cardLabel: { fontSize: 18, color: '#3C3C43', marginBottom: 8 },
   bmiPreviewRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' },
   bmiPreviewValue: { fontSize: 44, fontWeight: '700', color: '#212529', marginLeft: 12 },
 
-  // Commitment buttons
-  commitmentOptions: { gap: 12, marginBottom: 16 },
-  commitmentButton: {
-    borderRadius: 17,
-    paddingVertical: 28,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  commitmentSelected: { backgroundColor: '#000000' },
-  commitmentUnselected: { backgroundColor: '#e4e1e1' },
-  commitmentText: { fontSize: 28, fontWeight: '700', fontStyle: 'italic' },
-  commitmentTextSelected: { color: '#FFFFFF' },
-  commitmentTextUnselected: { color: '#000000' },
-
   // Resources
   resourcesBody: {
-    fontSize: 22,
-    color: '#212529',
+    fontSize: 16,
+    color: '#3C3C43',
     textAlign: 'center',
-    lineHeight: 34,
-    marginBottom: 24,
+    lineHeight: 24,
+    paddingHorizontal: 8,
   },
-  videoPlaceholder: {
-    backgroundColor: '#d9d9d9',
-    borderWidth: 3,
-    borderColor: '#000000',
-    borderRadius: 8,
-    height: 160,
-    marginBottom: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  videoInner: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 3,
-    borderColor: '#000000',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.7)',
-  },
-  videoPlayIcon: { fontSize: 32, color: '#000000', marginLeft: 6 },
 
-  // Summary
-  summaryTitle: {
-    fontSize: 36,
+  // Results / summary
+  resultsContainer: { width: '100%' },
+  resultsTitle: {
+    fontSize: 34,
     fontWeight: '700',
-    color: '#212529',
+    color: '#000',
+    marginTop: 24,
     textAlign: 'center',
-    marginBottom: 24,
   },
-  summaryCard: {
-    backgroundColor: '#f0ecec',
-    borderRadius: 17,
-    padding: 24,
-    marginBottom: 32,
+  scoreCard: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 16,
+    padding: 32,
+    marginVertical: 32,
     alignItems: 'center',
   },
-  summaryCardTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    fontStyle: 'italic',
-    color: '#212529',
-    marginBottom: 16,
+  scoreLabel: { fontSize: 15, color: '#8E8E93', marginBottom: 16 },
+  scoreCircle: { alignItems: 'center' },
+  scoreEmoji: { fontSize: 60, marginBottom: 16 },
+  scoreNumber: { fontSize: 72, fontWeight: '700', color: '#000' },
+  scoreMax: { fontSize: 17, color: '#8E8E93', marginTop: 8 },
+  scoreBmi: { fontSize: 15, color: '#8E8E93', marginTop: 12 },
+  resultsDescription: {
+    fontSize: 17,
+    color: '#3C3C43',
+    lineHeight: 24,
     textAlign: 'center',
+    marginBottom: 32,
   },
-  summaryScoreBox: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#c4c4c4',
-    borderRadius: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 12,
-  },
-  summaryScoreNumber: { fontSize: 56, fontWeight: '700', color: '#212529' },
-  summaryScoreLabel: { fontSize: 32, fontWeight: '700', color: '#212529', marginLeft: 8 },
-  summaryBmiText: { fontSize: 18, color: '#6C757D', marginTop: 4 },
 });
 
 export default BMIFlowScreen;

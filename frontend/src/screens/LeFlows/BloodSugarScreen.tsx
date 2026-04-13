@@ -17,72 +17,105 @@ import { useAuth } from '../../context/AuthContext';
 import { setCachedBloodSugar } from '../../utils/bloodSugarCache';
 
 // ─── Scoring helper (mirrors backend/metricCalc.js) ─────────────────────────
-function getBloodGlucoseScore(testType: string | null, value: number | null): number | null {
+// Implements LE8 7-tier scoring (Lloyd-Jones et al. 2022), bifurcated by diabetes status.
+function getBloodGlucoseScore(
+  testType: string | null,
+  value: number | null,
+  hasDiabetes: boolean,
+): number | null {
   if (value === null || testType === null) return null;
-  if (testType === 'HbA1c') {
-    if (value < 5.7) return 100;
-    if (value <= 6.4) return 60;
-    if (value <= 6.9) return 40;
-    if (value <= 7.9) return 25;
-    if (value <= 8.9) return 20;
-    if (value <= 9.9) return 10;
+
+  if (hasDiabetes) {
+    // For people with diabetes, LE8 scores exclusively via HbA1c (max = 40)
+    if (testType !== 'HbA1c') return null;
+    if (value < 7.0)  return 40;
+    if (value < 8.0)  return 30;
+    if (value < 9.0)  return 20;
+    if (value < 10.0) return 10;
     return 0;
   }
-  // Fasting Blood Glucose
-  if (value < 100) return 100;
+
+  // No diabetes — HbA1c path
+  if (testType === 'HbA1c') {
+    if (value < 5.7)  return 100;
+    if (value <= 6.4) return 60;
+    return 0;
+  }
+
+  // No diabetes — Fasting Blood Glucose (mg/dL)
+  if (value < 100)  return 100;
   if (value <= 125) return 60;
-  if (value <= 154) return 40;
-  if (value <= 182) return 30;
-  if (value <= 212) return 20;
-  if (value <= 240) return 10;
   return 0;
 }
 
-// ─── Result range helper ─────────────────────────────────────────────────────
-type Range = 'in-range' | 'prediabetes' | 'diabetes';
-function getRange(testType: string | null, value: number | null): Range | null {
+// ─── Result range helpers ────────────────────────────────────────────────────
+type Range = 'in-range' | 'prediabetes' | 'elevated';
+
+function getRange(
+  testType: string | null,
+  value: number | null,
+  hasDiabetes: boolean,
+): Range | null {
   if (value === null || testType === null) return null;
+
+  if (hasDiabetes) {
+    // Diabetes path: result screen is not shown (flow skips step 5)
+    return null;
+  }
+
   if (testType === 'HbA1c') {
-    if (value < 5.7) return 'in-range';
+    if (value < 5.7)  return 'in-range';
     if (value <= 6.4) return 'prediabetes';
-    return 'diabetes';
+    return 'elevated';
   }
-  if (value < 100) return 'in-range';
+
+  // FBG, no diabetes
+  if (value < 100)  return 'in-range';
   if (value <= 125) return 'prediabetes';
-  return 'diabetes';
+  return 'elevated';
 }
 
-const RANGE_COLORS = {
-  'in-range': '#369949',
+const RANGE_COLORS: Record<Range, string> = {
+  'in-range':   '#369949',
   'prediabetes': '#d1ce1d',
-  'diabetes': '#cd482f',
+  'elevated':   '#cd482f',
 };
 
-const RANGE_LABELS = {
-  'in-range': 'in-range',
-  'prediabetes': 'prediabetes',
-  'diabetes': 'diabetes',
-};
-
-function getResultMessage(testType: string | null, value: number | null): string {
+function getResultMessage(
+  testType: string | null,
+  value: number | null,
+  hasDiabetes: boolean,
+): string {
   if (!testType || value === null) return '';
-  const range = getRange(testType, value);
+  const range = getRange(testType, value, hasDiabetes);
+  if (!range) return '';
+
   if (testType === 'HbA1c') {
-    return `Your A1C is ${value}%. That falls in the ${RANGE_LABELS[range!]} category.`;
+    if (range === 'in-range')   return `Your A1C is ${value}%. That falls in the healthy range.`;
+    if (range === 'prediabetes') return `Your A1C is ${value}%. That falls in the prediabetes range.`;
+    return `Your A1C is ${value}%, which is above the typical healthy range. We recommend discussing this result with your doctor.`;
   }
-  return `Your FBG is ${value} mg/dL. That falls in the ${RANGE_LABELS[range!]} category.`;
+
+  // FBG
+  if (range === 'in-range')   return `Your FBG is ${value} mg/dL. That falls in the healthy range.`;
+  if (range === 'prediabetes') return `Your FBG is ${value} mg/dL. That falls in the prediabetes range.`;
+  return `Your FBG is ${value} mg/dL, which is above the healthy range. We recommend discussing this result with your doctor.`;
 }
 
-function getResultTip(testType: string | null, value: number | null): string {
-  const range = getRange(testType, value);
+function getResultTip(
+  testType: string | null,
+  value: number | null,
+  hasDiabetes: boolean,
+): string {
+  const range = getRange(testType, value, hasDiabetes);
   if (range === 'in-range') {
     return 'Tip: Keeping up with your current habits can help you stay on track. Small, steady routines often make the biggest difference over time.';
   }
   if (range === 'prediabetes') {
     return 'Tip: Even small changes—like adding a short walk or choosing one healthier meal a day—can support your overall well‑being. Starting gradually can feel more manageable.';
   }
-  if (range === 'diabetes') {
-    return 'Tip: Focusing on simple, daily steps—like staying active, eating balanced meals, and following your care plan—can support your health. Checking in with your healthcare team can also help you decide what\'s right for you.';
+  if (range === 'elevated') {
+    return 'Tip: A single reading above the healthy range doesn\'t confirm a diagnosis — a healthcare professional can help you understand what this means and what steps to consider next.';
   }
   return '';
 }
@@ -93,8 +126,6 @@ const CustomSlider: React.FC<{
   onValueChange: (v: number) => void;
 }> = ({ value, onValueChange }) => {
   const trackWidthRef = useRef<number>(0);
-  // Keep a ref to onValueChange so the panResponder (created once) always
-  // calls the latest callback, even when the component is reused across steps.
   const onValueChangeRef = useRef(onValueChange);
   onValueChangeRef.current = onValueChange;
 
@@ -121,12 +152,13 @@ const CustomSlider: React.FC<{
     <View style={sliderStyles.container}>
       <Text style={sliderStyles.valueDisplay}>{value}</Text>
       <View
-        style={sliderStyles.track}
+        style={sliderStyles.trackWrapper}
         onLayout={(e: LayoutChangeEvent) => {
           trackWidthRef.current = e.nativeEvent.layout.width;
         }}
         {...panResponder.panHandlers}
       >
+        <View style={sliderStyles.trackLine} />
         <View style={[sliderStyles.thumb, { left: `${thumbPercent}%` as any }]} />
       </View>
       <View style={sliderStyles.labels}>
@@ -148,51 +180,28 @@ const CustomSlider: React.FC<{
 };
 
 const sliderStyles = StyleSheet.create({
-  container: {
-    marginBottom: 40,
-    alignItems: 'center',
-  },
-  valueDisplay: {
-    fontSize: 80,
-    fontWeight: '700',
-    color: '#212529',
-    marginBottom: 16,
-  },
-  track: {
+  container: { marginVertical: 16, alignItems: 'center', width: '100%' },
+  valueDisplay: { fontSize: 64, fontWeight: '700', color: '#000', marginBottom: 8, textAlign: 'center' },
+  trackWrapper: {
     width: '90%',
-    height: 34,
-    backgroundColor: '#D9D9D9',
-    borderRadius: 17,
+    height: 40,
     justifyContent: 'center',
     position: 'relative',
   },
+  trackLine: { width: '100%', height: 4, backgroundColor: '#E5E5EA', borderRadius: 2 },
   thumb: {
     position: 'absolute',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#212529',
-    top: -1,
-    marginLeft: -18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#000',
+    top: 6,
+    marginLeft: -14,
   },
-  labels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '90%',
-    marginTop: 8,
-  },
-  labelItem: {
-    alignItems: 'center',
-  },
-  labelNum: {
-    fontSize: 18,
-    color: '#A2A2A2',
-    fontWeight: '500',
-  },
-  labelText: {
-    fontSize: 13,
-    color: '#A2A2A2',
-  },
+  labels: { flexDirection: 'row', justifyContent: 'space-between', width: '90%', marginTop: 8 },
+  labelItem: { alignItems: 'center' },
+  labelNum: { fontSize: 12, color: '#666', fontWeight: '500' },
+  labelText: { fontSize: 12, color: '#666' },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -200,71 +209,74 @@ const BloodSugarFlowScreen: React.FC = () => {
   const navigation = useNavigation();
   const { accessToken } = useAuth();
 
-  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [currentStep, setCurrentStep] = useState<number>(0);
 
-  // Selections keyed by step id
+  // selections keys match step numbers
   const [selections, setSelections] = useState<Record<number, any>>({
     1: null,  // knowsResult: 'Yes' | 'No'
-    2: 'Fasting Blood Glucose', // testType
-    3: null,  // value string
-    4: null,  // hasDiabetes: 'Yes' | 'No'
+    2: null,  // hasDiabetes: 'Yes' | 'No'
+    3: null,  // testType: 'Fasting Blood Glucose' | 'HbA1c'
+    4: null,  // value string
     6: null,  // commitment: 'Yes' | 'No'
     7: 5,     // importance 0-10
     8: 5,     // confidence 0-10
   });
 
-  // ── Navigation helpers ──────────────────────────────────────────────────────
   const goToStep = (step: number) => setCurrentStep(step);
-
-  const handleNext = () => {
-    if (currentStep < 10) setCurrentStep(currentStep + 1);
-  };
-
-  const handleBack = () => {
-    if (currentStep === 1) {
-      navigation.goBack();
-      return;
-    }
-    // Reverse the conditional skips
-    if (currentStep === 4 && selections[1] === 'No') {
-      setCurrentStep(1);
-      return;
-    }
-    if (currentStep === 6 && selections[1] === 'Yes') {
-      setCurrentStep(5);
-      return;
-    }
-    if (currentStep === 6 && selections[1] === 'No') {
-      setCurrentStep(4);
-      return;
-    }
-    if (currentStep === 9 && selections[6] === 'No') {
-      setCurrentStep(6);
-      return;
-    }
-    setCurrentStep(currentStep - 1);
-  };
 
   const setSelection = (stepId: number, value: any) => {
     setSelections(prev => ({ ...prev, [stepId]: value }));
   };
 
-  // ── Choice handlers ─────────────────────────────────────────────────────────
-  const handleStep1Choice = (choice: string) => {
-    setSelection(1, choice);
-    if (choice === 'No') {
-      goToStep(4); // skip test type + value + result feedback
-    } else {
-      goToStep(2);
+  // ── Derived booleans ────────────────────────────────────────────────────────
+  const knowsResult  = selections[1] === 'Yes';
+  const hasDiabetes  = selections[2] === 'Yes';
+  const testType     = selections[3] as string | null;
+  const rawValue     = selections[4];
+  const numValue     = rawValue ? parseFloat(rawValue) : null;
+
+  // ── Back navigation ─────────────────────────────────────────────────────────
+  const handleBack = () => {
+    switch (currentStep) {
+      case 0:  navigation.goBack(); break;
+      case 1:  goToStep(0); break;
+      case 2:  goToStep(1); break;
+      case 3:  goToStep(2); break;
+      case 4:  goToStep(hasDiabetes ? 2 : 3); break;
+      case 5:  goToStep(4); break;
+      case 6:  goToStep(!knowsResult ? 2 : hasDiabetes ? 4 : 5); break;
+      case 7:  goToStep(6); break;
+      case 8:  goToStep(7); break;
+      case 9:  goToStep(selections[6] === 'Yes' ? 8 : 6); break;
+      case 10: goToStep(9); break;
+      default: goToStep(currentStep - 1);
     }
   };
 
-  const handleStep4Choice = (choice: string) => {
-    setSelection(4, choice);
-    if (selections[1] === 'Yes') {
-      goToStep(5); // show result feedback
+  // ── Choice handlers (auto-navigate) ────────────────────────────────────────
+  const handleStep1Choice = (choice: string) => {
+    setSelection(1, choice);
+    goToStep(2);
+  };
+
+  const handleStep2Choice = (choice: string) => {
+    setSelection(2, choice);
+    const hasResult = selections[1] === 'Yes';
+    const isDiabetic = choice === 'Yes';
+
+    if (!hasResult) {
+      // No lab result — skip test type, value entry, and result screen
+      goToStep(6);
+      return;
+    }
+    if (isDiabetic) {
+      // Diabetes path — HbA1c only, skip test type selection
+      setSelection(3, 'HbA1c');
+      goToStep(4);
     } else {
-      goToStep(6); // skip result feedback
+      // No diabetes — show test type selection
+      setSelection(3, null);
+      goToStep(3);
     }
   };
 
@@ -273,24 +285,15 @@ const BloodSugarFlowScreen: React.FC = () => {
   };
 
   const handleStep6Next = () => {
-    if (selections[6] === 'Yes') {
-      goToStep(7);
-    } else {
-      goToStep(9); // skip importance + confidence
-    }
+    goToStep(selections[6] === 'Yes' ? 7 : 9);
   };
 
   // ── Save on Done ────────────────────────────────────────────────────────────
   const handleDone = async () => {
-    const testType = selections[2] as string | null;
-    const rawValue = selections[3];
-    const numValue = rawValue ? parseFloat(rawValue) : null;
-    const hasDiabetes = selections[4] === 'Yes';
     const commitmentToChange = selections[6] === 'Yes';
-    const importance = commitmentToChange ? selections[7] : null;
-    const confidence = commitmentToChange ? selections[8] : null;
-
-    const score = getBloodGlucoseScore(testType, numValue);
+    const importance  = commitmentToChange ? selections[7] : null;
+    const confidence  = commitmentToChange ? selections[8] : null;
+    const score = getBloodGlucoseScore(testType, numValue, hasDiabetes);
 
     try {
       await fetch('http://localhost:3000/api/blood-sugar', {
@@ -312,34 +315,57 @@ const BloodSugarFlowScreen: React.FC = () => {
       console.error('Error saving blood sugar assessment:', error);
     }
 
-    // Update AsyncStorage immediately so CardioVascularScreen reflects new data
-    await setCachedBloodSugar({
-      score,
-      value: numValue,
-      testType,
-    });
-
+    await setCachedBloodSugar({ score, value: numValue, testType });
     navigation.goBack();
   };
 
+  // ── Footer button props ─────────────────────────────────────────────────────
+  const getFooterButton = (): {
+    label: string;
+    onPress: () => void;
+    disabled: boolean;
+    dark: boolean;
+  } | null => {
+    switch (currentStep) {
+      case 0:  return { label: 'Start', onPress: () => goToStep(1), disabled: false, dark: false };
+      case 1:  return null; // auto-navigates on choice
+      case 2:  return null; // auto-navigates on choice
+      case 3:  return { label: 'Next', onPress: () => goToStep(4), disabled: !selections[3], dark: false };
+      case 4:  return { label: 'Next', onPress: () => goToStep(hasDiabetes ? 6 : 5), disabled: !selections[4], dark: false };
+      case 5:  return { label: 'Next', onPress: () => goToStep(6), disabled: false, dark: false };
+      case 6:  return { label: 'Next', onPress: handleStep6Next, disabled: !selections[6], dark: false };
+      case 7:  return { label: 'Next', onPress: () => goToStep(8), disabled: false, dark: false };
+      case 8:  return { label: 'Next', onPress: () => goToStep(9), disabled: false, dark: false };
+      case 9:  return { label: 'Next', onPress: () => goToStep(10), disabled: false, dark: false };
+      case 10: return { label: 'Done', onPress: handleDone, disabled: false, dark: true };
+      default: return null;
+    }
+  };
+
   // ── Step renderers ──────────────────────────────────────────────────────────
+  const renderStep0 = () => (
+    <View style={styles.phaseContent}>
+      <Text style={styles.introTitle}>Let's assess your blood sugar</Text>
+      <Text style={styles.introSubtitle}>
+        This short assessment helps calculate your blood sugar score for cardiovascular health.
+      </Text>
+      <View style={styles.introImageContainer}>
+        <Text style={styles.introEmoji}>🩸</Text>
+      </View>
+    </View>
+  );
+
   const renderStep1 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Do you know your most recent blood sugar result?</Text>
-      <View style={styles.buttonGroup}>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Do you know your most recent blood sugar result?</Text>
+      <View style={styles.yesNoContainer}>
         {['Yes', 'No'].map(choice => (
           <TouchableOpacity
             key={choice}
-            style={[
-              styles.largeButton,
-              selections[1] === choice ? styles.primaryButton : styles.secondaryButton,
-            ]}
+            style={[styles.yesNoCard, selections[1] === choice && styles.yesNoCardSelected]}
             onPress={() => handleStep1Choice(choice)}
           >
-            <Text style={[
-              styles.largeButtonText,
-              selections[1] === choice ? styles.primaryButtonText : styles.secondaryButtonText,
-            ]}>
+            <Text style={[styles.yesNoText, selections[1] === choice && styles.yesNoTextSelected]}>
               {choice}
             </Text>
           </TouchableOpacity>
@@ -349,42 +375,51 @@ const BloodSugarFlowScreen: React.FC = () => {
   );
 
   const renderStep2 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Which type of blood sugar test do you have?</Text>
-      <View style={styles.choiceGroup}>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Have you ever been told by a healthcare professional that you have diabetes?</Text>
+      <View style={styles.yesNoContainer}>
+        {['Yes', 'No'].map(choice => (
+          <TouchableOpacity
+            key={choice}
+            style={[styles.yesNoCard, selections[2] === choice && styles.yesNoCardSelected]}
+            onPress={() => handleStep2Choice(choice)}
+          >
+            <Text style={[styles.yesNoText, selections[2] === choice && styles.yesNoTextSelected]}>
+              {choice}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+
+  const renderStep3 = () => (
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Which type of blood sugar test do you have?</Text>
+      <View style={styles.optionsContainer}>
         {[
           { title: 'Fasting Blood Glucose', subtitle: 'Usually taken after 8+ hours of fasting', value: 'Fasting Blood Glucose' },
           { title: 'HbA1c', subtitle: 'Average blood sugar over 2–3 months', value: 'HbA1c' },
         ].map(option => (
           <TouchableOpacity
             key={option.value}
-            style={[styles.choiceButton, selections[2] === option.value && styles.choiceButtonSelected]}
-            onPress={() => setSelection(2, option.value)}
+            style={[styles.optionCard, selections[3] === option.value && styles.optionCardSelected]}
+            onPress={() => setSelection(3, option.value)}
           >
-            <View style={styles.choiceContent}>
-              <View style={[styles.radio, selections[2] === option.value && styles.radioSelected]}>
-                {selections[2] === option.value && <View style={styles.radioInner} />}
-              </View>
-              <View style={styles.choiceTextContainer}>
-                <Text style={styles.choiceTitle}>{option.title}</Text>
-                <Text style={styles.choiceSubtitle}>{option.subtitle}</Text>
-              </View>
-            </View>
+            <Text style={[styles.optionTitle, selections[3] === option.value && styles.optionTitleSelected]}>
+              {option.title}
+            </Text>
+            <Text style={[styles.optionSubtitle, selections[3] === option.value && styles.optionSubtitleSelected]}>
+              {option.subtitle}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
-      <TouchableOpacity
-        style={[styles.nextButton, !selections[2] && styles.nextButtonDisabled]}
-        onPress={handleNext}
-        disabled={!selections[2]}
-      >
-        <Text style={styles.nextButtonText}>Next</Text>
-      </TouchableOpacity>
     </View>
   );
 
-  const renderStep3 = () => {
-    const isHbA1c = selections[2] === 'HbA1c';
+  const renderStep4 = () => {
+    const isHbA1c = selections[3] === 'HbA1c';
     const title = isHbA1c
       ? 'Please enter your most recent HbA1c result:'
       : 'Please enter your most recent fasting blood glucose result:';
@@ -392,185 +427,111 @@ const BloodSugarFlowScreen: React.FC = () => {
     const placeholder = isHbA1c ? '5.7' : '100';
 
     return (
-      <View style={styles.stepContainer}>
-        <Text style={styles.stepTitle}>{title}</Text>
+      <View style={styles.phaseContent}>
+        <Text style={styles.phaseTitle}>{title}</Text>
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            value={selections[3] || ''}
-            onChangeText={v => setSelection(3, v)}
+            value={selections[4] || ''}
+            onChangeText={v => setSelection(4, v)}
             placeholder={placeholder}
             keyboardType="decimal-pad"
           />
           <Text style={styles.inputUnit}>{unit}</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.nextButton, !selections[3] && styles.nextButtonDisabled]}
-          onPress={handleNext}
-          disabled={!selections[3]}
-        >
-          <Text style={styles.nextButtonText}>Next</Text>
-        </TouchableOpacity>
       </View>
     );
   };
 
-  const renderStep4 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Have you ever been told by a healthcare professional that you have diabetes?</Text>
-      <View style={styles.buttonGroup}>
-        {['Yes', 'No'].map(choice => (
-          <TouchableOpacity
-            key={choice}
-            style={[
-              styles.largeButton,
-              selections[4] === choice ? styles.primaryButton : styles.secondaryButton,
-            ]}
-            onPress={() => handleStep4Choice(choice)}
-          >
-            <Text style={[
-              styles.largeButtonText,
-              selections[4] === choice ? styles.primaryButtonText : styles.secondaryButtonText,
-            ]}>
-              {choice}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-
   const renderStep5 = () => {
-    const testType = selections[2] as string | null;
-    const numValue = selections[3] ? parseFloat(selections[3]) : null;
-    const range = getRange(testType, numValue);
-    const color = range ? RANGE_COLORS[range] : '#212529';
-    const message = getResultMessage(testType, numValue);
-    const tip = getResultTip(testType, numValue);
+    const range  = getRange(testType, numValue, hasDiabetes);
+    const color  = range ? RANGE_COLORS[range] : '#212529';
+    const message = getResultMessage(testType, numValue, hasDiabetes);
+    const tip    = getResultTip(testType, numValue, hasDiabetes);
 
     return (
-      <View style={styles.stepContainer}>
+      <View style={styles.phaseContent}>
         <Text style={[styles.resultMessage, { color }]}>{message}</Text>
         <View style={styles.tipCard}>
           <Text style={styles.tipText}>{tip}</Text>
         </View>
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-          <Text style={styles.nextButtonText}>Next</Text>
-        </TouchableOpacity>
       </View>
     );
   };
 
   const renderStep6 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.commitTitle}>Commitment to Healthy Change</Text>
-      <Text style={styles.commitQuestion}>Do you plan to improve this area?</Text>
-      <View style={styles.commitButtonGroup}>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Commitment to Healthy Change</Text>
+      <Text style={styles.phaseSubtitle}>Do you plan to improve this area?</Text>
+      <View style={styles.yesNoContainer}>
         {['Yes', 'No'].map(choice => (
           <TouchableOpacity
             key={choice}
-            style={[
-              styles.commitButton,
-              selections[6] === choice && styles.commitButtonSelected,
-            ]}
+            style={[styles.yesNoCard, selections[6] === choice && styles.yesNoCardSelected]}
             onPress={() => handleStep6Choice(choice)}
           >
-            <Text style={[
-              styles.commitButtonText,
-              selections[6] === choice && styles.commitButtonTextSelected,
-            ]}>
+            <Text style={[styles.yesNoText, selections[6] === choice && styles.yesNoTextSelected]}>
               {choice}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
-      <TouchableOpacity
-        style={[styles.blueButton, !selections[6] && styles.nextButtonDisabled]}
-        onPress={handleStep6Next}
-        disabled={!selections[6]}
-      >
-        <Text style={styles.blueButtonText}>Next</Text>
-      </TouchableOpacity>
     </View>
   );
 
   const renderStep7 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.sliderSectionTitle}>Importance</Text>
-      <Text style={styles.sliderQuestion}>How important is this change to you right now?</Text>
-      <CustomSlider
-        value={selections[7]}
-        onValueChange={v => setSelection(7, v)}
-      />
-      <TouchableOpacity style={styles.blueButton} onPress={handleNext}>
-        <Text style={styles.blueButtonText}>Next</Text>
-      </TouchableOpacity>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Importance</Text>
+      <Text style={styles.phaseSubtitle}>How important is this change to you right now?</Text>
+      <CustomSlider value={selections[7]} onValueChange={v => setSelection(7, v)} />
     </View>
   );
 
   const renderStep8 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.sliderSectionTitle}>Confidence</Text>
-      <Text style={styles.sliderQuestion}>How confident are you about making this change?</Text>
-      <CustomSlider
-        value={selections[8]}
-        onValueChange={v => setSelection(8, v)}
-      />
-      <TouchableOpacity style={styles.blueButton} onPress={handleNext}>
-        <Text style={styles.blueButtonText}>Next</Text>
-      </TouchableOpacity>
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Confidence</Text>
+      <Text style={styles.phaseSubtitle}>How confident are you about making this change?</Text>
+      <CustomSlider value={selections[8]} onValueChange={v => setSelection(8, v)} />
     </View>
   );
 
   const renderStep9 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.resourcesTitle}>Resources</Text>
-      <Text style={styles.resourcesBody}>
-        {"You're on the right path!\n\nCheck out the Stress Management video and additional links for more support!"}
+    <View style={styles.phaseContent}>
+      <Text style={styles.phaseTitle}>Resources</Text>
+      <Text style={styles.phaseSubtitle}>
+        You're on the right path! Here are some resources to support your blood sugar health.
       </Text>
-      <View style={styles.videoPlaceholder}>
-        <View style={styles.playButton}>
-          <Ionicons name="play" size={40} color="#212529" />
-        </View>
+      <View style={styles.introImageContainer}>
+        <Text style={styles.introEmoji}>🥦</Text>
       </View>
-      <TouchableOpacity style={styles.blueButton} onPress={handleNext}>
-        <Text style={styles.blueButtonText}>Next</Text>
-      </TouchableOpacity>
+      <Text style={styles.resourcesBody}>
+        Focus on balanced meals, regular activity, and staying connected with your healthcare team to support healthy blood sugar levels.
+      </Text>
     </View>
   );
 
   const renderStep10 = () => {
-    const testType = selections[2] as string | null;
-    const numValue = selections[3] ? parseFloat(selections[3]) : null;
-    const score = getBloodGlucoseScore(testType, numValue);
+    const score = getBloodGlucoseScore(testType, numValue, hasDiabetes);
 
     return (
-      <View style={styles.stepContainer}>
-        <Text style={styles.summaryTitle}>Blood Sugar Summary</Text>
-        <Text style={styles.summarySubtitle}>{`Here's your Blood Sugar score:`}</Text>
+      <View style={styles.resultsContainer}>
+        <Text style={styles.resultsTitle}>Great Job!</Text>
         <View style={styles.scoreCard}>
-          <Text style={styles.scoreValue}>{score !== null ? score : '—'}</Text>
-          <Text style={styles.scoreLabel}>Points</Text>
-        </View>
-        <View style={styles.resultDetails}>
-          <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>Test Type:</Text>
-            <Text style={styles.resultValue}>{testType || '—'}</Text>
+          <Text style={styles.scoreLabel}>Based on your responses</Text>
+          <View style={styles.scoreCircle}>
+            <Text style={styles.scoreEmoji}>🎉</Text>
+            <Text style={styles.scoreNumber}>{score !== null ? score : '—'}</Text>
+            <Text style={styles.scoreMax}>out of 100</Text>
           </View>
-          <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>Result:</Text>
-            <Text style={styles.resultValue}>
-              {numValue !== null ? `${numValue} ${testType === 'HbA1c' ? '%' : 'mg/dL'}` : '—'}
+          {testType && numValue !== null && (
+            <Text style={styles.scoreDetail}>
+              {testType}: {numValue}{testType === 'HbA1c' ? '%' : ' mg/dL'}
             </Text>
-          </View>
-          <View style={styles.resultRow}>
-            <Text style={styles.resultLabel}>Diabetes Diagnosis:</Text>
-            <Text style={styles.resultValue}>{selections[4] || '—'}</Text>
-          </View>
+          )}
         </View>
-        <TouchableOpacity style={styles.submitButton} onPress={handleDone}>
-          <Text style={styles.submitButtonText}>Done</Text>
-        </TouchableOpacity>
+        <Text style={styles.resultsDescription}>
+          Your blood sugar score reflects your glucose levels. A higher score indicates better alignment with heart-healthy ranges.
+        </Text>
       </View>
     );
   };
@@ -578,23 +539,24 @@ const BloodSugarFlowScreen: React.FC = () => {
   // ── Step rendering dispatch ─────────────────────────────────────────────────
   const renderCurrentStep = () => {
     switch (currentStep) {
-      case 1: return renderStep1();
-      case 2: return renderStep2();
-      case 3: return renderStep3();
-      case 4: return renderStep4();
-      case 5: return renderStep5();
-      case 6: return renderStep6();
-      case 7: return renderStep7();
-      case 8: return renderStep8();
-      case 9: return renderStep9();
+      case 0:  return renderStep0();
+      case 1:  return renderStep1();
+      case 2:  return renderStep2();
+      case 3:  return renderStep3();
+      case 4:  return renderStep4();
+      case 5:  return renderStep5();
+      case 6:  return renderStep6();
+      case 7:  return renderStep7();
+      case 8:  return renderStep8();
+      case 9:  return renderStep9();
       case 10: return renderStep10();
       default: return null;
     }
   };
 
-  // ── Progress indicator ──────────────────────────────────────────────────────
-  // Visible steps for progress bar (steps that always appear in the main flow)
-  const VISIBLE_STEPS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const TOTAL_STEPS = 11;
+  const progressPercent = (currentStep / (TOTAL_STEPS - 1)) * 100;
+  const footerButton = getFooterButton();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -602,31 +564,13 @@ const BloodSugarFlowScreen: React.FC = () => {
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#007AFF" />
-          <Text style={styles.backText}>{currentStep === 1 ? 'Cancel' : 'Back'}</Text>
+          <Text style={styles.backText}>{currentStep === 0 ? 'Cancel' : 'Back'}</Text>
         </TouchableOpacity>
-        {/* Progress dots */}
-        <View style={styles.progressContainer}>
-          {VISIBLE_STEPS.map((stepId, index) => (
-            <View key={stepId} style={styles.stepIndicator}>
-              <View style={[
-                styles.stepCircle,
-                currentStep >= stepId && styles.stepCircleActive,
-              ]}>
-                <Text style={[
-                  styles.stepNumber,
-                  currentStep >= stepId && styles.stepNumberActive,
-                ]}>
-                  {index + 1}
-                </Text>
-              </View>
-              {index < VISIBLE_STEPS.length - 1 && (
-                <View style={[
-                  styles.stepLine,
-                  currentStep > stepId && styles.stepLineActive,
-                ]} />
-              )}
-            </View>
-          ))}
+        <View style={styles.progressBarContainer}>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+          </View>
+          <Text style={styles.progressText}>Step {currentStep + 1} of {TOTAL_STEPS}</Text>
         </View>
       </View>
 
@@ -636,252 +580,152 @@ const BloodSugarFlowScreen: React.FC = () => {
       >
         {renderCurrentStep()}
       </ScrollView>
+
+      {footerButton && (
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[
+              styles.footerButton,
+              footerButton.dark && styles.footerButtonDark,
+              footerButton.disabled && styles.footerButtonDisabled,
+            ]}
+            onPress={footerButton.onPress}
+            disabled={footerButton.disabled}
+          >
+            <Text style={styles.footerButtonText}>{footerButton.label}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
     backgroundColor: '#F8F9FA',
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E9ECEF',
   },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  backText: {
-    color: '#007AFF',
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 4,
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 10,
-  },
-  stepIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  stepCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  backButton: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  backText: { color: '#007AFF', fontSize: 16, fontWeight: '500', marginLeft: 4 },
+  progressBarContainer: { alignItems: 'center' },
+  progressBar: {
+    width: '100%',
+    height: 6,
     backgroundColor: '#E9ECEF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#E9ECEF',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 8,
   },
-  stepCircleActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  stepNumber: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6C757D',
-  },
-  stepNumberActive: {
-    color: '#FFFFFF',
-  },
-  stepLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: '#E9ECEF',
-    marginHorizontal: 2,
-  },
-  stepLineActive: {
-    backgroundColor: '#007AFF',
-  },
-  content: {
-    flexGrow: 1,
-    padding: 24,
-  },
-  stepContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 500,
-  },
-  // ── Choice / Large buttons ──────────────────────────────────────────────────
-  stepTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#212529',
-    marginBottom: 40,
-    lineHeight: 36,
-  },
-  buttonGroup: {
-    gap: 16,
-  },
-  largeButton: {
-    borderRadius: 16,
-    paddingVertical: 22,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  primaryButton: {
-    backgroundColor: '#212529',
-  },
-  secondaryButton: {
-    backgroundColor: '#F8F9FA',
-    borderWidth: 2,
-    borderColor: '#DEE2E6',
-  },
-  largeButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-  },
-  secondaryButtonText: {
-    color: '#212529',
-  },
-  // ── Radio / choice options ──────────────────────────────────────────────────
-  choiceGroup: {
-    gap: 16,
-    marginBottom: 40,
-  },
-  choiceButton: {
+  progressFill: { height: '100%', backgroundColor: '#34C759', borderRadius: 3 },
+  progressText: { fontSize: 14, color: '#6C757D', fontWeight: '500' },
+
+  content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 16 },
+
+  footer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#E9ECEF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
   },
-  choiceButtonSelected: {
-    borderColor: '#007AFF',
-    backgroundColor: '#F0F7FF',
-  },
-  choiceContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  radio: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#CED4DA',
-    marginRight: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  radioSelected: {
-    borderColor: '#007AFF',
-  },
-  radioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#007AFF',
-  },
-  choiceTextContainer: {
-    flex: 1,
-  },
-  choiceTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#212529',
-    marginBottom: 6,
-  },
-  choiceSubtitle: {
-    fontSize: 16,
-    color: '#6C757D',
-    lineHeight: 22,
-  },
-  // ── Next / Submit buttons ───────────────────────────────────────────────────
-  nextButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 16,
-    paddingVertical: 18,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  nextButtonDisabled: {
-    backgroundColor: '#CED4DA',
-    opacity: 0.6,
-  },
-  nextButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  blueButton: {
-    backgroundColor: '#224694',
-    borderRadius: 16,
-    paddingVertical: 18,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  blueButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  submitButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 16,
+  footerButton: {
+    backgroundColor: '#2084a4',
+    borderRadius: 17,
     paddingVertical: 20,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  submitButtonText: {
-    color: '#FFFFFF',
+  footerButtonDark: { backgroundColor: '#000000' },
+  footerButtonDisabled: { backgroundColor: '#E5E5EA' },
+  footerButtonText: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
+
+  // Intro styles
+  introTitle: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 44,
+  },
+  introSubtitle: {
+    fontSize: 22,
+    fontStyle: 'italic',
+    color: '#000',
+    textAlign: 'center',
+    lineHeight: 32,
+    marginBottom: 40,
+  },
+
+  // Phase screens
+  phaseContent: { flexGrow: 1, paddingTop: 8, alignItems: 'center', width: '100%' },
+  phaseTitle: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  phaseSubtitle: {
     fontSize: 18,
-    fontWeight: '600',
+    color: '#3C3C43',
+    textAlign: 'center',
+    lineHeight: 26,
+    marginBottom: 40,
   },
-  // ── Input ───────────────────────────────────────────────────────────────────
+
+  // Intro image / emoji (used for intro and resources)
+  introImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  introEmoji: { fontSize: 120 },
+
+  // Yes/No buttons
+  yesNoContainer: { gap: 16, marginBottom: 8, width: '100%' },
+  yesNoCard: {
+    borderRadius: 14,
+    backgroundColor: '#E5E5EA',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  yesNoCardSelected: { backgroundColor: '#000000' },
+  yesNoText: { fontSize: 20, fontWeight: '700', color: '#555' },
+  yesNoTextSelected: { color: '#FFFFFF' },
+
+  // Option cards (test type)
+  optionsContainer: { gap: 12, marginBottom: 8, width: '100%' },
+  optionCard: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  optionCardSelected: { backgroundColor: '#212529', borderColor: '#212529' },
+  optionTitle: { fontSize: 17, fontWeight: '600', color: '#212529', marginBottom: 4 },
+  optionTitleSelected: { color: '#FFFFFF' },
+  optionSubtitle: { fontSize: 13, color: '#6C757D' },
+  optionSubtitleSelected: { color: '#ADB5BD' },
+
+  // Value input (step 4)
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 14,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    marginBottom: 40,
+    marginBottom: 32,
     borderWidth: 2,
     borderColor: '#E9ECEF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    width: '100%',
   },
   input: {
     flex: 1,
@@ -891,202 +735,67 @@ const styles = StyleSheet.create({
     padding: 0,
     textAlign: 'center',
   },
-  inputUnit: {
-    fontSize: 24,
-    color: '#6C757D',
-    marginLeft: 16,
-    fontWeight: '500',
-  },
-  // ── Result / Feedback (step 5) ──────────────────────────────────────────────
+  inputUnit: { fontSize: 24, color: '#6C757D', marginLeft: 16, fontWeight: '500' },
+
+  // Result feedback (step 5)
   resultMessage: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 46,
+    lineHeight: 36,
     marginBottom: 32,
   },
   tipCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#212529',
-    borderRadius: 16,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 14,
     padding: 20,
-    marginBottom: 40,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 4,
+    marginBottom: 32,
+    width: '100%',
   },
   tipText: {
-    fontSize: 18,
-    fontStyle: 'italic',
-    color: '#212529',
-    lineHeight: 28,
+    fontSize: 17,
+    color: '#3C3C43',
+    lineHeight: 24,
     textAlign: 'center',
-    fontWeight: '600',
   },
-  // ── Commitment (step 6) ─────────────────────────────────────────────────────
-  commitTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#212529',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  commitQuestion: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#212529',
-    textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 36,
-  },
-  commitButtonGroup: {
-    gap: 16,
-    marginBottom: 40,
-  },
-  commitButton: {
-    backgroundColor: '#E4E1E1',
-    borderRadius: 16,
-    paddingVertical: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  commitButtonSelected: {
-    backgroundColor: '#212529',
-  },
-  commitButtonText: {
-    fontSize: 28,
-    fontWeight: '700',
-    fontStyle: 'italic',
-    color: '#212529',
-  },
-  commitButtonTextSelected: {
-    color: '#FFFFFF',
-  },
-  // ── Slider steps (7 & 8) ───────────────────────────────────────────────────
-  sliderSectionTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#212529',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  sliderQuestion: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#212529',
-    textAlign: 'center',
-    lineHeight: 36,
-    marginBottom: 40,
-  },
-  // ── Resources (step 9) ──────────────────────────────────────────────────────
-  resourcesTitle: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: '#212529',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
+
+  // Resources
   resourcesBody: {
-    fontSize: 28,
-    color: '#212529',
+    fontSize: 16,
+    color: '#3C3C43',
     textAlign: 'center',
-    lineHeight: 40,
-    marginBottom: 32,
+    lineHeight: 24,
+    paddingHorizontal: 8,
   },
-  videoPlaceholder: {
-    backgroundColor: '#D9D9D9',
-    borderWidth: 2,
-    borderColor: '#212529',
-    borderRadius: 12,
-    height: 180,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 40,
-    opacity: 0.85,
-  },
-  playButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 3,
-    borderColor: '#212529',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.7)',
-  },
-  // ── Summary (step 10) ───────────────────────────────────────────────────────
-  summaryTitle: {
-    fontSize: 36,
+
+  // Results / summary (step 10)
+  resultsContainer: { width: '100%' },
+  resultsTitle: {
+    fontSize: 34,
     fontWeight: '700',
-    color: '#212529',
-    marginBottom: 12,
+    color: '#000',
+    marginTop: 24,
     textAlign: 'center',
-  },
-  summarySubtitle: {
-    fontSize: 20,
-    fontStyle: 'italic',
-    fontWeight: '700',
-    color: '#212529',
-    textAlign: 'center',
-    marginBottom: 24,
   },
   scoreCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#C4C4C4',
-    borderRadius: 12,
-    paddingVertical: 24,
-    paddingHorizontal: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
-    alignSelf: 'center',
-    width: '80%',
-  },
-  scoreValue: {
-    fontSize: 64,
-    fontWeight: '700',
-    color: '#212529',
-    marginRight: 16,
-  },
-  scoreLabel: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: '#212529',
-  },
-  resultDetails: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F2F2F7',
     borderRadius: 16,
-    padding: 24,
-    marginBottom: 40,
-    borderWidth: 1,
-    borderColor: '#E9ECEF',
-  },
-  resultRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    padding: 32,
+    marginVertical: 32,
     alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
   },
-  resultLabel: {
-    fontSize: 16,
-    color: '#6C757D',
-    fontWeight: '500',
-  },
-  resultValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#212529',
+  scoreLabel: { fontSize: 15, color: '#8E8E93', marginBottom: 16 },
+  scoreCircle: { alignItems: 'center' },
+  scoreEmoji: { fontSize: 60, marginBottom: 16 },
+  scoreNumber: { fontSize: 72, fontWeight: '700', color: '#000' },
+  scoreMax: { fontSize: 17, color: '#8E8E93', marginTop: 8 },
+  scoreDetail: { fontSize: 15, color: '#8E8E93', marginTop: 12 },
+  resultsDescription: {
+    fontSize: 17,
+    color: '#3C3C43',
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 32,
   },
 });
 
