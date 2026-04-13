@@ -329,7 +329,7 @@ router.get("/", verifyToken, async (req, res) => {
       // Write composite score to composite_scores table
       const scoreDate = new Date().toISOString().slice(0, 10);
       await db.execute(
-        'INSERT INTO composite_scores (user_id, composite_score, score_date) VALUES (?, ?, ?)',
+        'INSERT INTO le8_composite_scores (user_id, composite_score, score_date) VALUES (?, ?, ?)',
         [userId, compositeScore, scoreDate]
       );
     }
