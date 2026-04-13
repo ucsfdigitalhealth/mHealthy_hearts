@@ -342,4 +342,5 @@ CREATE TABLE IF NOT EXISTS user_goals (
 - Implement automatic token refresh handling
 - Implement `/api/fetchdata` to request real Omron device metrics
 - Add endpoints for retrieving blood pressure, activity, weight, temperature, and oxygen data
+- Add Notification system
 
