@@ -17,6 +17,9 @@ import CardioHistoricalDataScreen from './src/screens/LeFlows/CardioHistoricalDa
 import AssessmentLandingScreen from './src/screens/LeFlows/AssessmentLandingScreen';
 import BloodLipidsLandingScreen from './src/screens/LeFlows/BloodLipidsLandingScreen';
 import SmokingLandingScreen from './src/screens/LeFlows/SmokingLandingScreen';
+import BloodSugarLandingScreen from './src/screens/LeFlows/BloodSugarLandingScreen';
+import DietLandingScreen from './src/screens/LeFlows/DietLandingScreen';
+import HeartScoreLandingScreen from './src/screens/LeFlows/HeartScoreLandingScreen';
 import DailyCheckInStepScreen from './src/screens/GoalFlow/DailyCheckInStepScreen';
 import YesterdayStepsStepScreen from './src/screens/GoalFlow/YesterdayStepsStepScreen';
 import SymptomBurdenStepScreen from './src/screens/GoalFlow/SymptomBurdenStepScreen';
@@ -29,6 +32,9 @@ export type RootStackParamList = {
   AssessmentLanding: { title: string; targetScreen: string };
   BloodLipidsLanding: undefined;
   SmokingLanding: undefined;
+  BloodSugarLanding: undefined;
+  DietLanding: undefined;
+  HeartScoreLanding: undefined;
   BloodSugar: undefined;
   BloodLipids: undefined;
   Bmi: undefined;
@@ -63,6 +69,9 @@ export default function App() {
             <Stack.Screen name="AssessmentLanding" component={AssessmentLandingScreen} />
             <Stack.Screen name="BloodLipidsLanding" component={BloodLipidsLandingScreen} />
             <Stack.Screen name="SmokingLanding" component={SmokingLandingScreen} />
+            <Stack.Screen name="BloodSugarLanding" component={BloodSugarLandingScreen} />
+            <Stack.Screen name="DietLanding" component={DietLandingScreen} />
+            <Stack.Screen name="HeartScoreLanding" component={HeartScoreLandingScreen} />
             <Stack.Screen name="BloodSugar" component={BloodSugarScreen} />
             <Stack.Screen name="BloodLipids" component={BloodLipidsScreen} />
             <Stack.Screen name="Bmi" component={BmiScreen} />

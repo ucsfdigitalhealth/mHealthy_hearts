@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { setCachedDiet } from '../../utils/dietCache';
+import { getDeviceTimezone } from '../../utils/localDate';
 
 type Question = {
   id: number;
@@ -338,6 +339,7 @@ const DietAssessmentScreen: React.FC = () => {
           commitmentToChange: commitment === true,
           importance: commitment ? importanceVal : null,
           confidence: commitment ? confidenceVal : null,
+          timezone: getDeviceTimezone() || 'UTC',
         }),
       });
     } catch (error) {

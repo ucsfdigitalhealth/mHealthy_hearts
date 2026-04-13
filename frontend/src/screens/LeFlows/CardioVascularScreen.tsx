@@ -1,19 +1,21 @@
 // CardioVascularScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
   TouchableOpacity,
   SafeAreaView
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App'; // Update path as needed
 import Settings from '../../components/Settings';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
+import { useFitbitAuth } from '../../context/FitbitAuthContext';
 import { getCachedBloodSugar, setCachedBloodSugar } from '../../utils/bloodSugarCache';
 import { getCachedBmi, setCachedBmi } from '../../utils/bmiCache';
 import { getCachedDiet, setCachedDiet } from '../../utils/dietCache';
@@ -54,8 +56,6 @@ const getStatusColor = (status: string | null): string => {
       return '#d1ce1d';
     case 'Diabetes':
       return '#cd482f';
-    case 'Excellent':
-      return '#059669';
     case 'Fair (Overweight)':
       return '#F59E0B';
     case 'Poor (Obese)':
@@ -140,6 +140,110 @@ const getBloodLipidRangeLabel = (score: number | null): string | null => {
 
 const DEFAULT_NOT_CALCULATED = 'Calculate your score';
 
+// ─── HeartScoreGauge ────────────────────────────────────────────────────────
+
+const HeartScoreGauge: React.FC<{ score: number | null }> = ({ score }) => {
+  const size = 280;
+  const strokeWidth = 18;
+  const radius = (size - strokeWidth) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+
+  const polarToCartesian = (angle: number) => {
+    const rad = (angle * Math.PI) / 180;
+    return {
+      x: cx + radius * Math.cos(rad),
+      y: cy + radius * Math.sin(rad),
+    };
+  };
+
+  // Arc runs from 180° (left) to 0° (right) — top half only
+  const describeArc = (start: number, end: number) => {
+    const s = polarToCartesian(start);
+    const e = polarToCartesian(end);
+    return `M ${s.x} ${s.y} A ${radius} ${radius} 0 0 1 ${e.x} ${e.y}`;
+  };
+
+  const circumference = Math.PI * radius; // half-circle arc length
+  const progress = score !== null ? Math.min(Math.max(score / 100, 0), 1) : 0;
+  const progressLength = progress * circumference;
+
+  const status = getStatusFromScore(score);
+  const statusColor = getStatusColor(status);
+
+  return (
+    <View style={gaugeStyles.container}>
+      <Svg width={size} height={size / 2 + 20}>
+        {/* Background track */}
+        <Path
+          d={describeArc(180, 0)}
+          fill="none"
+          stroke="#E5E7EB"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+        />
+        {/* Coloured progress arc */}
+        <Path
+          d={describeArc(180, 0)}
+          fill="none"
+          stroke={score !== null ? '#3B82F6' : '#E5E7EB'}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={`${progressLength} ${circumference}`}
+        />
+      </Svg>
+      <View style={gaugeStyles.textOverlay}>
+        <Text style={gaugeStyles.title}>Heart Health Score</Text>
+        <Text style={gaugeStyles.score}>
+          {score !== null ? `${score} out of 100` : '— out of 100'}
+        </Text>
+        {status && (
+          <View style={[gaugeStyles.statusPill, { backgroundColor: statusColor + '1A' }]}>
+            <Text style={[gaugeStyles.statusText, { color: statusColor }]}>{status}</Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+};
+
+const gaugeStyles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  textOverlay: {
+    alignItems: 'center',
+    marginTop: -20,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  score: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  statusPill: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+});
+
+// ─── MetricItem ─────────────────────────────────────────────────────────────
+
 const MetricItem: React.FC<{
   title: string;
   score: number | null;
@@ -147,7 +251,6 @@ const MetricItem: React.FC<{
   badge?: string;
   onPress?: () => void;
   status?: string | null;
-  isFirstInSection?: boolean;
   showNotCalculated?: boolean;
   notCalculatedMessage?: string;
   colorValueByStatus?: boolean;
@@ -158,7 +261,6 @@ const MetricItem: React.FC<{
   badge,
   onPress,
   status,
-  isFirstInSection,
   showNotCalculated,
   notCalculatedMessage = DEFAULT_NOT_CALCULATED,
   colorValueByStatus,
@@ -166,49 +268,52 @@ const MetricItem: React.FC<{
   const calculatedStatus = status || getStatusFromScore(score !== null && score !== undefined ? score : null);
   const statusColor = getStatusColor(calculatedStatus || null);
   const valueColor = colorValueByStatus && calculatedStatus ? statusColor : undefined;
-  
-  const content = (
-    <View style={[styles.metricItem, isFirstInSection && styles.firstMetricItem]}>
+
+  const inner = (
+    <>
       <View style={styles.metricHeader}>
         <Text style={styles.metricTitle}>{title}</Text>
         {badge && (
           <View style={[styles.badge, { backgroundColor: statusColor }]}>
-            <Text style={styles.badgeText}>{badge} Point</Text>
+            <Text style={styles.badgeText}>{badge} pts</Text>
           </View>
         )}
       </View>
       <View style={styles.metricContent}>
         {score !== null && score !== undefined ? (
-          <>
+          <View style={styles.metricValueRow}>
             <Text style={[styles.metricValue, valueColor ? { color: valueColor } : undefined]}>{score}</Text>
             {unit && <Text style={styles.metricUnit}> {unit}</Text>}
-          </>
+          </View>
         ) : (
           showNotCalculated && (
-            <Text style={styles.notCalculatedText}>{notCalculatedMessage}</Text>
+            <Text style={styles.notCalculatedText} numberOfLines={2}>{notCalculatedMessage}</Text>
           )
         )}
         {calculatedStatus && (
           <Text style={[styles.metricStatus, { color: statusColor }]}>{calculatedStatus}</Text>
         )}
       </View>
-    </View>
+    </>
   );
 
   if (onPress) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
-        {content}
+      <TouchableOpacity style={styles.metricTile} onPress={onPress} activeOpacity={0.75}>
+        {inner}
       </TouchableOpacity>
     );
   }
 
-  return content;
+  return <View style={styles.metricTile}>{inner}</View>;
 };
+
+// ─── CardioVascularScreen ────────────────────────────────────────────────────
 
 const CardioVascularScreen: React.FC = () => {
   const navigation = useNavigation<CardioNavigationProp>();
   const { accessToken } = useAuth();
+  const { isConnected: fitbitConnected } = useFitbitAuth();
   const [hasSmoked, setHasSmoked] = useState<'Yes' | 'No'>('Yes');
   const [lastSmoked, setLastSmoked] = useState<'More than 5 years ago' | '1–5 years ago' | 'Within the past year' | 'I currently smoke/use'>('More than 5 years ago');
   const [bloodLipidScore, setBloodLipidScore] = useState<number | null>(null);
@@ -225,14 +330,11 @@ const CardioVascularScreen: React.FC = () => {
   const [sleepScore, setSleepScore] = useState<number | null>(null);
   const [sleepDisplayHours, setSleepDisplayHours] = useState<number | null>(null);
   const [heartScore, setHeartScore] = useState<number | null>(null);
-  
+
   // Calculate heart score as average of all LE8 scores
   const calculateHeartScore = useCallback(() => {
     const scores: number[] = [];
-    
-    // Blood Pressure (placeholder - will be added when implemented)
 
-    // Add scores that we have
     if (activityScore !== null) scores.push(activityScore);
     if (sleepScore !== null) scores.push(sleepScore);
     if (bloodSugarScore !== null) scores.push(bloodSugarScore);
@@ -240,7 +342,7 @@ const CardioVascularScreen: React.FC = () => {
     if (bmiScore !== null) scores.push(bmiScore);
     if (dietScore !== null) scores.push(dietScore);
     if (smokingScore !== null) scores.push(smokingScore);
-    
+
     if (scores.length > 0) {
       const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
       setHeartScore(Math.round(average));
@@ -248,43 +350,22 @@ const CardioVascularScreen: React.FC = () => {
       setHeartScore(null);
     }
   }, [activityScore, sleepScore, bloodSugarScore, bloodLipidScore, bmiScore, dietScore, smokingScore]);
-  
-  // Recalculate heart score whenever any score changes
+
   useEffect(() => {
     calculateHeartScore();
   }, [calculateHeartScore]);
 
-  const handleBloodSugarPress = () => {
-    navigation.navigate('AssessmentLanding', { title: 'Blood Sugar', targetScreen: 'BloodSugar' });
-  };
+  const handleHeartScorePress = () => navigation.navigate('HeartScoreLanding');
+  const handleBloodSugarPress = () => navigation.navigate('BloodSugarLanding');
+  const handleBloodLipidsPress = () => navigation.navigate('BloodLipidsLanding');
+  const handleBmiPress = () => navigation.navigate('Bmi');
+  const handleDietPress = () => navigation.navigate('DietLanding');
+  const handleSmokingPress = () => navigation.navigate('SmokingLanding');
+  const handleViewHistoricalDataPress = () => navigation.navigate('CardioHistoricalData');
 
-  const handleBloodLipidsPress = () => {
-    navigation.navigate('BloodLipidsLanding');
-  };
-
-  const handleBmiPress = () => {
-    navigation.navigate('Bmi');
-  };
-
-  const handleDietPress = () => {
-    navigation.navigate('AssessmentLanding', { title: 'Diet', targetScreen: 'Diet' });
-  };
-
-  const handleSmokingPress = () => {
-    navigation.navigate('SmokingLanding');
-  };
-
-  const handleViewHistoricalDataPress = () => {
-    navigation.navigate('CardioHistoricalData');
-  };
-
-  // Fetch all health scores function
   const fetchAllHealthScores = useCallback(async () => {
-    if (!accessToken) {
-      return;
-    }
+    if (!accessToken) return;
 
-    // Check AsyncStorage caches first (blood lipids + blood sugar + BMI + diet)
     const cachedBL = await getCachedBloodLipids();
     if (cachedBL) {
       setBloodLipidScore(cachedBL.score ?? null);
@@ -329,7 +410,7 @@ const CardioVascularScreen: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        // Blood Lipids — update state and persist to cache
+
         setBloodLipidScore(data.bloodLipids?.score ?? null);
         setBloodLipidValue(data.bloodLipids?.value ?? null);
         await setCachedBloodLipids({
@@ -337,7 +418,7 @@ const CardioVascularScreen: React.FC = () => {
           value: data.bloodLipids?.value ?? null,
           measureType: data.bloodLipids?.measureType ?? null,
         });
-        // Blood Sugar — update state and persist to cache
+
         setBloodSugarScore(data.bloodSugar?.score ?? null);
         setBloodSugarValue(data.bloodSugar?.value ?? null);
         await setCachedBloodSugar({
@@ -345,27 +426,27 @@ const CardioVascularScreen: React.FC = () => {
           value: data.bloodSugar?.value ?? null,
           testType: data.bloodSugar?.testType ?? null,
         });
-        // BMI — update state and persist to cache
+
         setBmiScore(data.bmi?.score ?? null);
         setBmiValue(data.bmi?.value ?? null);
         await setCachedBmi({
           score: data.bmi?.score ?? null,
           value: data.bmi?.value ?? null,
         });
-        // Diet — update state and persist to cache
+
         setDietScore(data.diet?.score ?? null);
         setDietMepaScore(data.diet?.mepaScore ?? null);
         await setCachedDiet({
           score: data.diet?.score ?? null,
           mepaScore: data.diet?.mepaScore ?? null,
         });
-        // Smoking — update state and persist to cache
+
         setSmokingScore(data.smoking?.score ?? null);
         await setCachedSmoking({
           score: data.smoking?.score ?? null,
           category: data.smoking?.category ?? null,
         });
-        // Physical Activity — from health-scores (fitbit_daily_data); refresh from Fitbit if missing
+
         setActivityScore(data.physicalActivity?.score ?? null);
         setActivitySteps(data.physicalActivity?.steps ?? null);
         if (data.physicalActivity?.steps == null) {
@@ -378,41 +459,23 @@ const CardioVascularScreen: React.FC = () => {
             });
             if (stepsRes.ok) {
               const stepsData = await stepsRes.json();
-              if (stepsData.steps != null) {
-                setActivitySteps(Number(stepsData.steps));
-              }
-              if (stepsData.score != null) {
-                setActivityScore(Number(stepsData.score));
-              }
+              if (stepsData.steps != null) setActivitySteps(Number(stepsData.steps));
+              if (stepsData.score != null) setActivityScore(Number(stepsData.score));
             }
           } catch (stepsErr) {
             console.error('Error fetching Fitbit steps for cardiovascular screen:', stepsErr);
           }
         }
-        // Sleep — from fitbit_sleep_data
+
         setSleepScore(data.sleep?.score ?? null);
         setSleepDisplayHours(data.sleep?.hours ?? null);
-        // Heart score will be recalculated by useEffect
       } else {
         const errorText = await response.text();
         console.error('Error fetching health scores:', response.status, errorText);
-        // On error, fall back to cached values where available
-        if (!cachedBL) {
-          setBloodLipidScore(null);
-          setBloodLipidValue(null);
-        }
-        if (!cachedBS) {
-          setBloodSugarScore(null);
-          setBloodSugarValue(null);
-        }
-        if (!cachedBMI) {
-          setBmiScore(null);
-          setBmiValue(null);
-        }
-        if (!cachedDiet) {
-          setDietScore(null);
-          setDietMepaScore(null);
-        }
+        if (!cachedBL) { setBloodLipidScore(null); setBloodLipidValue(null); }
+        if (!cachedBS) { setBloodSugarScore(null); setBloodSugarValue(null); }
+        if (!cachedBMI) { setBmiScore(null); setBmiValue(null); }
+        if (!cachedDiet) { setDietScore(null); setDietMepaScore(null); }
         setSmokingScore(null);
         setActivityScore(null);
         setActivitySteps(null);
@@ -421,22 +484,10 @@ const CardioVascularScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching health scores:', error);
-      if (!cachedBL) {
-        setBloodLipidScore(null);
-        setBloodLipidValue(null);
-      }
-      if (!cachedBS) {
-        setBloodSugarScore(null);
-        setBloodSugarValue(null);
-      }
-      if (!cachedBMI) {
-        setBmiScore(null);
-        setBmiValue(null);
-      }
-      if (!cachedDiet) {
-        setDietScore(null);
-        setDietMepaScore(null);
-      }
+      if (!cachedBL) { setBloodLipidScore(null); setBloodLipidValue(null); }
+      if (!cachedBS) { setBloodSugarScore(null); setBloodSugarValue(null); }
+      if (!cachedBMI) { setBmiScore(null); setBmiValue(null); }
+      // cachedDiet already set above
       setSmokingScore(null);
       setActivityScore(null);
       setActivitySteps(null);
@@ -445,234 +496,108 @@ const CardioVascularScreen: React.FC = () => {
     }
   }, [accessToken]);
 
-  // Fetch all health scores on mount and when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       fetchAllHealthScores();
     }, [fetchAllHealthScores])
   );
-  
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>mHealthy Hearts</Text>
+          <View>
+            <Text style={styles.headerLabel}>mHealthy Hearts</Text>
+            <Text style={styles.headerTitle}>Dashboard</Text>
+          </View>
           <Settings />
         </View>
 
-        {/* Today's Date */}
-        <View style={styles.dateSection}>
-          <Text style={styles.todayLabel}>Today</Text>
-          <Text style={styles.date}>Wed 1 Sep</Text>
-        </View>
-
-        {/* Divider */}
-        <View style={styles.divider} />
-
-
-        {/* Heart Score */}
-        <View style={styles.heartScoreContainer}>
-          <Text style={styles.heartScoreLabel}>Heart Score</Text>
-          <View style={styles.heartScoreMain}>
-            <View style={styles.heartScoreCircle}>
-              <Text style={styles.heartScoreNumber}>
-                {heartScore !== null ? heartScore : '—'}
-              </Text>
-            </View>
-            {heartScore !== null ? (
-              (() => {
-                const status = getStatusFromScore(heartScore);
-                const statusColor = getStatusColor(status);
-                let bgColor = '#D1FAE5';
-                if (status === 'Good') bgColor = '#DBEAFE';
-                else if (status === 'Fair') bgColor = '#FEF3C7';
-                else if (status === 'Poor') bgColor = '#FEE2E2';
-                
-                return (
-                  <View style={[styles.heartScoreStatus, { backgroundColor: bgColor }]}>
-                    <Text style={[styles.heartScoreStatusText, { color: statusColor }]}>
-                      {status}
-                    </Text>
-                  </View>
-                );
-              })()
-            ) : (
-              <View style={[styles.heartScoreStatus, { backgroundColor: '#F3F4F6' }]}>
-                <Text style={[styles.heartScoreStatusText, { color: '#6B7280' }]}>
-                  Calculate your score
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        
-
-        {/* Divider */}
-        <View style={styles.divider} />
-
-        {/* View Historical Data Button */}
-                <TouchableOpacity
-          style={styles.historicalButton}
-          onPress={handleViewHistoricalDataPress}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.historicalButtonText}>View Historical Data</Text>
+        {/* ── Gauge Card ── */}
+        <TouchableOpacity style={styles.gaugeCard} onPress={handleHeartScorePress} activeOpacity={0.85}>
+          <HeartScoreGauge score={heartScore} />
         </TouchableOpacity>
 
-        {/* All Metrics in List */}
-        <View style={styles.metricsList}>
-          <MetricItem
-            title="Physical Activity"
-            score={activitySteps}
-            unit="steps"
-            badge={activityScore !== null ? String(activityScore) : undefined}
-            status={getStatusFromScore(activityScore)}
-            showNotCalculated={true}
-            isFirstInSection={true}
-          />
+        {/* ── LE8 Metrics ── */}
+        <Text style={styles.sectionTitle}>Life's Essential 8</Text>
 
-          <MetricItem
-            title="Sleep"
-            score={sleepDisplayHours !== null ? Math.round(sleepDisplayHours * 10) / 10 : null}
-            unit="hrs"
-            badge={sleepScore !== null ? String(sleepScore) : undefined}
-            status={getStatusFromScore(sleepScore)}
-            showNotCalculated={true}
-            notCalculatedMessage="Please update your sleep on the Fitbit App"
-          />
-          
-          <MetricItem 
-            title="Blood Pressure" 
-            score={null}
-            unit="mmHg"
-            showNotCalculated={true}
-            notCalculatedMessage="Please measure your blood pressure via your Omron device"
-          />
-          
-          <MetricItem
-            title="Blood Sugar"
-            score={bloodSugarValue !== null ? bloodSugarValue : null}
-            unit="mg/dL"
-            badge={bloodSugarScore !== null ? String(bloodSugarScore) : undefined}
-            status={getBloodSugarRangeLabel(bloodSugarScore)}
-            showNotCalculated={bloodSugarScore === null}
-            onPress={handleBloodSugarPress}
-          />
-          
-          <MetricItem 
-            title="Blood Lipids" 
-            score={bloodLipidValue !== null ? bloodLipidValue : null} 
-            unit="mg/dL"
-            badge={bloodLipidScore !== null ? String(bloodLipidScore) : undefined}
-            status={getBloodLipidRangeLabel(bloodLipidScore)}
-            showNotCalculated={bloodLipidScore === null}
-            onPress={handleBloodLipidsPress}
-          />
-          
-          <MetricItem
-            title="Body Mass Index"
-            score={bmiValue !== null ? Math.round(bmiValue * 10) / 10 : null}
-            unit="BMI"
-            badge={bmiScore !== null ? String(bmiScore) : undefined}
-            showNotCalculated={bmiScore === null}
-            onPress={handleBmiPress}
-            status={getBMIRangeLabel(bmiValue)}
-          />
-          
-          <MetricItem 
-            title="Diet" 
-            score={dietMepaScore}
-            unit="(MEPA score out of 10)"
-            badge={dietScore !== null ? String(dietScore) : undefined}
-            status={getDietRangeLabel(dietMepaScore)}
-            showNotCalculated={dietScore === null}
-            onPress={handleDietPress}
-          />
-          
-          <MetricItem
-            title="Smoking"
-            score={smokingScore}
-            badge={smokingScore !== null ? String(smokingScore) : undefined}
-            showNotCalculated={smokingScore === null}
-            status={getSmokingRangeLabel(smokingScore)}
-            onPress={handleSmokingPress}
-          />
-        </View>
+        <MetricItem
+          title="Physical Activity"
+          score={activitySteps}
+          unit="steps"
+          badge={activityScore !== null ? String(activityScore) : undefined}
+          status={getStatusFromScore(activityScore)}
+          showNotCalculated={true}
+          notCalculatedMessage={fitbitConnected ? 'No steps data for today' : 'Connect your Fitbit device'}
+        />
 
-        {/* Smoking Questions Section */}
-        {/* <View style={styles.smokingSection}>
-          <View style={styles.smokingHeader}>
-            <Text style={styles.smokingTitle}>Smoking Details</Text>
-          </View>
+        <MetricItem
+          title="Sleep"
+          score={sleepDisplayHours !== null ? Math.round(sleepDisplayHours * 10) / 10 : null}
+          unit="hrs"
+          badge={sleepScore !== null ? String(sleepScore) : undefined}
+          status={getStatusFromScore(sleepScore)}
+          showNotCalculated={true}
+          notCalculatedMessage={fitbitConnected ? 'Update sleep on the Fitbit App' : 'Connect your Fitbit device'}
+        />
 
-          <Text style={styles.question}>
-            Have you ever smoked cigarettes or used nicotine products?
-          </Text>
-          <View style={styles.choiceRow}>
-            <TouchableOpacity 
-              style={[styles.choiceButton, hasSmoked === 'Yes' && styles.choiceButtonSelected]}
-              onPress={() => setHasSmoked('Yes')}
-            >
-              <Text style={[styles.choiceButtonText, hasSmoked === 'Yes' && styles.choiceButtonTextSelected]}>
-                Yes
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.choiceButton, hasSmoked === 'No' && styles.choiceButtonSelected]}
-              onPress={() => setHasSmoked('No')}
-            >
-              <Text style={[styles.choiceButtonText, hasSmoked === 'No' && styles.choiceButtonTextSelected]}>
-                No
-              </Text>
-            </TouchableOpacity>
-          </View>
+        <MetricItem
+          title="Blood Pressure"
+          score={null}
+          unit="mmHg"
+          showNotCalculated={true}
+          notCalculatedMessage="Connect your Omron device"
+        />
 
-          {hasSmoked === 'Yes' && (
-            <>
-              <Text style={[styles.question, { marginTop: 16 }]}>
-                When was the last time you smoked?
-              </Text>
-              <View style={styles.smokingOptions}>
-                <TouchableOpacity 
-                  style={[styles.smokingOption, lastSmoked === 'More than 5 years ago' && styles.smokingOptionSelected]}
-                  onPress={() => setLastSmoked('More than 5 years ago')}
-                >
-                  <Text style={[styles.smokingOptionText, lastSmoked === 'More than 5 years ago' && styles.smokingOptionTextSelected]}>
-                    More than 5 years ago
-                  </Text>
-                </TouchableOpacity>
-                <View style={styles.smokingOptionRow}>
-                  <TouchableOpacity 
-                    style={[styles.smokingOption, lastSmoked === '1–5 years ago' && styles.smokingOptionSelected]}
-                    onPress={() => setLastSmoked('1–5 years ago')}
-                  >
-                    <Text style={[styles.smokingOptionText, lastSmoked === '1–5 years ago' && styles.smokingOptionTextSelected]}>
-                      1–5 years ago
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.smokingOption, lastSmoked === 'Within the past year' && styles.smokingOptionSelected]}
-                    onPress={() => setLastSmoked('Within the past year')}
-                  >
-                    <Text style={[styles.smokingOptionText, lastSmoked === 'Within the past year' && styles.smokingOptionTextSelected]}>
-                      Within the past year
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.smokingOption, lastSmoked === 'I currently smoke/use' && styles.smokingOptionSelected]}
-                    onPress={() => setLastSmoked('I currently smoke/use')}
-                  >
-                    <Text style={[styles.smokingOptionText, lastSmoked === 'I currently smoke/use' && styles.smokingOptionTextSelected]}>
-                      I currently smoke/use
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
-          )}
-        </View> */}
+        <MetricItem
+          title="Blood Sugar"
+          score={bloodSugarValue !== null ? bloodSugarValue : null}
+          unit="mg/dL"
+          badge={bloodSugarScore !== null ? String(bloodSugarScore) : undefined}
+          status={getBloodSugarRangeLabel(bloodSugarScore)}
+          showNotCalculated={bloodSugarScore === null}
+          onPress={handleBloodSugarPress}
+        />
+
+        <MetricItem
+          title="Blood Lipids"
+          score={bloodLipidValue !== null ? bloodLipidValue : null}
+          unit="mg/dL"
+          badge={bloodLipidScore !== null ? String(bloodLipidScore) : undefined}
+          status={getBloodLipidRangeLabel(bloodLipidScore)}
+          showNotCalculated={bloodLipidScore === null}
+          onPress={handleBloodLipidsPress}
+        />
+
+        <MetricItem
+          title="Body Mass Index"
+          score={bmiValue !== null ? Math.round(bmiValue * 10) / 10 : null}
+          unit="BMI"
+          badge={bmiScore !== null ? String(bmiScore) : undefined}
+          showNotCalculated={bmiScore === null}
+          onPress={handleBmiPress}
+          status={getBMIRangeLabel(bmiValue)}
+        />
+
+        <MetricItem
+          title="Diet"
+          score={dietMepaScore}
+          unit="(MEPA score out of 10)"
+          badge={dietScore !== null ? String(dietScore) : undefined}
+          status={getDietRangeLabel(dietMepaScore)}
+          showNotCalculated={dietScore === null}
+          onPress={handleDietPress}
+        />
+
+        <MetricItem
+          title="Smoking"
+          score={smokingScore}
+          badge={smokingScore !== null ? String(smokingScore) : undefined}
+          showNotCalculated={smokingScore === null}
+          status={getSmokingRangeLabel(smokingScore)}
+          onPress={handleSmokingPress}
+        />
 
       </ScrollView>
     </SafeAreaView>
@@ -682,7 +607,7 @@ const CardioVascularScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F1F3F9',
   },
   container: {
     paddingHorizontal: 20,
@@ -693,228 +618,115 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 16,
-    paddingBottom: 12,
+    paddingBottom: 20,
+  },
+  headerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#EF4444',
+    letterSpacing: 0.4,
+    marginBottom: 2,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#111827',
+  },
+
+  // Gauge card
+  gaugeCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+
+  // Section title
+  sectionTitle: {
+    fontSize: 20,
     fontWeight: '700',
     color: '#1F2937',
+    marginBottom: 12,
   },
-  dateSection: {
-    marginBottom: 16,
-  },
-  todayLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  date: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginTop: 4,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 16,
-  },
-  heartScoreContainer: {
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  heartScoreLabel: {
-    fontSize: 16,
-    color: '#6B7280',
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  heartScoreMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heartScoreCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#3B82F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 20,
-  },
-  heartScoreNumber: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  heartScoreStatus: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  heartScoreStatusText: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  metricsList: {
-    marginBottom: 24,
-  },
-  historicalButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 14,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  historicalButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  metricItem: {
+
+  // Individual metric tile (card per metric, uniform height)
+  metricTile: {
     backgroundColor: '#FFFFFF',
-    paddingVertical: 16,
-    paddingHorizontal: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  firstMetricItem: {
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderRadius: 16,
+    height: 110,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 3,
   },
   metricHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
   metricTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#1F2937',
+    flex: 1,
+    marginRight: 8,
   },
   metricContent: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
   },
-  metricValue: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  metricUnit: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginLeft: 4,
-    marginBottom: 4,
+  metricValueRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     flex: 1,
   },
+  metricValue: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#111827',
+    lineHeight: 34,
+  },
+  metricUnit: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginLeft: 4,
+    marginBottom: 3,
+  },
   metricStatus: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   notCalculatedText: {
-    fontSize: 16,
-    color: '#6B7280',
+    fontSize: 13,
+    color: '#9CA3AF',
     fontStyle: 'italic',
+    flex: 1,
   },
+
+  // Score badge pill
   badge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 999,
+    flexShrink: 0,
   },
   badgeText: {
     fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
-  },
-  smokingSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  smokingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  smokingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  question: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4B5563',
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  choiceRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  choiceButton: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  choiceButtonSelected: {
-    backgroundColor: '#B91C1C',
-  },
-  choiceButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  choiceButtonTextSelected: {
-    color: '#FFFFFF',
-  },
-  smokingOptions: {
-    marginTop: 8,
-  },
-  smokingOption: {
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  smokingOptionSelected: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#DC2626',
-  },
-  smokingOptionText: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  smokingOptionTextSelected: {
-    color: '#DC2626',
-    fontWeight: '600',
-  },
-  smokingOptionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
   },
 });
 

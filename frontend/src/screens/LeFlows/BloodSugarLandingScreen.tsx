@@ -14,15 +14,28 @@ import { useAuth } from '../../context/AuthContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const SMOKING_BASE = 'http://localhost:3000/api/smoking';
+const BLOOD_SUGAR_BASE = 'http://localhost:3000/api/blood-sugar';
 
-const SCORING_ROWS = [
-  { label: 'Never Smoked',          sub: 'OPTIMAL',       pts: 100, dot: '#059669' },
-  { label: 'Former (5+ yrs ago)',   sub: 'OPTIMAL',       pts: 100, dot: '#059669' },
-  { label: 'Former (1–5 yrs ago)',  sub: 'LOW RISK',      pts: 75,  dot: '#3B82F6' },
-  { label: 'Former (<1 yr ago)',    sub: 'MODERATE RISK', pts: 50,  dot: '#F59E0B' },
-  { label: 'Current (rarely)',      sub: 'HIGH RISK',     pts: 25,  dot: '#F97316' },
-  { label: 'Current (regularly)',   sub: 'CRITICAL RISK', pts: 0,   dot: '#DC2626' },
+// FBG scoring rows (mg/dL)
+const FBG_ROWS = [
+  { range: '< 100',     label: 'IN-RANGE',    pts: 100, dot: '#059669' },
+  { range: '100–125',   label: 'PREDIABETES', pts: 60,  dot: '#FFCC00' },
+  { range: '126–154',   label: 'DIABETES',    pts: 40,  dot: '#F97316' },
+  { range: '155–182',   label: 'DIABETES',    pts: 30,  dot: '#F97316' },
+  { range: '183–212',   label: 'DIABETES',    pts: 20,  dot: '#DC2626' },
+  { range: '213–240',   label: 'DIABETES',    pts: 10,  dot: '#DC2626' },
+  { range: '> 240',     label: 'DIABETES',    pts: 0,   dot: '#991B1B' },
+];
+
+// HbA1c scoring rows (%)
+const HBBA1C_ROWS = [
+  { range: '< 5.7%',     label: 'IN-RANGE',    pts: 100, dot: '#059669' },
+  { range: '5.7–6.4%',   label: 'PREDIABETES', pts: 60,  dot: '#FFCC00' },
+  { range: '6.5–6.9%',   label: 'DIABETES',    pts: 40,  dot: '#F97316' },
+  { range: '7.0–7.9%',   label: 'DIABETES',    pts: 25,  dot: '#F97316' },
+  { range: '8.0–8.9%',   label: 'DIABETES',    pts: 20,  dot: '#DC2626' },
+  { range: '9.0–9.9%',   label: 'DIABETES',    pts: 10,  dot: '#DC2626' },
+  { range: '≥ 10%',      label: 'DIABETES',    pts: 0,   dot: '#991B1B' },
 ];
 
 const formatDate = (dateStr: string): string => {
@@ -30,34 +43,33 @@ const formatDate = (dateStr: string): string => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const formatCategory = (category: string): string => {
-  if (category === 'never') return 'Never Smoked';
-  if (category === 'former') return 'Former Smoker';
-  if (category === 'current') return 'Current Smoker';
-  return category;
-};
+const getUnit = (testType: string): string =>
+  testType === 'HbA1c' ? '%' : 'mg/dL';
+
+const formatTestType = (testType: string): string =>
+  testType === 'HbA1c' ? 'HbA1c' : 'Fasting Blood Glucose';
 
 const getScoreColor = (score: number): string => {
   if (score >= 100) return '#059669';
-  if (score >= 75)  return '#3B82F6';
-  if (score >= 50)  return '#F59E0B';
-  if (score >= 25)  return '#F97316';
-  return '#DC2626';
+  if (score >= 60)  return '#FFCC00';
+  if (score >= 40)  return '#F97316';
+  if (score >= 20)  return '#DC2626';
+  return '#991B1B';
 };
 
-type SmokingRecord = { category: string; score: number; date: string };
+type BSRecord = { testType: string; value: number; score: number; date: string };
 
-const SmokingLandingScreen: React.FC = () => {
+const BloodSugarLandingScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
   const { accessToken } = useAuth();
-  const [mostRecent, setMostRecent] = useState<SmokingRecord | null>(null);
-  const [recentRecords, setRecentRecords] = useState<SmokingRecord[]>([]);
+  const [mostRecent, setMostRecent] = useState<BSRecord | null>(null);
+  const [recentRecords, setRecentRecords] = useState<BSRecord[]>([]);
   const [average, setAverage] = useState<number | null>(null);
 
   useFocusEffect(
     React.useCallback(() => {
       if (!accessToken) return;
-      fetch(`${SMOKING_BASE}/stats`, {
+      fetch(`${BLOOD_SUGAR_BASE}/stats`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
         .then(r => r.json())
@@ -66,7 +78,7 @@ const SmokingLandingScreen: React.FC = () => {
           setRecentRecords(data.recentRecords ?? []);
           setAverage(data.average ?? null);
         })
-        .catch(err => console.error('Error fetching smoking stats:', err));
+        .catch(err => console.error('Error fetching blood sugar stats:', err));
     }, [accessToken])
   );
 
@@ -76,6 +88,38 @@ const SmokingLandingScreen: React.FC = () => {
     if (mostRecent.score < average) return { arrow: '↓', text: 'Lower than 3-record avg' };
     return { arrow: '–', text: 'Equal to 3-record avg' };
   })();
+
+  const ScoringTable = ({
+    title,
+    rows,
+  }: {
+    title: string;
+    rows: typeof FBG_ROWS;
+  }) => (
+    <View style={{ marginBottom: 20 }}>
+      <Text style={styles.scoringSubtitle}>{title}</Text>
+      <View style={styles.scoringCard}>
+        {rows.map((row, i) => (
+          <View
+            key={i}
+            style={[
+              styles.scoringRow,
+              i === rows.length - 1 && styles.scoringRowLast,
+            ]}
+          >
+            <View style={[styles.dot, { backgroundColor: row.dot }]} />
+            <View style={styles.scoringInfo}>
+              <Text style={styles.scoringRange}>{row.range}</Text>
+              <Text style={styles.scoringLabel}>{row.label}</Text>
+            </View>
+            <View style={styles.ptsPill}>
+              <Text style={styles.ptsText}>{row.pts} pts</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -89,14 +133,14 @@ const SmokingLandingScreen: React.FC = () => {
         <View style={styles.measureCard}>
           <Text style={styles.measureTitle}>Measurements</Text>
           <Text style={styles.measureBody}>
-            Your Smoking Score is based on your current or past tobacco and nicotine use status, as well as your nicotine exposure.
+            Your Blood Sugar Score is measured using either Fasting Blood Glucose (mg/dL) or HbA1c (%). Both reflect your long-term blood sugar control.
           </Text>
         </View>
 
         {/* Take Assessment button */}
         <TouchableOpacity
           style={styles.assessBtn}
-          onPress={() => navigation.navigate('Smoking')}
+          onPress={() => navigation.navigate('BloodSugar')}
           activeOpacity={0.8}
         >
           <Text style={styles.assessBtnText}>Take Assessment</Text>
@@ -112,12 +156,11 @@ const SmokingLandingScreen: React.FC = () => {
               <Text style={styles.statTitle}>Most Recent</Text>
               <Text style={styles.statSub}>
                 {mostRecent
-                  ? `${formatCategory(mostRecent.category)} · ${formatDate(mostRecent.date)}`
+                  ? `${formatTestType(mostRecent.testType)}: ${mostRecent.value}${getUnit(mostRecent.testType)} · ${formatDate(mostRecent.date)}`
                   : 'No data yet'}
               </Text>
             </View>
-            <View style={
-              styles.statPill}>
+            <View style={styles.statPill}>
               <Text style={styles.statPillText}>
                 {mostRecent !== null ? mostRecent.score : '—'}
               </Text>
@@ -146,7 +189,7 @@ const SmokingLandingScreen: React.FC = () => {
         </View>
 
         {/* Recent Records */}
-        <Text style={styles.sectionTitle}>Smoking Assessments</Text>
+        <Text style={styles.sectionTitle}>Blood Sugar Assessments</Text>
 
         {recentRecords.length === 0 ? (
           <View style={styles.emptyCard}>
@@ -158,11 +201,15 @@ const SmokingLandingScreen: React.FC = () => {
             return (
               <View key={i} style={styles.recordTile}>
                 <View style={styles.recordBody}>
-                  <Text style={styles.recordDate}>{formatDate(record.date)}</Text>
+                  <View style={styles.recordTopRow}>
+                    <Text style={styles.recordDate}>{formatDate(record.date)}</Text>
+                    <Text style={styles.recordTestType}>{formatTestType(record.testType)}</Text>
+                  </View>
                   <View style={styles.recordMetrics}>
-                    <Text style={styles.recordCategory}>
-                      {formatCategory(record.category)}
-                    </Text>
+                    <View style={styles.recordMetricBlock}>
+                      <Text style={styles.recordMetricValue}>{record.value}</Text>
+                      <Text style={styles.recordMetricLabel}>{getUnit(record.testType)}</Text>
+                    </View>
                     <View style={[styles.recordScorePill, { backgroundColor: scoreColor }]}>
                       <Text style={styles.recordScoreText}>{record.score} pts</Text>
                     </View>
@@ -175,29 +222,8 @@ const SmokingLandingScreen: React.FC = () => {
 
         {/* Scoring System */}
         <Text style={styles.sectionTitle}>Scoring System</Text>
-
-        <View style={styles.scoringCard}>
-          {SCORING_ROWS.map((row, i) => (
-            <View
-              key={i}
-              style={[
-                styles.scoringRow,
-                i === SCORING_ROWS.length - 1 && styles.scoringRowLast,
-              ]}
-            >
-              <View style={[styles.dot, { backgroundColor: row.dot }]} />
-              <View style={styles.scoringInfo}>
-                <Text style={styles.scoringRange}>{row.label}</Text>
-                <Text style={styles.scoringLabel}>{row.sub}</Text>
-              </View>
-              <View style={styles.ptsPill}>
-                <Text style={styles.ptsText}>{row.pts} pts</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        <Text style={styles.footnote}>*If user faces secondhand smoke exposure within household, subtract 20 pts.</Text>
+        <ScoringTable title="Fasting Blood Glucose (mg/dL)" rows={FBG_ROWS} />
+        <ScoringTable title="HbA1c (%)" rows={HBBA1C_ROWS} />
 
       </ScrollView>
     </SafeAreaView>
@@ -307,8 +333,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statSub: {
-    fontSize: 13,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.8)',
+    lineHeight: 17,
   },
   trendRow: {
     flexDirection: 'row',
@@ -330,7 +357,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statPillText: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '900',
     color: '#FFFFFF',
   },
@@ -372,11 +399,23 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
+  recordTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   recordDate: {
     fontSize: 12,
     color: '#6B7280',
     fontWeight: '500',
-    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  recordTestType: {
+    fontSize: 12,
+    color: TEAL,
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -385,12 +424,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  recordCategory: {
-    fontSize: 20,
+  recordMetricBlock: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  recordMetricValue: {
+    fontSize: 32,
     fontWeight: '800',
     color: '#1F2937',
-    flex: 1,
-    marginRight: 12,
+  },
+  recordMetricLabel: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 4,
   },
   recordScorePill: {
     borderRadius: 999,
@@ -402,6 +449,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
+  scoringSubtitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#4B5563',
+    marginBottom: 8,
+  },
   scoringCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -411,12 +464,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
-    marginBottom: 12,
   },
   scoringRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
@@ -425,9 +477,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   dot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     marginRight: 14,
     flexShrink: 0,
   },
@@ -440,7 +492,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   scoringLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#8d8d8d',
     fontWeight: '500',
     marginTop: 1,
@@ -448,20 +500,14 @@ const styles = StyleSheet.create({
   ptsPill: {
     backgroundColor: '#EBEEF3',
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
   ptsText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#1F2937',
   },
-  footnote: {
-    fontSize: 13,
-    color: '#13233e',
-    paddingHorizontal: 4,
-    marginBottom: 8,
-  },
 });
 
-export default SmokingLandingScreen;
+export default BloodSugarLandingScreen;

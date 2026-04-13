@@ -109,4 +109,45 @@ router.get("/score", verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/blood-sugar/stats
+// Returns the most recent record, last 3 records with scores, and their average score
+router.get("/stats", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const [rows] = await db.execute(
+      `SELECT test_type, value, created_at
+       FROM blood_sugar_assessments
+       WHERE user_id = ? AND value IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 3`,
+      [userId]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(200).json({ mostRecent: null, recentRecords: [], average: null });
+    }
+
+    const recentRecords = rows.map(r => ({
+      testType: r.test_type,
+      value: Number(r.value),
+      score: getBloodGlucoseScore({ testType: r.test_type, value: Number(r.value) }),
+      date: r.created_at,
+    }));
+
+    const mostRecent = recentRecords[0];
+
+    const scoredRecords = recentRecords.filter(r => r.score !== null);
+    const average = scoredRecords.length > 0
+      ? Math.round((scoredRecords.reduce((sum, r) => sum + r.score, 0) / scoredRecords.length) * 10) / 10
+      : null;
+
+    return res.status(200).json({ mostRecent, recentRecords, average });
+  } catch (error) {
+    console.error("[GET /api/blood-sugar/stats] Error:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
+});
+
 module.exports = { router };
