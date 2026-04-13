@@ -38,16 +38,29 @@ const HBBA1C_ROWS = [
   { range: '≥ 10%',      label: 'DIABETES',    pts: 0,   dot: '#991B1B' },
 ];
 
+type BSRecord = { testType: string; value: number; score: number; date: string };
+
 const formatDate = (dateStr: string): string => {
   const d = new Date(dateStr);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const getUnit = (testType: string): string =>
-  testType === 'HbA1c' ? '%' : 'mg/dL';
+const isHbA1c = (testType: string | null | undefined): boolean =>
+  testType === 'HbA1c';
 
+const getUnit = (testType: string): string =>
+  isHbA1c(testType) ? '%' : 'mg/dL';
+
+/** Display label — assessments may be Fasting Blood Glucose or HbA1c */
 const formatTestType = (testType: string): string =>
-  testType === 'HbA1c' ? 'HbA1c' : 'Fasting Blood Glucose';
+  isHbA1c(testType) ? 'HbA1c' : 'Fasting Blood Glucose';
+
+const formatMeasurementSubtitle = (r: BSRecord): string => {
+  const label = formatTestType(r.testType);
+  console.log('r.score', r.score);
+  const valuePart = r.score != null ? String(r.score) : '—';
+  return `${label}: ${r.score != null ? String(r.score) + ' pts' : '—'}`;
+};
 
 const getScoreColor = (score: number): string => {
   if (score >= 100) return '#059669';
@@ -56,8 +69,6 @@ const getScoreColor = (score: number): string => {
   if (score >= 20)  return '#DC2626';
   return '#991B1B';
 };
-
-type BSRecord = { testType: string; value: number; score: number; date: string };
 
 const BloodSugarLandingScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
@@ -82,11 +93,19 @@ const BloodSugarLandingScreen: React.FC = () => {
     }, [accessToken])
   );
 
+  const recentCount = recentRecords.length;
+  const hasMixedTestTypes =
+    recentCount > 1 &&
+    new Set(recentRecords.map((r) => r.testType)).size > 1;
+
+  // Stats: scores are comparable (0–100) whether the entry was FBG or HbA1c
   const trendLabel = (() => {
-    if (!mostRecent || average === null) return null;
-    if (mostRecent.score > average) return { arrow: '↑', text: 'Higher than 3-record avg' };
-    if (mostRecent.score < average) return { arrow: '↓', text: 'Lower than 3-record avg' };
-    return { arrow: '–', text: 'Equal to 3-record avg' };
+    if (!mostRecent || average === null || mostRecent.score === null) return null;
+    const n = recentCount || 3;
+    const avgWord = n === 1 ? 'recent avg' : `${n}-record avg`;
+    if (mostRecent.score > average) return { arrow: '↑', text: `Higher than ${avgWord}` };
+    if (mostRecent.score < average) return { arrow: '↓', text: `Lower than ${avgWord}` };
+    return { arrow: '–', text: `Equal to ${avgWord}` };
   })();
 
   const ScoringTable = ({
@@ -156,28 +175,36 @@ const BloodSugarLandingScreen: React.FC = () => {
               <Text style={styles.statTitle}>Most Recent</Text>
               <Text style={styles.statSub}>
                 {mostRecent
-                  ? `${formatTestType(mostRecent.testType)}: ${mostRecent.value}${getUnit(mostRecent.testType)} · ${formatDate(mostRecent.date)}`
+                  ? formatMeasurementSubtitle(mostRecent)
                   : 'No data yet'}
               </Text>
             </View>
             <View style={styles.statPill}>
               <Text style={styles.statPillText}>
-                {mostRecent !== null ? mostRecent.score : '—'}
+                {mostRecent !== null && mostRecent.score !== null ? mostRecent.score : '—'}
               </Text>
             </View>
           </View>
 
-          {/* 3-Record Average */}
+          {/* Recent average score (last up to 3 assessments; FBG or HbA1c) */}
           <View style={[styles.statRow, { marginTop: 12 }]}>
             <View style={styles.statLeft}>
-              <Text style={styles.statTitle}>3-Record Average</Text>
+              <Text style={styles.statTitle}>
+                {recentCount <= 1 ? 'Recent average' : `${recentCount}-record average`}
+              </Text>
               {trendLabel ? (
                 <View style={styles.trendRow}>
                   <Text style={styles.trendArrow}>{trendLabel.arrow}</Text>
                   <Text style={styles.statSub}>{trendLabel.text}</Text>
                 </View>
               ) : (
-                <Text style={styles.statSub}>No data yet</Text>
+                <Text style={styles.statSub}>
+                  {average === null
+                    ? 'No data yet'
+                    : hasMixedTestTypes
+                      ? 'Avg of scores (FBG and/or HbA1c)'
+                      : 'Avg of recent scores'}
+                </Text>
               )}
             </View>
             <View style={styles.statPill}>

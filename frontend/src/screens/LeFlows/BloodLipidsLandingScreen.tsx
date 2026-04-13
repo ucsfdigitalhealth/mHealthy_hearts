@@ -44,6 +44,7 @@ const BloodLipidsLandingScreen: React.FC = () => {
   const { accessToken } = useAuth();
   const [mostRecentValue, setMostRecentValue] = useState<number | null>(null);
   const [mostRecentDate, setMostRecentDate] = useState<string | null>(null);
+  // recentRecords contains the last 3 blood lipid records (with value, score, and date) for the user, used for showing trends and history
   const [recentRecords, setRecentRecords] = useState<BLRecord[]>([]);
   const [average, setAverage] = useState<number | null>(null);
 

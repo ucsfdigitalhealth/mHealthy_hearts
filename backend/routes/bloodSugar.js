@@ -56,24 +56,29 @@ router.post("/", verifyToken, async (req, res) => {
     const importanceVal = commitBool === 1 ? (Number(importance) || null) : null;
     const confidenceVal = commitBool === 1 ? (Number(confidence) || null) : null;
 
+    const score = getBloodGlucoseScore({ testType, value: numericValue, hasDiabetes: hasDiabetesBool === 1 });
     const dataId = crypto.randomUUID();
 
-    await db.execute(
-      `INSERT INTO blood_sugar_assessments
-        (data_id, user_id, test_type, value, has_diabetes, commitment_to_change, importance, confidence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [dataId, userId, testType, numericValue, hasDiabetesBool, commitBool, importanceVal, confidenceVal]
-    );
-
-    const score = getBloodGlucoseScore({ testType, value: numericValue, hasDiabetes: hasDiabetesBool === 1 });
-
-    // Write daily score to daily_scores table
-    const scoreDate = new Date().toISOString().slice(0, 10);
-    if (userId && score !== null) {
+    // Persist the computed score with the assessment.
+    // Some environments may still have an older schema without `score`; gracefully fall back.
+    try {
       await db.execute(
-        'INSERT INTO daily_scores (user_id, score_type, score_value, score_date) VALUES (?, ?, ?, ?)',
-        [userId, 'blood_sugar', score, scoreDate]
+        `INSERT INTO blood_sugar_assessments
+          (data_id, user_id, test_type, value, has_diabetes, commitment_to_change, importance, confidence, score)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [dataId, userId, testType, numericValue, hasDiabetesBool, commitBool, importanceVal, confidenceVal, score]
       );
+    } catch (insertErr) {
+      if (insertErr?.code === "ER_BAD_FIELD_ERROR") {
+        await db.execute(
+          `INSERT INTO blood_sugar_assessments
+            (data_id, user_id, test_type, value, has_diabetes, commitment_to_change, importance, confidence)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [dataId, userId, testType, numericValue, hasDiabetesBool, commitBool, importanceVal, confidenceVal]
+        );
+      } else {
+        throw insertErr;
+      }
     }
 
     return res.status(201).json({
@@ -96,7 +101,7 @@ router.get("/score", verifyToken, async (req, res) => {
     const userId = req.user?.userId || null;
 
     const [rows] = await db.execute(
-      `SELECT test_type, value, has_diabetes FROM blood_sugar_assessments
+      `SELECT test_type, value, has_diabetes, score FROM blood_sugar_assessments
        WHERE user_id = ? AND value IS NOT NULL
        ORDER BY created_at DESC LIMIT 1`,
       [userId]
@@ -106,8 +111,11 @@ router.get("/score", verifyToken, async (req, res) => {
       return res.status(200).json({ score: null, value: null, testType: null });
     }
 
-    const { test_type: testType, value, has_diabetes } = rows[0];
-    const score = getBloodGlucoseScore({ testType, value: Number(value), hasDiabetes: has_diabetes === 1 });
+    const { test_type: testType, value, has_diabetes, score: persistedScore } = rows[0];
+    const score =
+      persistedScore != null
+        ? Number(persistedScore)
+        : getBloodGlucoseScore({ testType, value: Number(value), hasDiabetes: has_diabetes === 1 });
 
     return res.status(200).json({ score, value: Number(value), testType });
   } catch (error) {
@@ -126,7 +134,7 @@ router.get("/stats", verifyToken, async (req, res) => {
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
     const [rows] = await db.execute(
-      `SELECT test_type, value, created_at
+      `SELECT test_type, value, has_diabetes, created_at
        FROM blood_sugar_assessments
        WHERE user_id = ? AND value IS NOT NULL
        ORDER BY created_at DESC
@@ -141,7 +149,11 @@ router.get("/stats", verifyToken, async (req, res) => {
     const recentRecords = rows.map(r => ({
       testType: r.test_type,
       value: Number(r.value),
-      score: getBloodGlucoseScore({ testType: r.test_type, value: Number(r.value) }),
+      score: getBloodGlucoseScore({
+        testType: r.test_type,
+        value: Number(r.value),
+        hasDiabetes: r.has_diabetes === 1,
+      }),
       date: r.created_at,
     }));
 

@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const express = require("express");
 const router = express.Router();
 const db = require("../db.js");
@@ -326,12 +327,21 @@ router.get("/", verifyToken, async (req, res) => {
     let compositeScore = null;
     if (scoreValues.length > 0) {
       compositeScore = scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length;
-      // Write composite score to composite_scores table
+      // Persist daily composite snapshot without breaking this endpoint if persistence fails.
       const scoreDate = new Date().toISOString().slice(0, 10);
-      await db.execute(
-        'INSERT INTO le8_composite_scores (user_id, composite_score, score_date) VALUES (?, ?, ?)',
-        [userId, compositeScore, scoreDate]
-      );
+      try {
+        await db.execute(
+          `INSERT INTO le8_composite_scores (id, user_id, composite_score, score_date, components_counted)
+           VALUES (?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             composite_score = VALUES(composite_score),
+             components_counted = VALUES(components_counted),
+             updated_at = CURRENT_TIMESTAMP`,
+          [crypto.randomUUID(), userId, compositeScore, scoreDate, scoreValues.length]
+        );
+      } catch (persistErr) {
+        console.error("[GET /api/health-scores] Failed to persist composite score:", persistErr.message);
+      }
     }
     return res.status(200).json({
       bloodLipids: {

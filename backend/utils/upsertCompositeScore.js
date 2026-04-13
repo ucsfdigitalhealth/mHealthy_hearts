@@ -34,11 +34,15 @@ async function upsertCompositeScore(userId, db) {
 
     // ── Blood Sugar ──────────────────────────────────────────────────────────
     const [bsRows] = await db.execute(
-      'SELECT test_type, value FROM blood_sugar_assessments WHERE user_id = ? AND value IS NOT NULL ORDER BY created_at DESC LIMIT 1',
+      'SELECT test_type, value, has_diabetes FROM blood_sugar_assessments WHERE user_id = ? AND value IS NOT NULL ORDER BY created_at DESC LIMIT 1',
       [userId]
     );
     const bloodSugarScore = bsRows.length > 0
-      ? getBloodGlucoseScore({ testType: bsRows[0].test_type, value: Number(bsRows[0].value) })
+      ? getBloodGlucoseScore({
+          testType: bsRows[0].test_type,
+          value: Number(bsRows[0].value),
+          hasDiabetes: bsRows[0].has_diabetes === 1,
+        })
       : null;
 
     // ── BMI ──────────────────────────────────────────────────────────────────
