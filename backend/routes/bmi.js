@@ -144,4 +144,39 @@ router.get("/score", verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/bmi/stats
+// Returns mostRecent, recentRecords (last 5), and average BMI score for the authenticated user
+router.get("/stats", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+
+    const [rows] = await db.execute(
+      `SELECT bmi_value, created_at FROM bmi_assessments
+       WHERE user_id = ? ORDER BY created_at DESC LIMIT 5`,
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(200).json({ mostRecent: null, recentRecords: [], average: null });
+    }
+
+    const records = rows.map(row => ({
+      value: Number(row.bmi_value),
+      score: getBMIScore(Number(row.bmi_value)),
+      date: row.created_at,
+    }));
+
+    const average = records.reduce((sum, r) => sum + r.value, 0) / records.length;
+
+    return res.status(200).json({
+      mostRecent: records[0],
+      recentRecords: records,
+      average: Math.round(average * 10) / 10,
+    });
+  } catch (error) {
+    console.error("Error fetching BMI stats:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
+});
+
 module.exports = { router };

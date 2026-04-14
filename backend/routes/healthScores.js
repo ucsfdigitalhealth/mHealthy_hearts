@@ -478,4 +478,132 @@ router.get("/history", verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/health-scores/physical-activity/history?period=week|month|year
+// Returns bar chart data for physical activity scores over time
+router.get("/physical-activity/history", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const period = req.query.period || "week";
+    const tz = getTimezoneFromRequest(req) || "UTC";
+    const today = getTodayInTimezone(tz);
+
+    const daysCount = period === "week" ? 7 : period === "month" ? 28 : 336;
+    const fromDate = subtractDaysLocal(today, daysCount - 1);
+
+    const [stepsRows] = await db.execute(
+      `SELECT steps, date FROM fitbit_daily_data
+       WHERE user_id = ? AND date >= ? AND date <= ?
+       ORDER BY date ASC`,
+      [userId, fromDate, today]
+    );
+    const [goalRows] = await db.execute(
+      `SELECT step_target, goal_date FROM daily_goals
+       WHERE user_id = ? AND goal_date >= ? AND goal_date <= ?
+       ORDER BY goal_date ASC`,
+      [userId, fromDate, today]
+    );
+
+    const stepsMap = {};
+    for (const r of stepsRows) {
+      const d = toYmd(r.date);
+      if (d) stepsMap[d] = Number(r.steps);
+    }
+    const goalMap = {};
+    for (const r of goalRows) {
+      const d = toYmd(r.goal_date);
+      if (d) goalMap[d] = Number(r.step_target);
+    }
+
+    const dates = [];
+    for (let i = daysCount - 1; i >= 0; i--) {
+      dates.push(subtractDaysLocal(today, i));
+    }
+
+    const dailyScores = dates.map((date) => {
+      const steps = stepsMap[date];
+      if (steps == null) return null;
+      const goal = goalMap[date] || 10000;
+      return getPhysicalActivityScore(steps, goal);
+    });
+
+    let bars = [];
+    if (period === "week") {
+      bars = dailyScores.map((score) => ({ score }));
+    } else if (period === "month") {
+      for (let w = 0; w < 4; w++) {
+        bars.push({ score: safeAvg(dailyScores.slice(w * 7, w * 7 + 7)) });
+      }
+    } else {
+      for (let b = 0; b < 6; b++) {
+        bars.push({ score: safeAvg(dailyScores.slice(b * 56, b * 56 + 56)) });
+      }
+    }
+
+    return res.status(200).json({ bars });
+  } catch (error) {
+    console.error("[GET /api/health-scores/physical-activity/history] Error:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
+});
+
+// GET /api/health-scores/sleep/history?period=week|month|year
+// Returns bar chart data for sleep scores over time
+router.get("/sleep/history", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const period = req.query.period || "week";
+    const tz = getTimezoneFromRequest(req) || "UTC";
+    const today = getTodayInTimezone(tz);
+
+    const daysCount = period === "week" ? 7 : period === "month" ? 28 : 336;
+    const fromDate = subtractDaysLocal(today, daysCount - 1);
+
+    const [sleepRows] = await db.execute(
+      `SELECT total_minutes_asleep, date FROM fitbit_sleep_data
+       WHERE user_id = ? AND date >= ? AND date <= ?
+       ORDER BY date ASC`,
+      [userId, fromDate, today]
+    );
+
+    const sleepMap = {};
+    for (const r of sleepRows) {
+      const d = toYmd(r.date);
+      if (d) sleepMap[d] = Number(r.total_minutes_asleep);
+    }
+
+    const dates = [];
+    for (let i = daysCount - 1; i >= 0; i--) {
+      dates.push(subtractDaysLocal(today, i));
+    }
+
+    const dailyScores = dates.map((date) => {
+      const minutes = sleepMap[date];
+      if (minutes == null) return null;
+      return getSleepScore(minutes / 60);
+    });
+
+    let bars = [];
+    if (period === "week") {
+      bars = dailyScores.map((score) => ({ score }));
+    } else if (period === "month") {
+      for (let w = 0; w < 4; w++) {
+        bars.push({ score: safeAvg(dailyScores.slice(w * 7, w * 7 + 7)) });
+      }
+    } else {
+      for (let b = 0; b < 6; b++) {
+        bars.push({ score: safeAvg(dailyScores.slice(b * 56, b * 56 + 56)) });
+      }
+    }
+
+    return res.status(200).json({ bars });
+  } catch (error) {
+    console.error("[GET /api/health-scores/sleep/history] Error:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
+});
+
 module.exports = { router };

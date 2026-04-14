@@ -120,13 +120,6 @@ const PhysicalActivityLandingScreen: React.FC = () => {
         </View>
 
         {/* View Historical Data button */}
-        <TouchableOpacity
-          style={styles.assessBtn}
-          onPress={() => navigation.navigate('CardioHistoricalData')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.assessBtnText}>View Historical Data</Text>
-        </TouchableOpacity>
 
         {/* YOUR STATS teal card */}
         <View style={styles.statsCard}>
