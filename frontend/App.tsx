@@ -20,6 +20,10 @@ import SmokingLandingScreen from './src/screens/LeFlows/SmokingLandingScreen';
 import BloodSugarLandingScreen from './src/screens/LeFlows/BloodSugarLandingScreen';
 import DietLandingScreen from './src/screens/LeFlows/DietLandingScreen';
 import HeartScoreLandingScreen from './src/screens/LeFlows/HeartScoreLandingScreen';
+import BmiLandingScreen from './src/screens/LeFlows/BmiLandingScreen';
+import PhysicalActivityLandingScreen from './src/screens/LeFlows/PhysicalActivityLandingScreen';
+import SleepLandingScreen from './src/screens/LeFlows/SleepLandingScreen';
+import BloodPressureLandingScreen from './src/screens/LeFlows/BloodPressureLandingScreen';
 import DailyCheckInStepScreen from './src/screens/GoalFlow/DailyCheckInStepScreen';
 import YesterdayStepsStepScreen from './src/screens/GoalFlow/YesterdayStepsStepScreen';
 import SymptomBurdenStepScreen from './src/screens/GoalFlow/SymptomBurdenStepScreen';
@@ -35,6 +39,10 @@ export type RootStackParamList = {
   BloodSugarLanding: undefined;
   DietLanding: undefined;
   HeartScoreLanding: undefined;
+  BmiLanding: undefined;
+  PhysicalActivityLanding: undefined;
+  SleepLanding: undefined;
+  BloodPressureLanding: undefined;
   BloodSugar: undefined;
   BloodLipids: undefined;
   Bmi: undefined;
@@ -72,6 +80,10 @@ export default function App() {
             <Stack.Screen name="BloodSugarLanding" component={BloodSugarLandingScreen} />
             <Stack.Screen name="DietLanding" component={DietLandingScreen} />
             <Stack.Screen name="HeartScoreLanding" component={HeartScoreLandingScreen} />
+            <Stack.Screen name="BmiLanding" component={BmiLandingScreen} />
+            <Stack.Screen name="PhysicalActivityLanding" component={PhysicalActivityLandingScreen} />
+            <Stack.Screen name="SleepLanding" component={SleepLandingScreen} />
+            <Stack.Screen name="BloodPressureLanding" component={BloodPressureLandingScreen} />
             <Stack.Screen name="BloodSugar" component={BloodSugarScreen} />
             <Stack.Screen name="BloodLipids" component={BloodLipidsScreen} />
             <Stack.Screen name="Bmi" component={BmiScreen} />

@@ -358,9 +358,12 @@ const CardioVascularScreen: React.FC = () => {
   const handleHeartScorePress = () => navigation.navigate('HeartScoreLanding');
   const handleBloodSugarPress = () => navigation.navigate('BloodSugarLanding');
   const handleBloodLipidsPress = () => navigation.navigate('BloodLipidsLanding');
-  const handleBmiPress = () => navigation.navigate('Bmi');
+  const handleBmiPress = () => navigation.navigate('BmiLanding');
   const handleDietPress = () => navigation.navigate('DietLanding');
   const handleSmokingPress = () => navigation.navigate('SmokingLanding');
+  const handlePhysicalActivityPress = () => navigation.navigate('PhysicalActivityLanding');
+  const handleSleepPress = () => navigation.navigate('SleepLanding');
+  const handleBloodPressurePress = () => navigation.navigate('BloodPressureLanding');
   const handleViewHistoricalDataPress = () => navigation.navigate('CardioHistoricalData');
 
   const fetchAllHealthScores = useCallback(async () => {
@@ -530,6 +533,7 @@ const CardioVascularScreen: React.FC = () => {
           status={getStatusFromScore(activityScore)}
           showNotCalculated={true}
           notCalculatedMessage={fitbitConnected ? 'No steps data for today' : 'Connect your Fitbit device'}
+          onPress={handlePhysicalActivityPress}
         />
 
         <MetricItem
@@ -540,6 +544,7 @@ const CardioVascularScreen: React.FC = () => {
           status={getStatusFromScore(sleepScore)}
           showNotCalculated={true}
           notCalculatedMessage={fitbitConnected ? 'Update sleep on the Fitbit App' : 'Connect your Fitbit device'}
+          onPress={handleSleepPress}
         />
 
         <MetricItem
@@ -548,6 +553,7 @@ const CardioVascularScreen: React.FC = () => {
           unit="mmHg"
           showNotCalculated={true}
           notCalculatedMessage="Connect your Omron device"
+          onPress={handleBloodPressurePress}
         />
 
         <MetricItem
