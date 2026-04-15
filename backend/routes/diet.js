@@ -5,20 +5,6 @@ const db = require("../db.js");
 const { verifyToken } = require("../auth.js");
 const { getDietScore } = require("../metricCalc.js");
 
-/**
- * Calendar YYYY-MM-DD for comparisons with toLocaleDateString('en-CA', { timeZone }).
- * mysql2 returns SQL DATE as a JS Date; String(date) is locale-based, so split('-') breaks.
- */
-function toClientYmd(day, timeZone) {
-  if (day == null || day === "") return null;
-  if (day instanceof Date && !isNaN(day.getTime())) {
-    return day.toLocaleDateString("en-CA", { timeZone });
-  }
-  const s = String(day).trim();
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : null;
-}
-
 // POST /api/diet
 // Stores the user's diet assessment
 router.post("/", verifyToken, async (req, res) => {
@@ -213,19 +199,21 @@ router.get("/today", verifyToken, async (req, res) => {
 });
 
 // GET /api/diet/history
-// Returns bar chart data for week/month/year-to-date diet scores
+// Returns bar chart data for month/year diet scores.
+// Diet assessments are taken weekly, so:
+//   month → 4 bars, one per weekly assessment (last 4 rows)
+//   year  → 6 bars, each = average of 4 weekly assessments (~1 month per bar, last 24 rows)
 router.get("/history", verifyToken, async (req, res) => {
   try {
     const userId = req.user?.userId || null;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    const period = req.query.period || 'week';
-    // Must be a fixed int — MySQL prepared statements reject LIMIT ? (ER_WRONG_ARGUMENTS).
-    const limit =
-      period === 'week' ? 7 : period === 'month' ? 28 : 336;
+    const period = req.query.period || 'month';
+    // month: last 4 weekly assessments; year: last 48 weekly assessments (12 months × 4, split into 6 bars of 8)
+    const limit = period === 'year' ? 48 : 4;
 
     const [rows] = await db.execute(
-      `SELECT score, DATE(created_at) as day
+      `SELECT score
        FROM diet_assessments
        WHERE user_id = ? AND score IS NOT NULL
        ORDER BY created_at DESC
@@ -243,47 +231,16 @@ router.get("/history", verifyToken, async (req, res) => {
 
     let bars = [];
 
-    if (period === 'week') {
-      // Determine client timezone (from query or header), fallback to 'UTC'
-      const tz = req.query.timezone || req.headers['x-timezone'] || 'UTC';
-      
-      // Get today's date in the user's local timezone
-      const now = new Date();
-      const todayLocalStr = now.toLocaleDateString("en-CA", { timeZone: tz }); // 'YYYY-MM-DD'
-
-      let hasToday = false;
-      if (rows.length > 0 && rows[rows.length - 1].day != null) {
-        const lastDayKey = toClientYmd(rows[rows.length - 1].day, tz);
-        hasToday = lastDayKey != null && lastDayKey === todayLocalStr;
-      }
-
-      console.log("[GET /api/diet/history] hasToday:", hasToday, {
-        todayLocal: todayLocalStr,
-        lastRowDayRaw: rows.length > 0 ? rows[rows.length - 1].day : null,
-        lastDayKey:
-          rows.length > 0
-            ? toClientYmd(rows[rows.length - 1].day, tz)
-            : null,
-        tz,
-      });
-
-      // Up to 6 past days + today
-      for (let i = 0; i < 6; i++) {
+    if (period === 'month') {
+      // 4 bars — one score per weekly assessment
+      for (let i = 0; i < 4; i++) {
         bars.push({ score: scores[i] ?? null });
       }
-      bars.push({ score: hasToday ? scores[6] ?? null : null });
-
-    } else if (period === 'month') {
-      // 4 buckets of 7 rows each
-      for (let w = 0; w < 4; w++) {
-        const slice = scores.slice(w * 7, w * 7 + 7);
-        bars.push({ score: avg(slice) });
-      }
-
     } else {
-      // 6 buckets of 56 rows each
+      // 6 bars — each is the average of 8 weekly assessments (~2 months per bar, ~12 months total)
+      // If fewer than 48 rows exist, averages are computed from whatever data is available per bucket
       for (let b = 0; b < 6; b++) {
-        const slice = scores.slice(b * 56, b * 56 + 56);
+        const slice = scores.slice(b * 8, b * 8 + 8);
         bars.push({ score: avg(slice) });
       }
     }

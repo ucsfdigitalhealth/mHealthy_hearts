@@ -40,8 +40,7 @@ const Y_TICKS = [100, 75, 50, 25, 0];
 
 type BarPoint = { score: number | null };
 
-const PERIOD_LABEL: Record<'week' | 'month' | 'year', string> = {
-  week:  'WEEK TO DATE',
+const PERIOD_LABEL: Record<'month' | 'year', string> = {
   month: 'MONTH TO DATE',
   year:  'YEAR TO DATE',
 };
@@ -78,7 +77,7 @@ const DEFAULT_SERVINGS: ServingsData = {
 const DietLandingScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
   const { accessToken } = useAuth();
-  const [activePeriod, setActivePeriod] = useState<'week' | 'month' | 'year'>('week');
+  const [activePeriod, setActivePeriod] = useState<'month' | 'year'>('month');
   const [servings, setServings]         = useState<ServingsData>(DEFAULT_SERVINGS);
   const [bars, setBars]                 = useState<BarPoint[]>([]);
 
@@ -106,7 +105,7 @@ const DietLandingScreen: React.FC = () => {
       .catch(err => console.error('Error fetching diet today:', err));
   }, [accessToken]);
 
-  const fetchChart = React.useCallback((period: 'week' | 'month' | 'year') => {
+  const fetchChart = React.useCallback((period: 'month' | 'year') => {
     if (!accessToken) return;
     const tz = getDeviceTimezone() || 'UTC';
     fetch(`${DIET_BASE}/history?period=${period}&timezone=${encodeURIComponent(tz)}`, {
@@ -179,7 +178,7 @@ const DietLandingScreen: React.FC = () => {
         <View style={styles.chartCard}>
           {/* Period selector */}
           <View style={styles.periodRow}>
-            {(['week', 'month', 'year'] as const).map(p => (
+            {(['month', 'year'] as const).map(p => (
               <TouchableOpacity
                 key={p}
                 style={[styles.periodBtn, activePeriod === p && styles.periodBtnActive]}
