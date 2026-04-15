@@ -28,6 +28,7 @@ interface User {
 
 interface AuthResponse {
   accessToken: string;
+  refreshToken: string;
   message: string;
 }
 
@@ -176,7 +177,7 @@ export const LoginScreen: React.FC = () => {
         const userInfo = await fetchUserInfo(data.accessToken);
         if (userInfo) {
           // Use the AuthContext to store the login data
-          login(data.accessToken, userInfo);
+          await login(data.accessToken, data.refreshToken, userInfo);
           
           // Mark as fresh login and check Fitbit connection status
           setIsFreshLogin(true);

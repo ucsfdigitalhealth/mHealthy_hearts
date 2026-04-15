@@ -101,16 +101,18 @@ router.post('/login', async (req, res) => {
       [hashedRefreshToken, refreshTokenExpiration, userId]
     );
     
-    // Set refresh token as HTTP-only cookie
+    // Set refresh token as HTTP-only cookie (for web clients)
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: false, // Use secure cookies in production
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
     });
-    
-    res.json({ 
+
+    // Also return refresh token in body so React Native clients can store it
+    res.json({
       accessToken,
+      refreshToken,
       message: 'Login successful'
     });
   } catch (error) {
@@ -122,7 +124,8 @@ router.post('/login', async (req, res) => {
 // Refresh token endpoint
 router.post('/refresh', async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
+    // Accept refresh token from cookie (web) or request body (React Native)
+    const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
     
     if (!refreshToken) {
       return res.status(401).json({ message: 'Refresh token not provided' });
@@ -174,16 +177,18 @@ router.post('/refresh', async (req, res) => {
       [hashedNewRefreshToken, newRefreshTokenExpiration, user.id]
     );
     
-    // Set new refresh token cookie
+    // Set new refresh token cookie (for web clients)
     res.cookie('refreshToken', newRefreshToken, {
       httpOnly: true,
       secure: false, // Set to true in production, false for local development
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
-    
-    res.json({ 
+
+    // Also return new refresh token in body so React Native clients can update storage
+    res.json({
       accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
       message: 'Token refreshed successfully'
     });
     
@@ -196,7 +201,8 @@ router.post('/refresh', async (req, res) => {
 // Logout endpoint
 router.post('/logout', async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
+    // Accept refresh token from cookie (web) or request body (React Native)
+    const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
     
     if (refreshToken) {
       // Find and invalidate the refresh token - no authentication required

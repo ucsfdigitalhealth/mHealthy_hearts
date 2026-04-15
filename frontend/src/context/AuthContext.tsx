@@ -14,9 +14,10 @@ interface AuthContextType {
   user: User | null;
   accessToken: string | null;
   loading: boolean;
-  login: (token: string, userData: User) => void;
-  logout: () => void;
+  login: (token: string, refreshToken: string, userData: User) => Promise<void>;
+  logout: () => Promise<void>;
   fetchUserInfo: () => Promise<void>;
+  refreshAccessToken: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,18 +26,23 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const API_BASE_URL = 'http://localhost:3000/api/auth';
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const API_BASE_URL = 'http://localhost:3000/api/auth';
-
-  const login = async (token: string, userData: User) => {
+  const login = async (token: string, newRefreshToken: string, userData: User) => {
     try {
-      await AsyncStorage.setItem('accessToken', token);
-      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+      await AsyncStorage.multiSet([
+        ['accessToken', token],
+        ['refreshToken', newRefreshToken],
+        ['userData', JSON.stringify(userData)],
+      ]);
       setAccessToken(token);
+      setRefreshToken(newRefreshToken);
       setUser(userData);
       await Promise.all([clearStepsCache(), clearSleepCache()]);
     } catch (error) {
@@ -46,14 +52,63 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = useCallback(async () => {
     try {
-      await AsyncStorage.removeItem('accessToken');
-      await AsyncStorage.removeItem('userData');
+      // Notify backend to invalidate the refresh token
+      const storedRefreshToken = refreshToken || await AsyncStorage.getItem('refreshToken');
+      if (storedRefreshToken) {
+        await fetch(`${API_BASE_URL}/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: storedRefreshToken }),
+        }).catch(() => {}); // Fire-and-forget — don't block logout on network error
+      }
+
+      await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData']);
       setAccessToken(null);
+      setRefreshToken(null);
       setUser(null);
     } catch (error) {
       console.error('Error clearing auth data:', error);
     }
-  }, []);
+  }, [refreshToken]);
+
+  /**
+   * Attempts to get a new access token using the stored refresh token.
+   * Returns true on success, false on failure (which triggers logout).
+   */
+  const refreshAccessToken = useCallback(async (): Promise<boolean> => {
+    try {
+      const storedRefreshToken = refreshToken || await AsyncStorage.getItem('refreshToken');
+      if (!storedRefreshToken) {
+        console.log('No refresh token available');
+        return false;
+      }
+
+      console.log('Attempting token refresh...');
+      const response = await fetch(`${API_BASE_URL}/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: storedRefreshToken }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Token refresh successful');
+        await AsyncStorage.multiSet([
+          ['accessToken', data.accessToken],
+          ['refreshToken', data.refreshToken],
+        ]);
+        setAccessToken(data.accessToken);
+        setRefreshToken(data.refreshToken);
+        return true;
+      } else {
+        console.log('Token refresh failed:', response.status);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      return false;
+    }
+  }, [refreshToken]);
 
   const fetchUserInfo = useCallback(async (): Promise<void> => {
     if (!accessToken) {
@@ -62,59 +117,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      // Don't set loading state when refreshing user info to avoid unmounting NavigationContainer
-      console.log('Fetching user info with token:', accessToken.substring(0, 20) + '...');
-      
       const response = await fetch(`${API_BASE_URL}/userinfo`, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
+        headers: { 'Authorization': `Bearer ${accessToken}` },
       });
 
-      console.log('User info response status:', response.status);
-      
       if (response.ok) {
         const data = await response.json();
-        console.log('User info data:', data);
         setUser(data.user);
-        // Update stored user data
         await AsyncStorage.setItem('userData', JSON.stringify(data.user));
-      } else {
-        console.error('Failed to fetch user info:', response.status);
-        // If token is invalid, logout
-        if (response.status === 401) {
+      } else if (response.status === 401) {
+        // Try to refresh and retry once
+        const refreshed = await refreshAccessToken();
+        if (!refreshed) {
           await logout();
         }
       }
     } catch (error) {
       console.error('Error fetching user info:', error);
     }
-  }, [accessToken, logout]);
+  }, [accessToken, refreshAccessToken, logout]);
 
   // Load stored auth data on app start
   useEffect(() => {
     let isMounted = true;
-    
+
     const loadStoredAuth = async () => {
       try {
         setLoading(true);
-        const [storedToken, storedUserData] = await Promise.all([
+        const [storedToken, storedRefreshToken, storedUserData] = await Promise.all([
           AsyncStorage.getItem('accessToken'),
-          AsyncStorage.getItem('userData')
+          AsyncStorage.getItem('refreshToken'),
+          AsyncStorage.getItem('userData'),
         ]);
 
         if (!isMounted) return;
 
         if (storedToken) {
-          // Validate token by fetching user info directly (don't use fetchUserInfo to avoid dependencies)
+          // Try to validate the stored access token
           try {
             console.log('Validating stored token on app start...');
             const response = await fetch(`${API_BASE_URL}/userinfo`, {
               method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${storedToken}`,
-              },
+              headers: { 'Authorization': `Bearer ${storedToken}` },
             });
 
             if (!isMounted) return;
@@ -122,38 +167,87 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             if (response.ok) {
               const data = await response.json();
               console.log('Token is valid, restoring session');
-              // Token is valid, restore session
               setAccessToken(storedToken);
+              setRefreshToken(storedRefreshToken);
               setUser(data.user);
-              // Update stored user data with fresh data
               await AsyncStorage.setItem('userData', JSON.stringify(data.user));
+            } else if (response.status === 401 && storedRefreshToken) {
+              // Access token expired — try to refresh silently
+              console.log('Access token expired on startup, attempting refresh...');
+              const refreshResponse = await fetch(`${API_BASE_URL}/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: storedRefreshToken }),
+              });
+
+              if (!isMounted) return;
+
+              if (refreshResponse.ok) {
+                const refreshData = await refreshResponse.json();
+                console.log('Startup refresh successful, restoring session');
+                await AsyncStorage.multiSet([
+                  ['accessToken', refreshData.accessToken],
+                  ['refreshToken', refreshData.refreshToken],
+                ]);
+                setAccessToken(refreshData.accessToken);
+                setRefreshToken(refreshData.refreshToken);
+
+                // Fetch user info with new token
+                const userResponse = await fetch(`${API_BASE_URL}/userinfo`, {
+                  method: 'GET',
+                  headers: { 'Authorization': `Bearer ${refreshData.accessToken}` },
+                });
+                if (isMounted && userResponse.ok) {
+                  const userData = await userResponse.json();
+                  setUser(userData.user);
+                  await AsyncStorage.setItem('userData', JSON.stringify(userData.user));
+                } else if (isMounted && storedUserData) {
+                  // Fall back to cached user data if fetch fails
+                  setUser(JSON.parse(storedUserData));
+                }
+              } else {
+                console.log('Refresh token also expired, clearing auth');
+                await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData']);
+                if (isMounted) {
+                  setAccessToken(null);
+                  setRefreshToken(null);
+                  setUser(null);
+                }
+              }
             } else {
-              console.log('Token is invalid, clearing stored data');
-              // Token is invalid, clear stored data
-              await AsyncStorage.removeItem('accessToken');
-              await AsyncStorage.removeItem('userData');
-              setAccessToken(null);
-              setUser(null);
+              console.log('Token invalid, clearing stored data');
+              await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData']);
+              if (isMounted) {
+                setAccessToken(null);
+                setRefreshToken(null);
+                setUser(null);
+              }
             }
           } catch (error) {
             console.error('Error validating token:', error);
             if (!isMounted) return;
-            // On error, clear auth state to be safe
-            await AsyncStorage.removeItem('accessToken');
-            await AsyncStorage.removeItem('userData');
-            setAccessToken(null);
-            setUser(null);
+            // Network error — restore from cache so app works offline
+            if (storedUserData) {
+              console.log('Network error on startup, restoring from cache');
+              setAccessToken(storedToken);
+              setRefreshToken(storedRefreshToken);
+              setUser(JSON.parse(storedUserData));
+            } else {
+              setAccessToken(null);
+              setRefreshToken(null);
+              setUser(null);
+            }
           }
         } else {
-          // No stored token, ensure state is clear
           setAccessToken(null);
+          setRefreshToken(null);
           setUser(null);
         }
       } catch (error) {
         console.error('Error loading stored auth data:', error);
         if (!isMounted) return;
-        // On error, clear auth state to be safe
         setAccessToken(null);
+        setRefreshToken(null);
         setUser(null);
       } finally {
         if (isMounted) {
@@ -176,6 +270,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     fetchUserInfo,
+    refreshAccessToken,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
