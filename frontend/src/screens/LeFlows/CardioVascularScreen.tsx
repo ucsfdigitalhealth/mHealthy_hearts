@@ -365,7 +365,6 @@ const CardioVascularScreen: React.FC = () => {
   const handlePhysicalActivityPress = () => navigation.navigate('PhysicalActivityLanding');
   const handleSleepPress = () => navigation.navigate('SleepLanding');
   const handleBloodPressurePress = () => navigation.navigate('BloodPressureLanding');
-  const handleViewHistoricalDataPress = () => navigation.navigate('CardioHistoricalData');
 
   const fetchAllHealthScores = useCallback(async () => {
     if (!accessToken) return;
