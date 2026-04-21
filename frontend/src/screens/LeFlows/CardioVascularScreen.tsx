@@ -15,6 +15,7 @@ import type { RootStackParamList } from '../../../App'; // Update path as needed
 import Settings from '../../components/Settings';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthContext';
+import { fetchWithAuth } from '../../utils/apiClient';
 import { useFitbitAuth } from '../../context/FitbitAuthContext';
 import { getCachedBloodSugar, setCachedBloodSugar } from '../../utils/bloodSugarCache';
 import { getCachedBmi, setCachedBmi } from '../../utils/bmiCache';
@@ -312,7 +313,7 @@ const MetricItem: React.FC<{
 
 const CardioVascularScreen: React.FC = () => {
   const navigation = useNavigation<CardioNavigationProp>();
-  const { accessToken } = useAuth();
+  const { accessToken, refreshAccessToken, logout } = useAuth();
   const { isConnected: fitbitConnected } = useFitbitAuth();
   const [hasSmoked, setHasSmoked] = useState<'Yes' | 'No'>('Yes');
   const [lastSmoked, setLastSmoked] = useState<'More than 5 years ago' | '1–5 years ago' | 'Within the past year' | 'I currently smoke/use'>('More than 5 years ago');
@@ -403,13 +404,13 @@ const CardioVascularScreen: React.FC = () => {
       const healthScoresUrl = tz
         ? `${HEALTH_SCORES_BASE}?timezone=${encodeURIComponent(tz)}`
         : HEALTH_SCORES_BASE;
-      const response = await fetch(healthScoresUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      const response = await fetchWithAuth(
+        healthScoresUrl,
+        { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+        accessToken,
+        refreshAccessToken,
+        logout,
+      );
 
       if (response.ok) {
         const data = await response.json();
@@ -457,9 +458,13 @@ const CardioVascularScreen: React.FC = () => {
             const stepsUrl = tz
               ? `${FITBIT_STEPS_BASE}?timezone=${encodeURIComponent(tz)}`
               : FITBIT_STEPS_BASE;
-            const stepsRes = await fetch(stepsUrl, {
-              headers: { Authorization: `Bearer ${accessToken}` },
-            });
+            const stepsRes = await fetchWithAuth(
+              stepsUrl,
+              { method: 'GET' },
+              accessToken,
+              refreshAccessToken,
+              logout,
+            );
             if (stepsRes.ok) {
               const stepsData = await stepsRes.json();
               if (stepsData.steps != null) setActivitySteps(Number(stepsData.steps));
@@ -497,7 +502,7 @@ const CardioVascularScreen: React.FC = () => {
       setSleepScore(null);
       setSleepDisplayHours(null);
     }
-  }, [accessToken]);
+  }, [accessToken, refreshAccessToken, logout]);
 
   useFocusEffect(
     React.useCallback(() => {
