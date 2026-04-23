@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
-import { getCachedSteps, setCachedSteps, CACHE_TTL_MS } from '../utils/stepsCache';
+import { getCachedSteps, setCachedSteps, clearStepsCache, CACHE_TTL_MS } from '../utils/stepsCache';
 import { getDeviceTimezone } from '../utils/localDate';
+import { FITBIT_STEPS_LOGIN_REFRESH_KEY } from '../context/AuthContext';
 
 const STEPS_BASE = 'http://localhost:3000/api/fitbitAuth/fitbit/steps';
 
@@ -52,6 +54,7 @@ async function doStepsRefetch(): Promise<void> {
 export interface UseStepsResult {
   steps: string;
   stepsNumber: number;
+  refresh: () => void;
 }
 
 /**
@@ -62,6 +65,12 @@ export function useSteps(): UseStepsResult {
   const { accessToken } = useAuth();
   const [steps, setSteps] = useState<string>('—');
   const [stepsNumber, setStepsNumber] = useState<number>(0);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const refresh = useCallback(async () => {
+    await clearStepsCache();
+    setRefreshTrigger(t => t + 1);
+  }, []);
 
   useEffect(() => {
     if (!accessToken) {
@@ -85,7 +94,13 @@ export function useSteps(): UseStepsResult {
 
       try {
         const tz = getDeviceTimezone();
-        const url = tz ? `${STEPS_BASE}?timezone=${encodeURIComponent(tz)}` : STEPS_BASE;
+        const loginRefresh = await AsyncStorage.getItem(FITBIT_STEPS_LOGIN_REFRESH_KEY);
+        const force = loginRefresh === 'true';
+        if (force) await AsyncStorage.removeItem(FITBIT_STEPS_LOGIN_REFRESH_KEY);
+        const params = new URLSearchParams();
+        if (tz) params.set('timezone', tz);
+        if (force) params.set('force', 'true');
+        const url = `${STEPS_BASE}?${params.toString()}`;
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
@@ -126,7 +141,7 @@ export function useSteps(): UseStepsResult {
       // Do NOT clear stepsRefreshTimeoutId on unmount — timer runs across screens.
       // Only cleared when accessToken becomes null above.
     };
-  }, [accessToken]);
+  }, [accessToken, refreshTrigger]);
 
-  return { steps, stepsNumber };
+  return { steps, stepsNumber, refresh };
 }

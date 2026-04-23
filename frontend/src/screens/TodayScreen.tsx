@@ -1,15 +1,22 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Settings from '../components/Settings';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSteps } from '../hooks/useSteps';
 import { useSleep } from '../hooks/useSleep';
 
 const TodayScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { steps } = useSteps();
-  const { formatted: sleepFormatted, sleepScore, isLoading: sleepLoading, error: sleepError } = useSleep();
+  const { steps, refresh: refreshSteps } = useSteps();
+  const { formatted: sleepFormatted, sleepScore, isLoading: sleepLoading, error: sleepError, refresh: refreshSleep } = useSleep();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshSteps();
+      refreshSleep();
+    }, [refreshSteps, refreshSleep])
+  );
 
   const handleSymptomCheckIn = () => {
     // Navigate to Symptom Assessment screen

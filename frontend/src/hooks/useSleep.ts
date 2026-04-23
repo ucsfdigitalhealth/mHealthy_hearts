@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
-import { getCachedSleep, setCachedSleep, debugLogSleepCache, CACHE_TTL_MS } from '../utils/sleepCache';
+import { getCachedSleep, setCachedSleep, clearSleepCache, debugLogSleepCache, CACHE_TTL_MS } from '../utils/sleepCache';
 import { getDeviceTimezone } from '../utils/localDate';
+import { FITBIT_SLEEP_LOGIN_REFRESH_KEY } from '../context/AuthContext';
 
 const SLEEP_BASE = 'http://localhost:3000/api/fitbitAuth/fitbit/sleep';
 
@@ -70,6 +72,8 @@ export interface UseSleepResult {
   isLoading: boolean;
   /** Set when the last fetch failed (e.g. network or 401). */
   error: string | null;
+  /** Clears the cache and immediately re-fetches from the backend. */
+  refresh: () => void;
 }
 
 function formatMinutesToHM(minutes: number): string {
@@ -100,6 +104,12 @@ export function useSleep(): UseSleepResult {
   const [efficiency, setEfficiency] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const refresh = useCallback(async () => {
+    await clearSleepCache();
+    setRefreshTrigger(t => t + 1);
+  }, []);
 
   const sleepHours = minutesAsleep / 60;
   const sleepScore = calculateSleepScore(sleepHours);
@@ -136,7 +146,13 @@ export function useSleep(): UseSleepResult {
 
       try {
         const tz = getDeviceTimezone();
-        const url = tz ? `${SLEEP_BASE}?timezone=${encodeURIComponent(tz)}` : SLEEP_BASE;
+        const loginRefresh = await AsyncStorage.getItem(FITBIT_SLEEP_LOGIN_REFRESH_KEY);
+        const force = loginRefresh === 'true';
+        if (force) await AsyncStorage.removeItem(FITBIT_SLEEP_LOGIN_REFRESH_KEY);
+        const params = new URLSearchParams();
+        if (tz) params.set('timezone', tz);
+        if (force) params.set('force', 'true');
+        const url = `${SLEEP_BASE}?${params.toString()}`;
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
@@ -192,7 +208,7 @@ export function useSleep(): UseSleepResult {
       // Do NOT clear sleepRefreshTimeoutId on unmount — timer runs across screens.
       // Only cleared when accessToken becomes null above.
     };
-  }, [accessToken]);
+  }, [accessToken, refreshTrigger]);
 
   return {
     minutesAsleep,
@@ -203,5 +219,6 @@ export function useSleep(): UseSleepResult {
     efficiency,
     isLoading,
     error,
+    refresh,
   };
 }

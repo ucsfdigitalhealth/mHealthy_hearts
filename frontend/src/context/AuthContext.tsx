@@ -28,6 +28,9 @@ interface AuthProviderProps {
 
 const API_BASE_URL = 'http://localhost:3000/api/auth';
 
+export const FITBIT_STEPS_LOGIN_REFRESH_KEY = 'fitbit_steps_login_refresh';
+export const FITBIT_SLEEP_LOGIN_REFRESH_KEY = 'fitbit_sleep_login_refresh';
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -40,6 +43,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         ['accessToken', token],
         ['refreshToken', newRefreshToken],
         ['userData', JSON.stringify(userData)],
+        // Flags that tell the steps/sleep hooks to bypass the backend DB cache
+        // on their first fetch, going directly to Fitbit servers.
+        [FITBIT_STEPS_LOGIN_REFRESH_KEY, 'true'],
+        [FITBIT_SLEEP_LOGIN_REFRESH_KEY, 'true'],
       ]);
       setAccessToken(token);
       setRefreshToken(newRefreshToken);

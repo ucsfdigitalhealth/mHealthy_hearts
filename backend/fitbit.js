@@ -489,13 +489,15 @@ router.get('/fitbit/steps', verifyTokenOrRefresh, async (req, res) => {
     const today = getTodayInTimezone(tz);
 
     // Check fitbit_daily_data for today's steps; use cache if present and < 30 minutes old
+    // ?force=true bypasses the DB cache and goes directly to Fitbit (used on login)
+    const forceRefresh = req.query.force === 'true';
     const [rows] = await db.execute(
       'SELECT steps, updated_at FROM fitbit_daily_data WHERE user_id = ? AND date = ? ORDER BY updated_at DESC LIMIT 1',
       [req.user.userId, today]
     );
     const cached = rows[0];
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000); // elapsed time
-    const useCache = cached && cached.updated_at != null && new Date(cached.updated_at) > thirtyMinutesAgo;
+    const useCache = !forceRefresh && cached && cached.updated_at != null && new Date(cached.updated_at) > thirtyMinutesAgo;
 
     if (useCache) {
       const data = {
@@ -601,13 +603,15 @@ router.get('/fitbit/sleep', verifyTokenOrRefresh, async (req, res) => {
     const yesterdayLocal = subtractDaysLocal(todayLocal, 1);
 
     // Check fitbit_sleep_data for yesterday's sleep (bed date); use cache if < 30 minutes old
+    // ?force=true bypasses the DB cache and goes directly to Fitbit (used on login)
+    const forceRefresh = req.query.force === 'true';
     const [rows] = await db.execute(
       'SELECT date, total_minutes_asleep, total_time_in_bed, sleep_efficiency, updated_at FROM fitbit_sleep_data WHERE user_id = ? AND date = ? ORDER BY updated_at DESC LIMIT 1',
       [req.user.userId, yesterdayLocal]
     );
     const cached = rows[0];
     const thirtyMinutesAgo = new Date(new Date().getTime() - 30 * 60 * 1000); // elapsed time
-    const useCache = cached && cached.updated_at != null && new Date(cached.updated_at) > thirtyMinutesAgo;
+    const useCache = !forceRefresh && cached && cached.updated_at != null && new Date(cached.updated_at) > thirtyMinutesAgo;
 
     if (useCache) {
       const cachedSleepHours = (cached.total_minutes_asleep || 0) / 60;

@@ -23,7 +23,7 @@ type TodayGoal = {
 
 const ActivityScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { steps, stepsNumber } = useSteps();
+  const { steps, stepsNumber, refresh: refreshSteps } = useSteps();
   const { accessToken } = useAuth();
   const [todayGoal, setTodayGoal] = useState<TodayGoal>(null);
   const [currentStreak, setCurrentStreak] = useState(0);
@@ -60,7 +60,8 @@ const ActivityScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       fetchGoalAndStreak();
-    }, [fetchGoalAndStreak])
+      refreshSteps();
+    }, [fetchGoalAndStreak, refreshSteps])
   );
 
   const goalSteps = todayGoal?.stepTarget ?? 6000;
