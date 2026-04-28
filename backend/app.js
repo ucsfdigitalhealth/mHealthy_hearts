@@ -16,6 +16,7 @@ import diet from "./routes/diet.js";
 import smoking from "./routes/smoking.js";
 import healthScores from "./routes/healthScores.js";
 import activityGoals from "./routes/activityGoals.js";
+import symptoms from "./routes/symptoms.js";
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use('/api/diet', diet.router);
 app.use('/api/smoking', smoking.router);
 app.use('/api/health-scores', healthScores.router);
 app.use('/api/activity', activityGoals.router);
+app.use('/api/symptoms', symptoms.router);
 
 const PORT = process.env.PORT || 3000;
 

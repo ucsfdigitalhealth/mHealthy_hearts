@@ -10,7 +10,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Linking,
 } from 'react-native';
+import { logDisclaimer } from '../api/symptoms';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -178,7 +180,10 @@ export const LoginScreen: React.FC = () => {
         if (userInfo) {
           // Use the AuthContext to store the login data
           await login(data.accessToken, data.refreshToken, userInfo);
-          
+
+          // Log that the disclaimer was shown at login (fire-and-forget)
+          logDisclaimer(data.accessToken, 'login');
+
           // Mark as fresh login and check Fitbit connection status
           setIsFreshLogin(true);
           setHasCheckedFitbit(false); // Reset to trigger check
@@ -263,6 +268,20 @@ export const LoginScreen: React.FC = () => {
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.content}>
+            {/* Safety disclaimer — shown every time the login form is visible */}
+            <View style={styles.disclaimerBanner}>
+              <Text style={styles.disclaimerText}>
+                {'In an emergency, '}
+                <Text
+                  style={styles.disclaimerLink}
+                  onPress={() => Linking.openURL('tel:911')}
+                >
+                  call 911
+                </Text>
+                {' first. This app does not contact your doctor or send help. Log your symptoms after you are safe.'}
+              </Text>
+            </View>
+
             <Text style={styles.title}>mHealthy Hearts</Text>
             <Text style={styles.subtitle}>
               {isLogin ? 'Welcome back!' : 'Create your account'}
@@ -420,6 +439,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  disclaimerBanner: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 20,
+  },
+  disclaimerText: {
+    fontSize: 13,
+    color: '#92400E',
+    lineHeight: 19,
+  },
+  disclaimerLink: {
+    color: '#DC2626',
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });
 

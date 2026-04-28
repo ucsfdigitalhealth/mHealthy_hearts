@@ -11,10 +11,10 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/bottom-tabs": "^7.12.0",
     "@react-navigation/native": "^7.1.17",
     "@react-navigation/native-stack": "^7.3.26",
-    "victory-native": "^36.9.1",
     "expo": "~54.0.30",
     "expo-linking": "~8.0.11",
     "expo-status-bar": "~3.0.9",
@@ -26,7 +26,8 @@
     "react-native-safe-area-context": "^5.6.1",
     "react-native-screens": "^4.16.0",
     "react-native-svg": "^15.15.2",
-    "react-native-vector-icons": "^10.3.0"
+    "react-native-vector-icons": "^10.3.0",
+    "victory-native": "^36.9.1"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",

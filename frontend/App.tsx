@@ -13,6 +13,9 @@ import BmiScreen from './src/screens/LeFlows/BmiScreen';
 import DietAssessmentScreen from './src/screens/LeFlows/DietAssessmentScreen';
 import SmokingAssessmentScreen from './src/screens/LeFlows/SmokingAssessmentScreen';
 import SymptomAssessmentScreen from './src/screens/SymptomsScreen';
+import SymptomScreen2 from './src/screens/symptoms/SymptomScreen2';
+import SymptomScreen3 from './src/screens/symptoms/SymptomScreen3';
+import SymptomConfirmation from './src/screens/symptoms/SymptomConfirmation';
 import AssessmentLandingScreen from './src/screens/LeFlows/AssessmentLandingScreen';
 import BloodLipidsLandingScreen from './src/screens/LeFlows/BloodLipidsLandingScreen';
 import SmokingLandingScreen from './src/screens/LeFlows/SmokingLandingScreen';
@@ -49,6 +52,20 @@ export type RootStackParamList = {
   Smoking: undefined;
   Settings: undefined;
   Symptoms: undefined;
+  SymptomScreen2: {
+    symptom_key: string;
+    symptom_label: string;
+    tracking_type: string;
+    safety_modal_shown: boolean;
+  };
+  SymptomScreen3: {
+    symptom_key: string;
+    symptom_label: string;
+    tracking_type: string;
+    safety_modal_shown: boolean;
+    activities: string[];
+  };
+  SymptomConfirmation: undefined;
   GoalsSetting: undefined;
   GoalStep1: undefined;
   GoalStep2: undefined;
@@ -89,6 +106,9 @@ export default function App() {
             <Stack.Screen name="Diet" component={DietAssessmentScreen} />
             <Stack.Screen name="Smoking" component={SmokingAssessmentScreen} />
             <Stack.Screen name="Symptoms" component={SymptomAssessmentScreen} />
+            <Stack.Screen name="SymptomScreen2" component={SymptomScreen2} />
+            <Stack.Screen name="SymptomScreen3" component={SymptomScreen3} />
+            <Stack.Screen name="SymptomConfirmation" component={SymptomConfirmation} />
             <Stack.Screen name="GoalStep1" component={DailyCheckInStepScreen} />
             <Stack.Screen name="GoalStep2" component={YesterdayStepsStepScreen} />
             <Stack.Screen name="GoalStep3" component={SymptomBurdenStepScreen} />
