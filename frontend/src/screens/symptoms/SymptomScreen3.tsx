@@ -123,7 +123,7 @@ const SymptomScreen3: React.FC = () => {
     setSaving(true);
     setSaveError(null);
     try {
-      await postSymptomEvent(accessToken, {
+      const result = await postSymptomEvent(accessToken, {
         symptom_key,
         symptom_label,
         tracking_type,
@@ -132,7 +132,18 @@ const SymptomScreen3: React.FC = () => {
         activities,
         safety_modal_shown,
       });
-      navigation.navigate('SymptomConfirmation');
+
+      // EMA-eligible symptoms (and not stress, which uses a separate protocol)
+      // go to Screen 4 for enrollment preference. Others skip straight to Confirmation.
+      if (tracking_type === 'event_log_ema' && symptom_key !== 'stress') {
+        navigation.navigate('SymptomScreen4', {
+          symptom_event_id: result.id,
+          symptom_key,
+          symptom_label,
+        });
+      } else {
+        navigation.navigate('SymptomConfirmation');
+      }
     } catch (err: any) {
       setSaveError(err.message || 'Something went wrong. Please try again.');
     } finally {

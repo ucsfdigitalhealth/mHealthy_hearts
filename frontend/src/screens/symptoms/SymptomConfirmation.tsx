@@ -7,17 +7,20 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'SymptomConfirmation'>;
+type RoutePropType = RouteProp<RootStackParamList, 'SymptomConfirmation'>;
 
 const SymptomConfirmation: React.FC = () => {
   const navigation = useNavigation<NavProp>();
+  const route = useRoute<RoutePropType>();
+  const enrollmentSummary = route.params?.enrollmentSummary;
+  const hasSchedule = Boolean(enrollmentSummary);
 
   const handleDone = () => {
-    // Return to HomeTabs (root of the app after login)
     navigation.navigate('HomeTabs');
   };
 
@@ -29,7 +32,14 @@ const SymptomConfirmation: React.FC = () => {
         </View>
 
         <Text style={styles.title}>Logged.</Text>
-        <Text style={styles.subtitle}>Take care of yourself.</Text>
+
+        {hasSchedule ? (
+          <Text style={styles.subtitle}>
+            {`We'll check in with you ${enrollmentSummary}.`}
+          </Text>
+        ) : (
+          <Text style={styles.subtitle}>Take care of yourself.</Text>
+        )}
 
         <Text style={styles.body}>
           Your symptom has been recorded. If you are feeling unwell, please reach out to your care team.
@@ -65,11 +75,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '500',
     color: '#34C759',
     textAlign: 'center',
     marginBottom: 24,
+    lineHeight: 28,
+    maxWidth: 300,
   },
   body: {
     fontSize: 16,

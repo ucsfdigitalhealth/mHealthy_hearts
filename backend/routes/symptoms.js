@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db.js');
 const { verifyToken } = require('../auth.js');
+const { SYMPTOM_INSTRUMENT_MAP, EMA_ENROLLMENT_KEYS } = require('../config/instruments.js');
 
 const ALLOWED_SYMPTOM_KEYS = new Set([
   'chest_pain', 'fainted', 'irregular_heartbeat', 'racing_heart', 'light_headed',
@@ -124,6 +125,62 @@ router.post('/disclaimer-log', verifyToken, async (req, res) => {
     return res.status(201).json({ message: 'Disclaimer log saved' });
   } catch (error) {
     console.error('Error logging disclaimer:', error);
+    return res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+});
+
+// POST /api/symptoms/ema-enrollment
+// schedule format (for ongoing): [{day_of_week: 0-6, time: "HH:MM"}, ...]
+router.post('/ema-enrollment', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+    const { symptom_event_id, symptom_key, frequency, schedule } = req.body || {};
+
+    if (!symptom_event_id) {
+      return res.status(400).json({ message: 'symptom_event_id is required' });
+    }
+    if (!symptom_key || !EMA_ENROLLMENT_KEYS.has(symptom_key)) {
+      return res.status(400).json({ message: 'Invalid or non-enrollable symptom_key' });
+    }
+    if (!frequency || !['once', 'ongoing'].includes(frequency)) {
+      return res.status(400).json({ message: 'frequency must be "once" or "ongoing"' });
+    }
+
+    let scheduleJson = null;
+
+    if (frequency === 'ongoing') {
+      if (!Array.isArray(schedule) || schedule.length === 0) {
+        return res.status(400).json({ message: 'schedule must be a non-empty array for ongoing frequency' });
+      }
+      for (const slot of schedule) {
+        const dayNum = Number(slot.day_of_week);
+        if (isNaN(dayNum) || dayNum < 0 || dayNum > 6) {
+          return res.status(400).json({ message: 'Each slot must have day_of_week 0–6' });
+        }
+        if (!slot.time || typeof slot.time !== 'string') {
+          return res.status(400).json({ message: 'Each slot must have a time string (HH:MM)' });
+        }
+      }
+      scheduleJson = JSON.stringify(schedule);
+    }
+
+    const instrument_key = SYMPTOM_INSTRUMENT_MAP[symptom_key];
+
+    const [result] = await db.execute(
+      `INSERT INTO ema_enrollments
+         (user_id, symptom_event_id, symptom_key, instrument_key, schedule, frequency)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, symptom_event_id, symptom_key, instrument_key, scheduleJson, frequency]
+    );
+
+    return res.status(201).json({
+      id: result.insertId,
+      symptom_key,
+      frequency,
+      instrument_key,
+    });
+  } catch (error) {
+    console.error('Error saving EMA enrollment:', error);
     return res.status(500).json({ message: 'Server Error', error: error.message });
   }
 });
