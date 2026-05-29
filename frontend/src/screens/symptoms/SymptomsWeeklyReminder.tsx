@@ -267,7 +267,7 @@ const SymptomsWeeklyReminder: React.FC = () => {
       </ScrollView>
 
       <View style={styles.footer}>
-        {wantsReminder === true ? (
+        {wantsReminder === true && (
           <TouchableOpacity
             style={[styles.confirmButton, (!canConfirm || saving) && styles.confirmButtonDisabled]}
             onPress={handleConfirm}
@@ -279,13 +279,15 @@ const SymptomsWeeklyReminder: React.FC = () => {
               <Text style={styles.confirmButtonText}>Set reminder</Text>
             )}
           </TouchableOpacity>
-        ) : (
+        )}
+
+        {wantsReminder === false && (
           <TouchableOpacity style={styles.confirmButton} onPress={handleSkip}>
             <Text style={styles.confirmButtonText}>Done</Text>
           </TouchableOpacity>
         )}
 
-        {wantsReminder === true && (
+        {(wantsReminder === true || wantsReminder === null) && (
           <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
             <Text style={styles.skipText}>Skip for now</Text>
           </TouchableOpacity>
