@@ -77,10 +77,11 @@ A cardiovascular health tracking mobile app for prostate cancer survivors, monit
 - `GET /api/activity/yesterday-steps` - Get yesterday's step count (requires JWT)
 
 ### Symptom Tracking
-- `POST /api/symptoms/event` - Log a symptom event (requires JWT)
+- `POST /api/symptoms/event` - Log a symptom event; accepts `intensity_score` (0–10), `weight_change_direction`, `weight_change_lbs` (requires JWT)
 - `GET /api/symptoms/events` - Get all symptom events for the user; optional query params: `?symptom_key=fatigue&limit=50&offset=0` (requires JWT)
 - `POST /api/symptoms/disclaimer-log` - Record that the safety disclaimer was shown; body: `{ "context": "login" | "section_entry" | "acute_symptom_modal" }` (requires JWT)
-- `POST /api/symptoms/ema-enrollment` - Enroll in recurring EMA check-ins (requires JWT)
+- `POST /api/symptoms/instrument-response` - Store a completed weekly validated instrument (PROMIS, mMRC, HFRDIS); server computes and overrides T-score (requires JWT)
+- `POST /api/symptoms/ema-enrollment` - Enroll in recurring EMA check-ins; supports `frequency: "weekly"` with `notification_channel` and multi-slot schedule (requires JWT)
 
 ### Request/Response Examples
 
@@ -137,62 +138,86 @@ Run it in MAMP phpMyAdmin by selecting the `mhearts` database, opening the SQL t
 | `le8_composite_scores` | Full LE8 snapshot: all 8 component scores + aggregate per user per day |
 | `daily_goals` | Step goals set each day through the daily check-in flow |
 | `activity_streaks` | Running current and longest streak per user |
-| `symptom_events` | Every symptom a patient logs (core event log) |
+| `symptom_events` | Every symptom a patient logs; includes `intensity_score`, `weight_change_direction`, `weight_change_lbs` (v1.3) |
 | `symptom_disclaimer_log` | IRB audit trail — every time the safety disclaimer was shown |
-| `ema_enrollments` | Patient EMA enrollment preferences (frequency + multi-slot schedule) |
+| `ema_enrollments` | Patient EMA enrollment preferences; supports `weekly` frequency, `notification_channel`, and multi-slot schedule (v1.3) |
+| `symptom_instrument_responses` | Completed weekly validated instrument results (raw score, T-score, severity label) (v1.3) |
 | `user_goals` | Legacy — not currently used |
 
 
 ---
 
-## Symptom Tracking Feature
+## Symptom Tracking Feature (v1.3)
 
 ### Overview
-Patients can log individual symptoms through a 4-screen flow:
+Patients can log individual symptoms through a branching flow. Each symptom is assigned a path type that determines the screens shown:
 
-1. **Screen 1 — How are you feeling?** — Select one symptom from 15 options. Acute cardiac symptoms (chest pain, fainted, irregular heartbeat, racing heart, lightheadedness) trigger a blocking safety modal requiring acknowledgment before continuing.
-2. **Screen 2 — What were you doing?** — Multi-select activity context (sitting, walking, exercising, etc.)
-3. **Screen 3 — When? How long?** — Datetime picker (no future times) + duration selector (1 min / 10 min / 1 hour / more than 1 hour). Submits to `POST /api/symptoms/event`.
-4. **Screen 4 — Once or ongoing?** — For EMA-eligible symptoms only. Patient chooses "just this once" or "ongoing" and can set multiple recurring day/time check-in slots.
+**Acute path** (chest pain, fainted, irregular heartbeat, racing heart, lightheadedness):
+> Screen 1 → Safety modal → Screen 2 (activities) → Screen 3 (time/duration) → Intensity screen → Screen 4 (EMA enrollment) or Confirmation
+
+**Momentary path** (waking SOB at night, leg swelling, unintentional weight change):
+> Screen 1 → Screen 2 → Screen 3 → Intensity / Weight screen → Screen 4 or Confirmation
+
+**Choice path** (fatigue, anxiety, depression, sleep disturbance, reduced exercise tolerance, breathlessness, hot flashes):
+> Screen 1 → Branch choice screen →
+> - *Momentary*: Screen 2 → Screen 3 → Intensity screen → Screen 4 or Confirmation
+> - *Weekly instrument*: Instrument questionnaire → Weekly reminder setup → Confirmation
+
+**Stress** — informational modal only; no data written.
+
+### Screens
+| Screen | Purpose |
+|---|---|
+| Screen 1 — How are you feeling? | Symptom selection (15 options); entry disclaimer modal on mount |
+| SymptomsBranchChoice | For choice-path symptoms: "Right now" vs "Weekly check-in" |
+| Screen 2 — What were you doing? | Multi-select activity context |
+| Screen 3 — When? How long? | Datetime picker + duration selector |
+| SymptomsIntensity | Intensity slider (0–10) for most symptoms; direction + lbs input for weight change |
+| Screen 4 — Once or ongoing? | EMA enrollment after momentary log (once / ongoing + multi-slot schedule) |
+| SymptomsInstrument | Weekly validated questionnaire (PROMIS 4a, mMRC, or HFRDIS) with local score display |
+| SymptomsWeeklyReminder | Set up recurring weekly reminders: channel (text/email) + multi-slot day/time builder |
+| SymptomConfirmation | Success screen; shows reminder summary if enrolled |
 
 ### Safety Disclaimer
-The legally approved disclaimer _"In an emergency, call 911 first. This app does not contact your doctor or send help. Log your symptoms after you are safe."_ appears in three contexts, each silently logged to `symptom_disclaimer_log`:
+The approved disclaimer _"In an emergency, call 911. This app does not contact your doctor or send help. Log your symptoms after you are safe."_ appears in three contexts, each silently logged to `symptom_disclaimer_log`:
 - **Login screen** — visible banner on every login
-- **Screen 1 entry** — non-blocking banner at the top
+- **Screen 1 entry** — blocking modal on mount (must tap OK)
 - **Acute symptom modal** — blocking modal requiring "I Understand" before proceeding
 
 ### Instruments
-`backend/config/instruments.js` is the **single source of truth** for all validated instruments used in the study. It exports:
-- `INSTRUMENTS` — all 11 instruments with exact question wording, response scales, scoring logic, and reverse-score flags
-- `SYMPTOM_INSTRUMENT_MAP` — maps each EMA symptom key to its instrument key
-- `EMA_ENROLLMENT_KEYS` — the 9 patient-enrollable symptom keys (stress excluded — uses a separate grant-required 4x/day scheduled protocol)
+`backend/config/instruments.js` is the **single source of truth** for all validated instruments. It exports:
+- `INSTRUMENTS` — all instruments with question wording, response scales, scoring logic, and reverse-score flags
+- `SYMPTOM_INSTRUMENT_MAP` — maps each symptom key to its instrument key
+- `EMA_ENROLLMENT_KEYS` — patient-enrollable symptom keys (stress excluded — separate scheduled protocol)
+- `WEEKLY_INSTRUMENT_KEYS` — symptom keys that have a weekly validated instrument
+- `PROMIS_T_SCORES` + `lookupTScore()` — T-score lookup tables for all 5 PROMIS instruments
 
-| Symptom | Instrument |
-|---|---|
-| Fatigue | PROMIS Fatigue 4a |
-| Anxiety | PROMIS Anxiety 4a |
-| Depression / mood changes | PROMIS Depression 4a |
-| Sleep disturbance | PROMIS Sleep Disturbance 4a |
-| Reduced exercise tolerance | PROMIS Physical Function 4a |
-| Breathlessness with activity | mMRC Dyspnea Scale |
-| Waking short of breath at night | Single-item PND |
-| Leg swelling | Single-item self-report |
-| Unintentional weight change | Single-item self-report |
-| Stress | PSS-4 EMA (scheduled protocol only) |
-| Hot flashes | HFRDIS (QoL section, separate flow) |
+| Symptom | Instrument | Scoring |
+|---|---|---|
+| Fatigue | PROMIS Fatigue 4a | Sum → T-score lookup |
+| Anxiety | PROMIS Anxiety 4a | Sum → T-score lookup |
+| Depression / mood changes | PROMIS Depression 4a | Sum → T-score lookup |
+| Sleep disturbance | PROMIS Sleep Disturbance 4a | Sum (items 0 & 1 reverse-scored) → T-score lookup |
+| Reduced exercise tolerance | PROMIS Physical Function 4a | Sum → T-score lookup (higher = better) |
+| Breathlessness with activity | mMRC Dyspnea Scale | Single grade 0–4; no T-score; skips reminder screen |
+| Hot flashes | HFRDIS (10 items, 0–10 sliders) | Sum + average; mild / moderate / severe label |
+| Waking short of breath at night | Single-item momentary log | — |
+| Leg swelling | Single-item momentary log | — |
+| Unintentional weight change | Direction + lbs input; clinical flag if >2 lbs gained same day | — |
+| Stress | Informational modal only (scheduled protocol) | — |
 
-### EMA Enrollment — Schedule Format
-The `schedule` field in `ema_enrollments` stores a JSON array of `{day_of_week, time}` pairs, supporting multiple day/time combinations:
+### EMA / Weekly Enrollment — Schedule Format
+The `schedule` field in `ema_enrollments` stores a JSON array of `{day_of_week, time}` objects, supporting multiple slots per week:
 ```json
 [
   {"day_of_week": 1, "time": "09:00"},
   {"day_of_week": 3, "time": "14:00"}
 ]
 ```
-`day_of_week`: 0 = Sunday, 1 = Monday, … 6 = Saturday.
+`day_of_week`: 0 = Sunday … 6 = Saturday. For weekly enrollments, `notification_channel` is `"text"` or `"email"`.
 
 ### Migrations to Run
-Use `backend/migrations/full_migrate.sql` — it includes all tables including `symptom_events`, `symptom_disclaimer_log`, and `ema_enrollments`. No need to run the individual symptom migration files separately.
+Use `backend/migrations/full_migrate.sql` — it includes all tables. For an existing database already running pre-v1.3 schema, run `backend/migrations/add_intensity_columns_to_existing_db.sql` instead (drops and recreates `symptom_events`, `ema_enrollments`, and `symptom_instrument_responses` with the v1.3 schema). **Warning: this deletes existing rows in those three tables.**
 
 ---
 
