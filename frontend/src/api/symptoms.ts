@@ -8,12 +8,15 @@ export interface SymptomEventPayload {
   duration_bucket: string;
   activities: string[];
   safety_modal_shown: boolean;
+  intensity_score?: number | null;
+  weight_change_direction?: 'gained' | 'lost' | 'not_sure' | null;
+  weight_change_lbs?: number | null;
 }
 
 export async function postSymptomEvent(
   token: string,
   payload: SymptomEventPayload,
-): Promise<{ id: number; symptom_key: string; occurred_at: string }> {
+): Promise<{ id: number; symptom_key: string; occurred_at: string; clinical_flag?: string | null }> {
   const res = await fetch(`${API_BASE}/event`, {
     method: 'POST',
     headers: {
@@ -53,6 +56,58 @@ export async function postEmaEnrollment(
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.message || 'Failed to save enrollment');
+  return data;
+}
+
+export interface InstrumentResponsePayload {
+  symptom_key: string;
+  instrument_id: string;
+  raw_responses: number[];
+  raw_score: number;
+  t_score: number | null;
+  severity_label?: string | null;
+  enrollment_id?: number | null;
+}
+
+export async function postInstrumentResponse(
+  token: string,
+  payload: InstrumentResponsePayload,
+): Promise<{ id: number; symptom_key: string; instrument_id: string; raw_score: number; t_score: number | null }> {
+  const res = await fetch(`${API_BASE}/instrument-response`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to save instrument response');
+  return data;
+}
+
+export interface WeeklyEnrollmentPayload {
+  instrument_response_id: number;
+  symptom_key: string;
+  frequency: 'weekly';
+  schedule: ScheduleSlotApi[];
+  notification_channel: 'text' | 'email';
+}
+
+export async function postWeeklyEnrollment(
+  token: string,
+  payload: WeeklyEnrollmentPayload,
+): Promise<{ id: number; symptom_key: string; frequency: string; instrument_key: string }> {
+  const res = await fetch(`${API_BASE}/ema-enrollment`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to save weekly enrollment');
   return data;
 }
 

@@ -18,35 +18,43 @@ import { logDisclaimer } from '../api/symptoms';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Symptoms'>;
 
+type SymptomPath = 'acute' | 'momentary' | 'choice' | 'weekly_only' | 'stress_modal';
+
 interface Symptom {
   key: string;
   label: string;
   tracking_type: 'event_log_only' | 'event_log_ema';
   acute: boolean;
+  path: SymptomPath;
 }
 
 const SYMPTOMS: Symptom[] = [
-  { key: 'chest_pain',                label: 'Chest pain',                        tracking_type: 'event_log_only', acute: true },
-  { key: 'fainted',                   label: 'Fainted or near-fainted',            tracking_type: 'event_log_only', acute: true },
-  { key: 'irregular_heartbeat',       label: 'Irregular heartbeat',                tracking_type: 'event_log_only', acute: true },
-  { key: 'racing_heart',              label: 'Racing heart',                       tracking_type: 'event_log_only', acute: true },
-  { key: 'light_headed',              label: 'Light headed / dizzy',               tracking_type: 'event_log_only', acute: true },
-  { key: 'fatigue',                   label: 'Fatigue',                            tracking_type: 'event_log_ema',  acute: false },
-  { key: 'anxiety',                   label: 'Anxiety',                            tracking_type: 'event_log_ema',  acute: false },
-  { key: 'depression_mood',           label: 'Depression / mood changes',          tracking_type: 'event_log_ema',  acute: false },
-  { key: 'sleep_disturbance',         label: 'Sleep disturbance',                  tracking_type: 'event_log_ema',  acute: false },
-  { key: 'breathlessness_activity',   label: 'Breathlessness with activity',       tracking_type: 'event_log_ema',  acute: false },
-  { key: 'waking_sob_night',          label: 'Waking short of breath at night',    tracking_type: 'event_log_ema',  acute: false },
-  { key: 'reduced_exercise_tolerance',label: 'Reduced exercise tolerance',         tracking_type: 'event_log_ema',  acute: false },
-  { key: 'leg_swelling',              label: 'Leg swelling',                       tracking_type: 'event_log_ema',  acute: false },
-  { key: 'weight_change',             label: 'Unintentional weight change',        tracking_type: 'event_log_ema',  acute: false },
-  { key: 'stress',                    label: 'Stress',                             tracking_type: 'event_log_ema',  acute: false },
+  // ACUTE — always momentary, safety modal required
+  { key: 'chest_pain',              label: 'Chest pain',                      tracking_type: 'event_log_only', acute: true,  path: 'acute' },
+  { key: 'fainted',                 label: 'Fainted or near-fainted',          tracking_type: 'event_log_only', acute: true,  path: 'acute' },
+  { key: 'irregular_heartbeat',     label: 'Irregular heartbeat',              tracking_type: 'event_log_only', acute: true,  path: 'acute' },
+  { key: 'racing_heart',            label: 'Racing heart',                     tracking_type: 'event_log_only', acute: true,  path: 'acute' },
+  { key: 'light_headed',            label: 'Light headed / dizzy',             tracking_type: 'event_log_only', acute: true,  path: 'acute' },
+  // ONGOING — branch choice (momentary or weekly instrument)
+  { key: 'fatigue',                 label: 'Fatigue',                          tracking_type: 'event_log_ema',  acute: false, path: 'choice' },
+  { key: 'anxiety',                 label: 'Anxiety',                          tracking_type: 'event_log_ema',  acute: false, path: 'choice' },
+  { key: 'depression_mood',         label: 'Depression / mood changes',        tracking_type: 'event_log_ema',  acute: false, path: 'choice' },
+  { key: 'sleep_disturbance',       label: 'Sleep disturbance',                tracking_type: 'event_log_ema',  acute: false, path: 'choice' },
+  { key: 'reduced_exercise_tolerance', label: 'Reduced exercise tolerance',    tracking_type: 'event_log_ema',  acute: false, path: 'choice' },
+  { key: 'breathlessness_activity', label: 'Breathlessness with activity',     tracking_type: 'event_log_ema',  acute: false, path: 'choice' },
+  { key: 'hot_flashes',             label: 'Hot Flashes',                      tracking_type: 'event_log_ema',  acute: false, path: 'weekly_only' },
+  // ONGOING — always momentary (no branch choice)
+  { key: 'waking_sob_night',        label: 'Waking short of breath at night',  tracking_type: 'event_log_ema',  acute: false, path: 'momentary' },
+  { key: 'leg_swelling',            label: 'Leg swelling',                     tracking_type: 'event_log_ema',  acute: false, path: 'momentary' },
+  { key: 'weight_change',           label: 'Unintentional weight change',      tracking_type: 'event_log_ema',  acute: false, path: 'momentary' },
+  // SPECIAL — informational modal only, no data written
+  { key: 'stress',                  label: 'Stress',                           tracking_type: 'event_log_ema',  acute: false, path: 'stress_modal' },
 ];
 
 const DISCLAIMER_TEXT_PARTS = {
   before911: 'In an emergency, ',
   link911: 'call 911',
-  after911: ' first. This app does not contact your doctor or send help. Log your symptoms after you are safe.',
+  after911: '. This app does not contact your doctor or send help. Log your symptoms after you are safe.',
 };
 
 const DisclaimerBanner: React.FC = () => (
@@ -54,10 +62,7 @@ const DisclaimerBanner: React.FC = () => (
     <Ionicons name="warning" size={18} color="#B45309" style={styles.bannerIcon} />
     <Text style={styles.bannerText}>
       {DISCLAIMER_TEXT_PARTS.before911}
-      <Text
-        style={styles.bannerLink}
-        onPress={() => Linking.openURL('tel:911')}
-      >
+      <Text style={styles.bannerLink} onPress={() => Linking.openURL('tel:911')}>
         {DISCLAIMER_TEXT_PARTS.link911}
       </Text>
       {DISCLAIMER_TEXT_PARTS.after911}
@@ -68,32 +73,64 @@ const DisclaimerBanner: React.FC = () => (
 const SymptomScreen1: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const { accessToken } = useAuth();
+
+  // Entry disclaimer modal — shown once before symptom list is visible
+  const [entryModalVisible, setEntryModalVisible] = useState(true);
+
+  // Acute symptom safety modal
   const [acuteModalVisible, setAcuteModalVisible] = useState(false);
   const [pendingSymptom, setPendingSymptom] = useState<Symptom | null>(null);
 
-  useEffect(() => {
+  // Stress informational modal
+  const [stressModalVisible, setStressModalVisible] = useState(false);
+
+  const handleEntryModalOk = () => {
+    setEntryModalVisible(false);
     logDisclaimer(accessToken, 'section_entry');
-  }, [accessToken]);
+  };
 
   const handleSymptomPress = (symptom: Symptom) => {
-    if (symptom.acute) {
-      setPendingSymptom(symptom);
-      setAcuteModalVisible(true);
-      logDisclaimer(accessToken, 'acute_symptom_modal');
-    } else {
-      navigateToScreen2(symptom, false);
+    switch (symptom.path) {
+      case 'acute':
+        setPendingSymptom(symptom);
+        setAcuteModalVisible(true);
+        logDisclaimer(accessToken, 'acute_symptom_modal');
+        break;
+
+      case 'momentary':
+        navigateMomentary(symptom, false);
+        break;
+
+      case 'choice':
+        navigation.navigate('SymptomsBranchChoice', {
+          symptom_key: symptom.key,
+          symptom_label: symptom.label,
+          tracking_type: symptom.tracking_type,
+        });
+        break;
+
+      case 'weekly_only':
+        navigation.navigate('SymptomsInstrument', {
+          symptom_key: symptom.key,
+          symptom_label: symptom.label,
+        });
+        break;
+
+      case 'stress_modal':
+        setStressModalVisible(true);
+        break;
     }
   };
 
   const handleAcuteModalOk = () => {
     setAcuteModalVisible(false);
     if (pendingSymptom) {
-      navigateToScreen2(pendingSymptom, true);
+      navigateMomentary(pendingSymptom, true);
       setPendingSymptom(null);
     }
   };
 
-  const navigateToScreen2 = (symptom: Symptom, safetyModalShown: boolean) => {
+  const navigateMomentary = (symptom: Symptom, safetyModalShown: boolean) => {
     navigation.navigate('SymptomScreen2', {
       symptom_key: symptom.key,
       symptom_label: symptom.label,
@@ -116,7 +153,6 @@ const SymptomScreen1: React.FC = () => {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Safety disclaimer banner — always visible */}
         <DisclaimerBanner />
 
         <Text style={styles.screenTitle}>How are you feeling?</Text>
@@ -132,7 +168,7 @@ const SymptomScreen1: React.FC = () => {
               activeOpacity={0.7}
             >
               <View style={styles.symptomTileInner}>
-                <View style={[styles.acuteDot]} />
+                <View style={styles.acuteDot} />
                 <Text style={styles.symptomLabel}>{symptom.label}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -140,7 +176,6 @@ const SymptomScreen1: React.FC = () => {
           ))}
         </View>
 
-        {/* Divider between groups */}
         <View style={styles.groupDivider} />
 
         {/* Ongoing symptoms */}
@@ -162,6 +197,33 @@ const SymptomScreen1: React.FC = () => {
         </View>
       </ScrollView>
 
+      {/* Entry safety disclaimer modal */}
+      <Modal
+        visible={entryModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconRow}>
+              <Ionicons name="shield-checkmark" size={36} color="#007AFF" />
+            </View>
+            <Text style={styles.modalTitle}>Before you log</Text>
+            <Text style={styles.modalBody}>
+              {'In an emergency, '}
+              <Text style={styles.modalLink} onPress={() => Linking.openURL('tel:911')}>
+                call 911
+              </Text>
+              {'. This app does not contact your doctor or send help. Log your symptoms after you are safe.'}
+            </Text>
+            <TouchableOpacity style={styles.modalButton} onPress={handleEntryModalOk}>
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Acute symptom safety modal */}
       <Modal
         visible={acuteModalVisible}
@@ -177,16 +239,42 @@ const SymptomScreen1: React.FC = () => {
             <Text style={styles.modalTitle}>Important Safety Notice</Text>
             <Text style={styles.modalBody}>
               {'In an emergency, '}
-              <Text
-                style={styles.modalLink}
-                onPress={() => Linking.openURL('tel:911')}
-              >
+              <Text style={styles.modalLink} onPress={() => Linking.openURL('tel:911')}>
                 call 911
               </Text>
-              {' first. This app does not contact your doctor or send help. Log your symptoms after you are safe.'}
+              {'. This app does not contact your doctor or send help. Log your symptoms after you are safe.'}
             </Text>
             <TouchableOpacity style={styles.modalButton} onPress={handleAcuteModalOk}>
               <Text style={styles.modalButtonText}>I Understand — Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Stress informational modal */}
+      <Modal
+        visible={stressModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStressModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconRow}>
+              <Ionicons name="information-circle" size={36} color="#007AFF" />
+            </View>
+            <Text style={styles.modalTitle}>Stress Check-ins</Text>
+            <Text style={styles.modalBody}>
+              Stress check-ins are scheduled automatically as part of the study. You don't need to log stress manually.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                setStressModalVisible(false);
+                navigation.navigate('HomeTabs');
+              }}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -222,7 +310,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  // --- Disclaimer banner ---
   banner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -248,7 +335,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textDecorationLine: 'underline',
   },
-  // --- Screen title ---
   screenTitle: {
     fontSize: 26,
     fontWeight: '700',
@@ -260,7 +346,6 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 24,
   },
-  // --- Symptom tiles ---
   symptomGroup: {
     gap: 10,
   },
@@ -314,7 +399,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#E5E7EB',
     marginVertical: 16,
   },
-  // --- Acute symptom modal ---
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',

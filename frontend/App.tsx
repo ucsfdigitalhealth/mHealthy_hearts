@@ -17,6 +17,10 @@ import SymptomScreen2 from './src/screens/symptoms/SymptomScreen2';
 import SymptomScreen3 from './src/screens/symptoms/SymptomScreen3';
 import SymptomConfirmation from './src/screens/symptoms/SymptomConfirmation';
 import SymptomScreen4 from './src/screens/symptoms/SymptomScreen4';
+import SymptomsBranchChoice from './src/screens/symptoms/SymptomsBranchChoice';
+import SymptomsIntensity from './src/screens/symptoms/SymptomsIntensity';
+import SymptomsInstrument from './src/screens/symptoms/SymptomsInstrument';
+import SymptomsWeeklyReminder from './src/screens/symptoms/SymptomsWeeklyReminder';
 import AssessmentLandingScreen from './src/screens/LeFlows/AssessmentLandingScreen';
 import BloodLipidsLandingScreen from './src/screens/LeFlows/BloodLipidsLandingScreen';
 import SmokingLandingScreen from './src/screens/LeFlows/SmokingLandingScreen';
@@ -74,6 +78,29 @@ export type RootStackParamList = {
   SymptomConfirmation: {
     enrollmentSummary?: string;
   } | undefined;
+  SymptomsBranchChoice: {
+    symptom_key: string;
+    symptom_label: string;
+    tracking_type: string;
+  };
+  SymptomsIntensity: {
+    symptom_key: string;
+    symptom_label: string;
+    tracking_type: string;
+    safety_modal_shown: boolean;
+    activities: string[];
+    occurred_at: string;
+    duration_bucket: string;
+  };
+  SymptomsInstrument: {
+    symptom_key: string;
+    symptom_label: string;
+  };
+  SymptomsWeeklyReminder: {
+    symptom_key: string;
+    symptom_label: string;
+    instrument_response_id: number;
+  };
   GoalsSetting: undefined;
   GoalStep1: undefined;
   GoalStep2: undefined;
@@ -118,6 +145,10 @@ export default function App() {
             <Stack.Screen name="SymptomScreen3" component={SymptomScreen3} />
             <Stack.Screen name="SymptomScreen4" component={SymptomScreen4} />
             <Stack.Screen name="SymptomConfirmation" component={SymptomConfirmation} />
+            <Stack.Screen name="SymptomsBranchChoice" component={SymptomsBranchChoice} />
+            <Stack.Screen name="SymptomsIntensity" component={SymptomsIntensity} />
+            <Stack.Screen name="SymptomsInstrument" component={SymptomsInstrument} />
+            <Stack.Screen name="SymptomsWeeklyReminder" component={SymptomsWeeklyReminder} />
             <Stack.Screen name="GoalStep1" component={DailyCheckInStepScreen} />
             <Stack.Screen name="GoalStep2" component={YesterdayStepsStepScreen} />
             <Stack.Screen name="GoalStep3" component={SymptomBurdenStepScreen} />
