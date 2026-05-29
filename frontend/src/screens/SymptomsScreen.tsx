@@ -18,7 +18,7 @@ import { logDisclaimer } from '../api/symptoms';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Symptoms'>;
 
-type SymptomPath = 'acute' | 'momentary' | 'choice' | 'weekly_only' | 'stress_modal';
+type SymptomPath = 'acute' | 'momentary' | 'choice' | 'stress_modal';
 
 interface Symptom {
   key: string;
@@ -42,7 +42,7 @@ const SYMPTOMS: Symptom[] = [
   { key: 'sleep_disturbance',       label: 'Sleep disturbance',                tracking_type: 'event_log_ema',  acute: false, path: 'choice' },
   { key: 'reduced_exercise_tolerance', label: 'Reduced exercise tolerance',    tracking_type: 'event_log_ema',  acute: false, path: 'choice' },
   { key: 'breathlessness_activity', label: 'Breathlessness with activity',     tracking_type: 'event_log_ema',  acute: false, path: 'choice' },
-  { key: 'hot_flashes',             label: 'Hot Flashes',                      tracking_type: 'event_log_ema',  acute: false, path: 'weekly_only' },
+  { key: 'hot_flashes',             label: 'Hot Flashes',                      tracking_type: 'event_log_ema',  acute: false, path: 'choice' },
   // ONGOING — always momentary (no branch choice)
   { key: 'waking_sob_night',        label: 'Waking short of breath at night',  tracking_type: 'event_log_ema',  acute: false, path: 'momentary' },
   { key: 'leg_swelling',            label: 'Leg swelling',                     tracking_type: 'event_log_ema',  acute: false, path: 'momentary' },
@@ -106,13 +106,6 @@ const SymptomScreen1: React.FC = () => {
           symptom_key: symptom.key,
           symptom_label: symptom.label,
           tracking_type: symptom.tracking_type,
-        });
-        break;
-
-      case 'weekly_only':
-        navigation.navigate('SymptomsInstrument', {
-          symptom_key: symptom.key,
-          symptom_label: symptom.label,
         });
         break;
 
