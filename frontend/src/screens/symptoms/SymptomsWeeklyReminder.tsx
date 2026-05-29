@@ -23,6 +23,13 @@ type RoutePropType = RouteProp<RootStackParamList, 'SymptomsWeeklyReminder'>;
 
 type NotificationChannel = 'text' | 'email';
 
+interface ScheduleSlot {
+  id: string;
+  day_of_week: number;
+  time: string;         // "HH:MM" — sent to API
+  time_display: string; // "9:00 AM" — shown in UI
+}
+
 const DAYS = [
   { label: 'Sun', full: 'Sunday',    plural: 'Sundays',    value: 0 },
   { label: 'Mon', full: 'Monday',    plural: 'Mondays',    value: 1 },
@@ -33,7 +40,7 @@ const DAYS = [
   { label: 'Sat', full: 'Saturday',  plural: 'Saturdays',  value: 6 },
 ];
 
-function defaultReminderTime(): Date {
+function defaultTime(): Date {
   const d = new Date();
   d.setHours(9, 0, 0, 0);
   return d;
@@ -47,15 +54,15 @@ function toTimeApi(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-function nextOccurrence(dayOfWeek: number, time: string): string {
-  const [h, m] = time.split(':').map(Number);
-  const now = new Date();
-  const result = new Date();
-  result.setHours(h, m, 0, 0);
-  const diff = (dayOfWeek - now.getDay() + 7) % 7;
-  result.setDate(now.getDate() + (diff === 0 && result <= now ? 7 : diff));
-  return result.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }) +
-    ' at ' + toTimeDisplay(result);
+function formatScheduleSummary(slots: ScheduleSlot[]): string {
+  if (slots.length === 0) return '';
+  const parts = slots.map(s => {
+    const day = DAYS.find(d => d.value === s.day_of_week);
+    return `${day?.plural ?? 'weekly'} at ${s.time_display}`;
+  });
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1];
 }
 
 const SymptomsWeeklyReminder: React.FC = () => {
@@ -66,21 +73,48 @@ const SymptomsWeeklyReminder: React.FC = () => {
 
   const [wantsReminder, setWantsReminder] = useState<boolean | null>(null);
   const [channel, setChannel] = useState<NotificationChannel | null>(null);
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [reminderTime, setReminderTime] = useState<Date>(defaultReminderTime);
+
+  // Saved slots
+  const [slots, setSlots] = useState<ScheduleSlot[]>([]);
+
+  // Add-slot form state
+  const [isAdding, setIsAdding] = useState(false);
+  const [pendingDay, setPendingDay] = useState<number | null>(null);
+  const [pendingTime, setPendingTime] = useState<Date>(defaultTime);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const canConfirm = wantsReminder === true && channel !== null && slots.length > 0;
+
+  // ── Slot management ────────────────────────────────────────────────────────
+
+  const handleAddSlot = () => {
+    if (pendingDay === null) return;
+    const newSlot: ScheduleSlot = {
+      id: `${pendingDay}-${Date.now()}`,
+      day_of_week: pendingDay,
+      time: toTimeApi(pendingTime),
+      time_display: toTimeDisplay(pendingTime),
+    };
+    setSlots(prev => [...prev, newSlot]);
+    setPendingDay(null);
+    setPendingTime(defaultTime());
+    setIsAdding(false);
+  };
+
+  const handleRemoveSlot = (id: string) => {
+    setSlots(prev => prev.filter(s => s.id !== id));
+  };
+
   const handleTimeChange = (_event: DateTimePickerEvent, picked?: Date) => {
     if (Platform.OS === 'android') setShowTimePicker(false);
     if (_event.type === 'dismissed') return;
-    if (picked) setReminderTime(picked);
+    if (picked) setPendingTime(picked);
   };
 
-  const canConfirm =
-    wantsReminder === true && channel !== null && selectedDay !== null;
+  // ── Submit ─────────────────────────────────────────────────────────────────
 
   const handleConfirm = async () => {
     if (!canConfirm || !accessToken) return;
@@ -91,13 +125,12 @@ const SymptomsWeeklyReminder: React.FC = () => {
         instrument_response_id,
         symptom_key,
         frequency: 'weekly',
-        schedule: [{ day_of_week: selectedDay!, time: toTimeApi(reminderTime) }],
+        schedule: slots.map(s => ({ day_of_week: s.day_of_week, time: s.time })),
         notification_channel: channel!,
       });
-
-      const dayObj = DAYS.find(d => d.value === selectedDay);
-      const summary = `${dayObj?.plural ?? 'weekly'} at ${toTimeDisplay(reminderTime)}`;
-      navigation.navigate('SymptomConfirmation', { enrollmentSummary: summary });
+      navigation.navigate('SymptomConfirmation', {
+        enrollmentSummary: formatScheduleSummary(slots),
+      });
     } catch (err: any) {
       setSaveError(err.message || 'Something went wrong. Please try again.');
     } finally {
@@ -109,6 +142,8 @@ const SymptomsWeeklyReminder: React.FC = () => {
     navigation.navigate('SymptomConfirmation');
   };
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -118,7 +153,11 @@ const SymptomsWeeklyReminder: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.screenTitle}>Weekly reminder</Text>
         <Text style={styles.screenSubtitle}>
           Would you like to set up a weekly reminder for your{' '}
@@ -126,7 +165,7 @@ const SymptomsWeeklyReminder: React.FC = () => {
           {' '}check-in?
         </Text>
 
-        {/* Yes / No choice */}
+        {/* Yes / No */}
         <View style={styles.yesNoGroup}>
           <TouchableOpacity
             style={[styles.yesNoTile, wantsReminder === true && styles.yesNoTileSelected]}
@@ -150,9 +189,9 @@ const SymptomsWeeklyReminder: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Reminder setup — shown only if yes */}
+        {/* Setup section */}
         {wantsReminder === true && (
-          <View style={styles.setupSection}>
+          <View>
 
             {/* Channel */}
             <Text style={styles.fieldLabel}>How would you like to be reminded?</Text>
@@ -177,81 +216,149 @@ const SymptomsWeeklyReminder: React.FC = () => {
               ))}
             </View>
 
-            {/* Day of week */}
-            <Text style={[styles.fieldLabel, { marginTop: 20 }]}>Which day?</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.dayRow}
-            >
-              {DAYS.map(day => {
-                const isSelected = selectedDay === day.value;
-                return (
-                  <TouchableOpacity
-                    key={day.value}
-                    style={[styles.dayTile, isSelected && styles.dayTileSelected]}
-                    onPress={() => setSelectedDay(day.value)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.dayLabel, isSelected && styles.dayLabelSelected]}>
-                      {day.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            {/* Schedule builder */}
+            <Text style={[styles.fieldLabel, { marginTop: 24 }]}>
+              When would you like to check in?
+            </Text>
 
-            {/* Time */}
-            <Text style={[styles.fieldLabel, { marginTop: 20 }]}>What time?</Text>
-            <TouchableOpacity
-              style={styles.timeButton}
-              onPress={() => setShowTimePicker(true)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="time-outline" size={18} color="#007AFF" />
-              <Text style={styles.timeButtonText}>{toTimeDisplay(reminderTime)}</Text>
-              <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-            </TouchableOpacity>
-
-            {/* iOS time picker */}
-            {Platform.OS === 'ios' && showTimePicker && (
-              <Modal transparent animationType="slide" visible onRequestClose={() => setShowTimePicker(false)}>
-                <View style={styles.pickerOverlay}>
-                  <View style={styles.pickerCard}>
-                    <View style={styles.pickerHeader}>
-                      <Text style={styles.pickerTitle}>Select Time</Text>
-                      <TouchableOpacity onPress={() => setShowTimePicker(false)}>
-                        <Text style={styles.pickerDone}>Done</Text>
+            {/* Saved slots */}
+            {slots.length > 0 && (
+              <View style={styles.slotList}>
+                {slots.map((slot, idx) => {
+                  const day = DAYS.find(d => d.value === slot.day_of_week);
+                  return (
+                    <View key={slot.id} style={styles.slotRow}>
+                      <View style={styles.slotBadge}>
+                        <View style={styles.slotNumberCircle}>
+                          <Text style={styles.slotNumber}>{idx + 1}</Text>
+                        </View>
+                        <Ionicons name="calendar-outline" size={16} color="#007AFF" style={styles.slotIcon} />
+                        <Text style={styles.slotText}>
+                          {day?.full ?? 'Day'} at {slot.time_display}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.removeButton}
+                        onPress={() => handleRemoveSlot(slot.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="close-circle" size={22} color="#9CA3AF" />
                       </TouchableOpacity>
                     </View>
-                    <DateTimePicker
-                      value={reminderTime}
-                      mode="time"
-                      display="spinner"
-                      onChange={handleTimeChange}
-                      style={styles.iosPicker}
-                    />
-                  </View>
-                </View>
-              </Modal>
+                  );
+                })}
+              </View>
             )}
 
-            {Platform.OS === 'android' && showTimePicker && (
-              <DateTimePicker
-                value={reminderTime}
-                mode="time"
-                display="default"
-                onChange={handleTimeChange}
-              />
-            )}
-
-            {/* Preview next occurrence */}
-            {selectedDay !== null && (
-              <View style={styles.previewBox}>
-                <Ionicons name="calendar-outline" size={16} color="#007AFF" style={{ marginRight: 8 }} />
-                <Text style={styles.previewText}>
-                  Next reminder: {nextOccurrence(selectedDay, toTimeApi(reminderTime))}
+            {/* Add slot button / form */}
+            {!isAdding ? (
+              <TouchableOpacity
+                style={styles.addSlotButton}
+                onPress={() => setIsAdding(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#007AFF" />
+                <Text style={styles.addSlotButtonText}>
+                  {slots.length === 0 ? 'Add a check-in time' : 'Add another time'}
                 </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.addForm}>
+                <View style={styles.addFormHeader}>
+                  <Text style={styles.addFormTitle}>New check-in time</Text>
+                  <TouchableOpacity onPress={() => { setIsAdding(false); setPendingDay(null); }}>
+                    <Ionicons name="close" size={20} color="#6B7280" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Day selector */}
+                <Text style={styles.formFieldLabel}>Day</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.dayRow}
+                >
+                  {DAYS.map(day => {
+                    const selected = pendingDay === day.value;
+                    return (
+                      <TouchableOpacity
+                        key={day.value}
+                        style={[styles.dayTile, selected && styles.dayTileSelected]}
+                        onPress={() => setPendingDay(day.value)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.dayLabel, selected && styles.dayLabelSelected]}>
+                          {day.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Time picker */}
+                <Text style={styles.formFieldLabel}>Time</Text>
+                <TouchableOpacity
+                  style={styles.timeButton}
+                  onPress={() => setShowTimePicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="time-outline" size={18} color="#007AFF" />
+                  <Text style={styles.timeButtonText}>{toTimeDisplay(pendingTime)}</Text>
+                  <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+
+                {/* iOS time picker modal */}
+                {Platform.OS === 'ios' && showTimePicker && (
+                  <Modal transparent animationType="slide" visible onRequestClose={() => setShowTimePicker(false)}>
+                    <View style={styles.pickerOverlay}>
+                      <View style={styles.pickerCard}>
+                        <View style={styles.pickerHeader}>
+                          <Text style={styles.pickerTitle}>Select Time</Text>
+                          <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                            <Text style={styles.pickerDone}>Done</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <DateTimePicker
+                          value={pendingTime}
+                          mode="time"
+                          display="spinner"
+                          onChange={handleTimeChange}
+                          style={styles.iosPicker}
+                        />
+                      </View>
+                    </View>
+                  </Modal>
+                )}
+
+                {Platform.OS === 'android' && showTimePicker && (
+                  <DateTimePicker
+                    value={pendingTime}
+                    mode="time"
+                    display="default"
+                    onChange={handleTimeChange}
+                  />
+                )}
+
+                {/* Add confirm */}
+                <TouchableOpacity
+                  style={[styles.addConfirmButton, pendingDay === null && styles.addConfirmButtonDisabled]}
+                  onPress={handleAddSlot}
+                  disabled={pendingDay === null}
+                >
+                  <Ionicons
+                    name="checkmark"
+                    size={18}
+                    color={pendingDay === null ? '#9CA3AF' : '#FFFFFF'}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.addConfirmButtonText, pendingDay === null && styles.addConfirmButtonTextDisabled]}>
+                    Add this time
+                  </Text>
+                </TouchableOpacity>
+
+                {pendingDay === null && (
+                  <Text style={styles.addFormHint}>Select a day above to continue.</Text>
+                )}
               </View>
             )}
           </View>
@@ -267,7 +374,7 @@ const SymptomsWeeklyReminder: React.FC = () => {
       </ScrollView>
 
       <View style={styles.footer}>
-        {wantsReminder === true && (
+        {wantsReminder === true && slots.length > 0 && !isAdding && (
           <TouchableOpacity
             style={[styles.confirmButton, (!canConfirm || saving) && styles.confirmButtonDisabled]}
             onPress={handleConfirm}
@@ -276,7 +383,9 @@ const SymptomsWeeklyReminder: React.FC = () => {
             {saving ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.confirmButtonText}>Set reminder</Text>
+              <Text style={styles.confirmButtonText}>
+                {`Set up ${slots.length === 1 ? '1 reminder' : `${slots.length} reminders`}`}
+              </Text>
             )}
           </TouchableOpacity>
         )}
@@ -309,11 +418,12 @@ const styles = StyleSheet.create({
   },
   backButton: { flexDirection: 'row', alignItems: 'center' },
   backText: { color: '#007AFF', fontSize: 16, fontWeight: '500', marginLeft: 4 },
-  content: { padding: 20, paddingBottom: 20 },
+  content: { padding: 20, paddingBottom: 52 },
   screenTitle: { fontSize: 26, fontWeight: '700', color: '#1F2937', marginBottom: 8 },
   screenSubtitle: { fontSize: 15, color: '#6B7280', lineHeight: 22, marginBottom: 28 },
   highlight: { color: '#007AFF', fontWeight: '600' },
 
+  // ── Yes / No ──
   yesNoGroup: { flexDirection: 'row', gap: 12, marginBottom: 28 },
   yesNoTile: {
     flex: 1,
@@ -331,7 +441,7 @@ const styles = StyleSheet.create({
   yesNoLabel: { fontSize: 15, fontWeight: '600', color: '#374151' },
   yesNoLabelSelected: { color: '#1D4ED8' },
 
-  setupSection: {},
+  // ── Field labels ──
   fieldLabel: {
     fontSize: 14,
     fontWeight: '700',
@@ -341,6 +451,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
+  // ── Channel ──
   channelGroup: { flexDirection: 'row', gap: 12 },
   channelTile: {
     flex: 1,
@@ -357,7 +468,75 @@ const styles = StyleSheet.create({
   channelLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
   channelLabelSelected: { color: '#1D4ED8' },
 
-  dayRow: { gap: 8, paddingBottom: 4, marginBottom: 4 },
+  // ── Saved slot rows ──
+  slotList: { gap: 10, marginBottom: 14 },
+  slotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0F7FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  slotBadge: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  slotNumberCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  slotNumber: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+  slotIcon: { marginRight: 8 },
+  slotText: { fontSize: 15, fontWeight: '500', color: '#1D4ED8', flex: 1 },
+  removeButton: { marginLeft: 8 },
+
+  // ── Add slot button ──
+  addSlotButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#007AFF',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  addSlotButtonText: { fontSize: 15, fontWeight: '600', color: '#007AFF' },
+
+  // ── Add slot form ──
+  addForm: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    marginBottom: 20,
+  },
+  addFormHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addFormTitle: { fontSize: 15, fontWeight: '600', color: '#374151' },
+  formFieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 10,
+  },
+  dayRow: { gap: 8, paddingBottom: 4, marginBottom: 20 },
   dayTile: {
     width: 48,
     height: 48,
@@ -371,7 +550,6 @@ const styles = StyleSheet.create({
   dayTileSelected: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
   dayLabel: { fontSize: 13, fontWeight: '600', color: '#374151' },
   dayLabelSelected: { color: '#FFFFFF' },
-
   timeButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -382,21 +560,36 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 13,
     paddingHorizontal: 14,
+    marginBottom: 16,
   },
   timeButtonText: { flex: 1, fontSize: 16, fontWeight: '500', color: '#1F2937' },
-
-  previewBox: {
+  addConfirmButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 10,
-    padding: 12,
+    justifyContent: 'center',
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    paddingVertical: 14,
   },
-  previewText: { flex: 1, fontSize: 14, color: '#1D4ED8', lineHeight: 20 },
+  addConfirmButtonDisabled: { backgroundColor: '#E5E7EB' },
+  addConfirmButtonText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
+  addConfirmButtonTextDisabled: { color: '#9CA3AF' },
+  addFormHint: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 10,
+    fontStyle: 'italic',
+  },
 
+  // ── Picker modal ──
   pickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-  pickerCard: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 40 },
+  pickerCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 40,
+  },
   pickerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -409,6 +602,7 @@ const styles = StyleSheet.create({
   pickerDone: { fontSize: 16, fontWeight: '600', color: '#007AFF' },
   iosPicker: { width: '100%' },
 
+  // ── Error ──
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -421,6 +615,7 @@ const styles = StyleSheet.create({
   },
   errorBannerText: { flex: 1, fontSize: 14, color: '#DC2626', lineHeight: 20 },
 
+  // ── Footer ──
   footer: {
     padding: 20,
     paddingBottom: 32,
