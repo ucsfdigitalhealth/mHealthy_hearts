@@ -23,6 +23,7 @@ const SYMPTOM_INSTRUMENT_MAP = {
   sleep_disturbance:          'promis_sleep_4a',
   reduced_exercise_tolerance: 'promis_physical_function_4a',
   breathlessness_activity:    'mmrc',
+  hot_flashes:                'hfrdis',
   waking_sob_night:           'single_item_pnd',
   leg_swelling:               'single_item_leg_swelling',
   weight_change:              'single_item_weight_change',
@@ -31,6 +32,7 @@ const SYMPTOM_INSTRUMENT_MAP = {
 
 // EMA symptoms that flow through the patient-initiated enrollment screen (Screen 4).
 // Stress is intentionally excluded — it uses a separate grant-required protocol.
+// hot_flashes uses the weekly instrument path (SymptomsWeeklyReminder) not Screen 4.
 const EMA_ENROLLMENT_KEYS = new Set([
   'fatigue',
   'anxiety',
@@ -42,6 +44,70 @@ const EMA_ENROLLMENT_KEYS = new Set([
   'leg_swelling',
   'weight_change',
 ]);
+
+// Symptoms that use the weekly validated instrument path (patient-initiated).
+const WEEKLY_INSTRUMENT_KEYS = new Set([
+  'fatigue',
+  'anxiety',
+  'depression_mood',
+  'sleep_disturbance',
+  'reduced_exercise_tolerance',
+  'breathlessness_activity',
+  'hot_flashes',
+]);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROMIS T-SCORE LOOKUP TABLES
+// Source: PROMIS scoring manuals at healthmeasures.net
+// Raw scores range 4–20 for all 4-item short forms.
+// Values for rows 9–11 (Fatigue) and 9–19 (Physical Function) are interpolated
+// where the published table was truncated in the PRD source document.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PROMIS_T_SCORES = {
+  promis_fatigue_4a: {
+    4: 33.7, 5: 39.7, 6: 43.1, 7: 46.0, 8: 48.1,
+    9: 50.2, 10: 52.0, 11: 54.0,
+    12: 57.0, 13: 58.9, 14: 60.7, 15: 62.5, 16: 64.3,
+    17: 66.1, 18: 67.9, 19: 70.0, 20: 72.8,
+  },
+  promis_anxiety_4a: {
+    4: 40.3, 5: 48.0, 6: 51.2, 7: 53.7, 8: 55.8,
+    9: 57.7, 10: 59.5, 11: 61.4, 12: 63.4, 13: 65.3,
+    14: 67.3, 15: 69.3, 16: 71.2, 17: 73.3, 18: 75.4,
+    19: 77.9, 20: 81.6,
+  },
+  promis_depression_4a: {
+    4: 41.0, 5: 49.0, 6: 51.8, 7: 53.9, 8: 55.7,
+    9: 57.3, 10: 58.9, 11: 60.5, 12: 62.2, 13: 63.9,
+    14: 65.7, 15: 67.5, 16: 69.4, 17: 71.2, 18: 73.3,
+    19: 75.7, 20: 79.4,
+  },
+  promis_sleep_4a: {
+    4: 32.0, 5: 37.5, 6: 41.1, 7: 43.8, 8: 46.2,
+    9: 48.3, 10: 50.5, 11: 52.4, 12: 54.3, 13: 56.2,
+    14: 58.1, 15: 60.1, 16: 62.3, 17: 64.5, 18: 67.0,
+    19: 69.9, 20: 73.3,
+  },
+  // Higher T-score = BETTER physical function (opposite direction from other domains)
+  promis_physical_function_4a: {
+    4: 22.5, 5: 26.6, 6: 28.9, 7: 30.5, 8: 31.9,
+    9: 33.3, 10: 34.7, 11: 36.2, 12: 37.8, 13: 39.6,
+    14: 41.6, 15: 43.8, 16: 46.4, 17: 49.2, 18: 52.4,
+    19: 55.1, 20: 57.0,
+  },
+};
+
+function lookupTScore(instrumentKey, rawScore) {
+  const table = PROMIS_T_SCORES[instrumentKey];
+  if (!table) return null;
+  const t = table[rawScore];
+  if (t === undefined) {
+    console.warn(`[instruments] No T-score for ${instrumentKey} raw=${rawScore} — data quality issue`);
+    return null;
+  }
+  return t;
+}
 
 // Full instrument definitions, keyed by instrument_key.
 const INSTRUMENTS = {
@@ -474,4 +540,7 @@ module.exports = {
   INSTRUMENTS,
   SYMPTOM_INSTRUMENT_MAP,
   EMA_ENROLLMENT_KEYS,
+  WEEKLY_INSTRUMENT_KEYS,
+  PROMIS_T_SCORES,
+  lookupTScore,
 };

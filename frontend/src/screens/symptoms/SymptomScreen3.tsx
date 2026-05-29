@@ -8,14 +8,11 @@ import {
   Platform,
   Modal,
   SafeAreaView,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App';
-import { useAuth } from '../../context/AuthContext';
-import { postSymptomEvent } from '../../api/symptoms';
 
 // @react-native-community/datetimepicker is bundled with Expo SDK 54.
 // If you get an import error, run: cd frontend && npx expo install @react-native-community/datetimepicker
@@ -63,13 +60,9 @@ const SymptomScreen3: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RoutePropType>();
   const { symptom_key, symptom_label, tracking_type, safety_modal_shown, activities } = route.params;
-  const { accessToken } = useAuth();
-
   const [occurredAt, setOccurredAt] = useState<Date>(new Date());
   const [isFuture, setIsFuture] = useState(false);
   const [durationBucket, setDurationBucket] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   // DateTimePicker visibility — iOS shows inline, Android shows modally
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -116,39 +109,21 @@ const SymptomScreen3: React.FC = () => {
     }
   };
 
-  const canSave = durationBucket !== null && !isFuture && !saving;
+  const canSave = durationBucket !== null && !isFuture;
 
-  const handleSave = async () => {
-    if (!canSave || !accessToken) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const result = await postSymptomEvent(accessToken, {
-        symptom_key,
-        symptom_label,
-        tracking_type,
-        occurred_at: occurredAt.toISOString(),
-        duration_bucket: durationBucket!,
-        activities,
-        safety_modal_shown,
-      });
-
-      // EMA-eligible symptoms (and not stress, which uses a separate protocol)
-      // go to Screen 4 for enrollment preference. Others skip straight to Confirmation.
-      if (tracking_type === 'event_log_ema' && symptom_key !== 'stress') {
-        navigation.navigate('SymptomScreen4', {
-          symptom_event_id: result.id,
-          symptom_key,
-          symptom_label,
-        });
-      } else {
-        navigation.navigate('SymptomConfirmation');
-      }
-    } catch (err: any) {
-      setSaveError(err.message || 'Something went wrong. Please try again.');
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = () => {
+    if (!canSave) return;
+    // Pass all data to SymptomsIntensity, which collects the intensity field
+    // and submits the event so the payload is complete.
+    navigation.navigate('SymptomsIntensity', {
+      symptom_key,
+      symptom_label,
+      tracking_type,
+      safety_modal_shown,
+      activities,
+      occurred_at: occurredAt.toISOString(),
+      duration_bucket: durationBucket!,
+    });
   };
 
   return (
@@ -260,32 +235,16 @@ const SymptomScreen3: React.FC = () => {
           </View>
         </View>
 
-        {/* Save error banner */}
-        {saveError && (
-          <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle-outline" size={18} color="#DC2626" style={{ marginRight: 8 }} />
-            <Text style={styles.errorBannerText}>{saveError}</Text>
-          </View>
-        )}
       </ScrollView>
 
       {/* Footer */}
       <View style={styles.footer}>
-        {saveError && (
-          <TouchableOpacity style={styles.retryButton} onPress={handleSave} disabled={!canSave}>
-            <Text style={styles.retryButtonText}>Try Again</Text>
-          </TouchableOpacity>
-        )}
         <TouchableOpacity
           style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
           onPress={handleSave}
           disabled={!canSave}
         >
-          {saving ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.saveButtonText}>Save</Text>
-          )}
+          <Text style={styles.saveButtonText}>Next</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -449,23 +408,6 @@ const styles = StyleSheet.create({
   durationLabelSelected: {
     color: '#1D4ED8',
   },
-  // --- Error banner ---
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 8,
-  },
-  errorBannerText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#DC2626',
-    lineHeight: 20,
-  },
   // --- Footer ---
   footer: {
     padding: 20,
@@ -494,19 +436,6 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '600',
-  },
-  retryButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#007AFF',
-  },
-  retryButtonText: {
-    color: '#007AFF',
-    fontSize: 16,
     fontWeight: '600',
   },
 });

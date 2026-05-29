@@ -12,6 +12,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS user_goals;
 DROP TABLE IF EXISTS ema_enrollments;
+DROP TABLE IF EXISTS symptom_instrument_responses;
 DROP TABLE IF EXISTS symptom_disclaimer_log;
 DROP TABLE IF EXISTS symptom_events;
 DROP TABLE IF EXISTS activity_streaks;
@@ -306,17 +307,22 @@ CREATE TABLE activity_streaks (
 -- activities: JSON array of strings (e.g. ["sitting", "walking"]).
 -- tracking_type: 'event_log_only' = acute cardiac symptoms (no EMA follow-up);
 --                'event_log_ema'  = ongoing symptoms eligible for recurring check-ins.
+-- intensity_score: 0–10 patient-reported severity (null for weight_change events).
+-- weight_change_*: used instead of intensity_score for 'weight_change' symptom only.
 CREATE TABLE symptom_events (
-  id                 INT AUTO_INCREMENT PRIMARY KEY,
-  user_id            VARCHAR(36)  NOT NULL,
-  symptom_key        VARCHAR(60)  NOT NULL,    -- machine key e.g. 'chest_pain', 'fatigue'
-  symptom_label      VARCHAR(120) NOT NULL,    -- human label e.g. 'Chest pain'
-  tracking_type      ENUM('event_log_only', 'event_log_ema') NOT NULL,
-  occurred_at        DATETIME     NOT NULL,    -- patient-reported time
-  duration_bucket    ENUM('1_min_or_less', '10_min_or_less', '1_hour_or_less', 'more_than_1_hour') NOT NULL,
-  activities         JSON         NOT NULL,
-  safety_modal_shown TINYINT(1)   NOT NULL DEFAULT 0,
-  created_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  id                       INT AUTO_INCREMENT PRIMARY KEY,
+  user_id                  VARCHAR(36)  NOT NULL,
+  symptom_key              VARCHAR(60)  NOT NULL,    -- machine key e.g. 'chest_pain', 'fatigue'
+  symptom_label            VARCHAR(120) NOT NULL,    -- human label e.g. 'Chest pain'
+  tracking_type            ENUM('event_log_only', 'event_log_ema') NOT NULL,
+  occurred_at              DATETIME     NOT NULL,    -- patient-reported time
+  duration_bucket          ENUM('1_min_or_less', '10_min_or_less', '1_hour_or_less', 'more_than_1_hour') NOT NULL,
+  activities               JSON         NOT NULL,
+  safety_modal_shown       TINYINT(1)   NOT NULL DEFAULT 0,
+  intensity_score          TINYINT UNSIGNED NULL     COMMENT '0–10 severity; null for weight_change',
+  weight_change_direction  ENUM('gained','lost','not_sure') NULL,
+  weight_change_lbs        DECIMAL(5,1) NULL,
+  created_at               TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_symptom_events_user_symptom  (user_id, symptom_key),
   INDEX idx_symptom_events_user_occurred (user_id, occurred_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -334,24 +340,50 @@ CREATE TABLE symptom_disclaimer_log (
 
 
 -- EMA enrollment preferences. One row per enrollment.
--- schedule: JSON array of {day_of_week, time} pairs for ongoing check-ins.
+-- schedule: JSON array of {day_of_week, time} pairs for ongoing/weekly check-ins.
 --   day_of_week: 0=Sunday, 1=Monday, ..., 6=Saturday
 --   time: "HH:MM" string
 --   Example: [{"day_of_week": 1, "time": "09:00"}, {"day_of_week": 3, "time": "14:00"}]
 -- schedule is NULL when frequency = 'once'.
+-- symptom_event_id: references symptom_events.id — NULL for weekly instrument path.
+-- instrument_response_id: references symptom_instrument_responses.id — NULL for momentary path.
+-- notification_channel: how to deliver weekly reminders (weekly frequency only).
 -- instrument_key resolved from backend/config/instruments.js at enrollment time.
 CREATE TABLE ema_enrollments (
-  id               INT AUTO_INCREMENT PRIMARY KEY,
-  user_id          VARCHAR(36) NOT NULL,
-  symptom_event_id INT         NOT NULL,    -- references symptom_events.id
-  symptom_key      VARCHAR(60) NOT NULL,
-  instrument_key   VARCHAR(60) NOT NULL,
-  schedule         JSON        NULL,
-  frequency        ENUM('once', 'ongoing') NOT NULL,
-  is_active        TINYINT(1)  NOT NULL DEFAULT 1,
-  enrolled_at      TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+  id                     INT AUTO_INCREMENT PRIMARY KEY,
+  user_id                VARCHAR(36)           NOT NULL,
+  symptom_event_id       INT                   NULL,    -- momentary path; null for weekly
+  instrument_response_id INT                   NULL,    -- weekly path; null for momentary
+  symptom_key            VARCHAR(60)           NOT NULL,
+  instrument_key         VARCHAR(60)           NOT NULL,
+  schedule               JSON                  NULL,
+  frequency              ENUM('once','ongoing','weekly') NOT NULL,
+  notification_channel   ENUM('text','email')  NULL,
+  is_active              TINYINT(1)            NOT NULL DEFAULT 1,
+  enrolled_at            TIMESTAMP             DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_ema_enrollments_user_active   (user_id, is_active),
   INDEX idx_ema_enrollments_symptom_key   (user_id, symptom_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- Weekly validated instrument responses.
+-- raw_responses: JSON array of integer values (one per question, in order).
+-- t_score: null for mMRC and HFRDIS (non-PROMIS instruments).
+-- severity_label: populated for HFRDIS only ('mild'/'moderate'/'severe').
+-- enrollment_id: FK to ema_enrollments; null if patient has not enrolled in recurring reminders.
+CREATE TABLE symptom_instrument_responses (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  patient_id       VARCHAR(36)  NOT NULL,
+  symptom_key      VARCHAR(60)  NOT NULL,
+  instrument_id    VARCHAR(60)  NOT NULL,
+  raw_responses    JSON         NOT NULL,
+  raw_score        INT          NOT NULL,
+  t_score          DECIMAL(5,2) NULL,
+  severity_label   ENUM('mild','moderate','severe') NULL,
+  enrollment_id    INT          NULL,
+  responded_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_instrument_responses_patient_symptom    (patient_id, symptom_key),
+  INDEX idx_instrument_responses_patient_instrument (patient_id, instrument_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
