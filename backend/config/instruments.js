@@ -16,7 +16,16 @@
 // Import this wherever you need to resolve symptom → instrument.
 // NOTE: 'stress' maps to pss4_ema but uses a grant-required scheduled protocol —
 //       it is NOT patient-initiated. See pss4_ema entry below.
+// NOTE: the 5 acute momentary symptoms (chest_pain, fainted, irregular_heartbeat,
+//       racing_heart, light_headed) have no validated questionnaire — a recurring
+//       reminder for these just re-prompts the momentary log, so they map to the
+//       generic 'symptom_event_log' placeholder rather than a PROMIS/etc. instrument.
 const SYMPTOM_INSTRUMENT_MAP = {
+  chest_pain:                 'symptom_event_log',
+  fainted:                    'symptom_event_log',
+  irregular_heartbeat:        'symptom_event_log',
+  racing_heart:               'symptom_event_log',
+  light_headed:               'symptom_event_log',
   fatigue:                    'promis_fatigue_4a',
   anxiety:                    'promis_anxiety_4a',
   depression_mood:            'promis_depression_4a',
@@ -32,16 +41,16 @@ const SYMPTOM_INSTRUMENT_MAP = {
 
 // EMA symptoms eligible for a patient-initiated recurring reminder, set up via
 // SymptomRecurringPrompt -> DailyReminderSetup after a momentary log.
+// Includes all 8 momentary symptoms from SymptomsMomentaryList.
 // Stress is intentionally excluded — it uses a separate grant-required protocol.
 // hot_flashes uses the weekly combined check-in path (WeeklySymptomSetup /
 // SymptomsInstrument queue) instead of a per-symptom recurring reminder.
 const EMA_ENROLLMENT_KEYS = new Set([
-  'fatigue',
-  'anxiety',
-  'depression_mood',
-  'sleep_disturbance',
-  'reduced_exercise_tolerance',
-  'breathlessness_activity',
+  'chest_pain',
+  'fainted',
+  'irregular_heartbeat',
+  'racing_heart',
+  'light_headed',
   'waking_sob_night',
   'leg_swelling',
   'weight_change',
