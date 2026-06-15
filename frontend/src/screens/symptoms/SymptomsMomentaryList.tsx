@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App';
+import { useAuth } from '../../context/AuthContext';
+import { logDisclaimer } from '../../api/symptoms';
+import AcuteSafetyModal from '../../components/symptoms/AcuteSafetyModal';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'SymptomsMomentaryList'>;
 
@@ -37,14 +40,33 @@ const OTHER_SYMPTOMS: MomentarySymptom[] = [
 
 const SymptomsMomentaryList: React.FC = () => {
   const navigation = useNavigation<NavProp>();
+  const { accessToken } = useAuth();
 
-  const handlePress = (symptom: MomentarySymptom) => {
+  const [pendingSymptom, setPendingSymptom] = useState<MomentarySymptom | null>(null);
+
+  const goToSymptomScreen = (symptom: MomentarySymptom) => {
     navigation.navigate('SymptomScreen2', {
       symptom_key: symptom.key,
       symptom_label: symptom.label,
       tracking_type: symptom.tracking_type,
       safety_modal_shown: true,
     });
+  };
+
+  const handlePress = (symptom: MomentarySymptom) => {
+    if (symptom.acute) {
+      setPendingSymptom(symptom);
+      return;
+    }
+    goToSymptomScreen(symptom);
+  };
+
+  const handleSafetyModalContinue = () => {
+    if (!pendingSymptom) return;
+    logDisclaimer(accessToken, 'acute_symptom_modal');
+    const symptom = pendingSymptom;
+    setPendingSymptom(null);
+    goToSymptomScreen(symptom);
   };
 
   return (
@@ -96,6 +118,12 @@ const SymptomsMomentaryList: React.FC = () => {
           ))}
         </View>
       </ScrollView>
+
+      <AcuteSafetyModal
+        visible={pendingSymptom !== null}
+        onClose={() => setPendingSymptom(null)}
+        onContinue={handleSafetyModalContinue}
+      />
     </SafeAreaView>
   );
 };

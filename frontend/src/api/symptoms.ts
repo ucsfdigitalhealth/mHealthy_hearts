@@ -160,8 +160,19 @@ export async function putWeeklyPlan(token: string, payload: WeeklyPlanPayload): 
   return data.plan;
 }
 
+export async function deleteWeeklyPlan(token: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/weekly-plan`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || 'Failed to delete weekly plan');
+  }
+}
+
 // Fire-and-forget; swallows all errors so it never blocks the user flow.
-export function logDisclaimer(token: string | null, context: 'login' | 'section_entry'): void {
+export function logDisclaimer(token: string | null, context: 'login' | 'section_entry' | 'acute_symptom_modal'): void {
   if (!token) return;
   fetch(`${API_BASE}/disclaimer-log`, {
     method: 'POST',

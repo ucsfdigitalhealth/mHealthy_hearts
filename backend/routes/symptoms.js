@@ -315,6 +315,29 @@ router.put('/weekly-plan', verifyToken, async (req, res) => {
   }
 });
 
+// DELETE /api/symptoms/weekly-plan
+// Deactivates the user's existing active combined weekly symptom-tracking plan.
+router.delete('/weekly-plan', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+
+    const [existing] = await db.execute(
+      'SELECT id FROM weekly_symptom_plans WHERE user_id = ? AND is_active = 1 LIMIT 1',
+      [userId]
+    );
+    if (existing.length === 0) {
+      return res.status(404).json({ message: 'No active weekly plan found.' });
+    }
+
+    await db.execute('UPDATE weekly_symptom_plans SET is_active = 0 WHERE id = ?', [existing[0].id]);
+
+    return res.status(200).json({ message: 'Weekly plan deleted.' });
+  } catch (error) {
+    console.error('Error deleting weekly plan:', error);
+    return res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+});
+
 function validateWeeklyPlanBody({ symptom_keys, day_of_week, time, notification_channel }) {
   if (!Array.isArray(symptom_keys) || symptom_keys.length === 0 || symptom_keys.length > MAX_WEEKLY_PLAN_SYMPTOMS) {
     return `symptom_keys must be a non-empty array of at most ${MAX_WEEKLY_PLAN_SYMPTOMS} keys`;

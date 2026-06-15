@@ -7,13 +7,14 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App';
 import { useAuth } from '../../context/AuthContext';
-import { getWeeklyPlan, WeeklyPlan } from '../../api/symptoms';
+import { getWeeklyPlan, deleteWeeklyPlan, WeeklyPlan } from '../../api/symptoms';
 import { buildSymptomQueue } from './weeklySymptomOptions';
 import StressInfoModal from '../../components/symptoms/StressInfoModal';
 
@@ -35,6 +36,7 @@ const SymptomsLanding: React.FC = () => {
 
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [stressModalVisible, setStressModalVisible] = useState(false);
 
   useFocusEffect(
@@ -68,6 +70,32 @@ const SymptomsLanding: React.FC = () => {
       selected_symptom_keys: plan.symptom_keys,
       existing_plan_id: plan.id,
     });
+  };
+
+  const handleDeleteWeeklyPlan = () => {
+    if (!plan || !accessToken) return;
+    Alert.alert(
+      'Delete weekly check-in?',
+      'This will remove your weekly check-in schedule. You can set up a new one anytime.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteWeeklyPlan(accessToken);
+              setPlan(null);
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete weekly check-in.');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -113,6 +141,18 @@ const SymptomsLanding: React.FC = () => {
               <TouchableOpacity style={styles.editButton} onPress={handleEditWeeklyPlan} activeOpacity={0.7}>
                 <Ionicons name="pencil" size={14} color="#007AFF" style={{ marginRight: 4 }} />
                 <Text style={styles.editButtonText}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={handleDeleteWeeklyPlan}
+                activeOpacity={0.7}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator size="small" color="#DC2626" />
+                ) : (
+                  <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                )}
               </TouchableOpacity>
             </View>
           </>
@@ -220,6 +260,17 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   editButtonText: { fontSize: 14, fontWeight: '600', color: '#007AFF' },
+
+  deleteButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    marginLeft: 8,
+  },
 
   cardHighlight: {
     flexDirection: 'row',
