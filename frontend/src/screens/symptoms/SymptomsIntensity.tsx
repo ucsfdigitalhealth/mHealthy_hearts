@@ -205,11 +205,15 @@ const SymptomsIntensity: React.FC = () => {
 
       const result = await postSymptomEvent(accessToken, payload);
 
-      navigation.navigate('SymptomRecurringPrompt', {
-        symptom_event_id: result.id,
-        symptom_key,
-        symptom_label,
-      });
+      if (tracking_type === 'event_log_ema') {
+        navigation.navigate('SymptomRecurringPrompt', {
+          symptom_event_id: result.id,
+          symptom_key,
+          symptom_label,
+        });
+      } else {
+        navigation.navigate('SymptomConfirmation');
+      }
     } catch (err: any) {
       setSaveError(err.message || 'Something went wrong. Please try again.');
     } finally {
