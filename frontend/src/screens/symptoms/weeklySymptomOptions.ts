@@ -1,7 +1,8 @@
-// Shared label map for the 7 symptoms eligible for the combined weekly
-// check-in. The set of eligible keys is config-driven server-side via
+// Shared label map for the 7 symptoms that make up the combined weekly
+// check-in. All of these are tracked automatically — there is no per-user
+// selection. The set of keys is config-driven server-side via
 // WEEKLY_INSTRUMENT_KEYS (backend/config/instruments.js, GET /weekly-instrument-keys);
-// this file only supplies display labels + ordering for the picker UI.
+// this file only supplies display labels + ordering.
 
 export interface WeeklySymptomOption {
   key: string;
@@ -21,8 +22,6 @@ export const WEEKLY_SYMPTOM_OPTIONS: WeeklySymptomOption[] = [
 export const WEEKLY_SYMPTOM_LABELS: Record<string, string> = Object.fromEntries(
   WEEKLY_SYMPTOM_OPTIONS.map(o => [o.key, o.label])
 );
-
-export const MAX_WEEKLY_SYMPTOMS = 6;
 
 export interface SymptomQueueItem {
   symptom_key: string;

@@ -14,7 +14,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App';
 import { useAuth } from '../../context/AuthContext';
 import { getWeeklyInstrumentKeys, getWeeklyPlan } from '../../api/symptoms';
-import { WEEKLY_SYMPTOM_OPTIONS, MAX_WEEKLY_SYMPTOMS } from './weeklySymptomOptions';
+import { WEEKLY_SYMPTOM_OPTIONS } from './weeklySymptomOptions';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'WeeklySymptomSetup'>;
 
@@ -23,7 +23,6 @@ const WeeklySymptomSetup: React.FC = () => {
   const { accessToken } = useAuth();
 
   const [availableKeys, setAvailableKeys] = useState<string[] | null>(null);
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [existingPlanId, setExistingPlanId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -38,7 +37,6 @@ const WeeklySymptomSetup: React.FC = () => {
         setAvailableKeys(keys);
         if (plan) {
           setExistingPlanId(plan.id);
-          setSelectedKeys(plan.symptom_keys);
         }
       })
       .catch(err => {
@@ -56,20 +54,10 @@ const WeeklySymptomSetup: React.FC = () => {
     ? WEEKLY_SYMPTOM_OPTIONS.filter(o => availableKeys.includes(o.key))
     : [];
 
-  const atCap = selectedKeys.length >= MAX_WEEKLY_SYMPTOMS;
-
-  const toggleKey = (key: string) => {
-    setSelectedKeys(prev => {
-      if (prev.includes(key)) return prev.filter(k => k !== key);
-      if (prev.length >= MAX_WEEKLY_SYMPTOMS) return prev;
-      return [...prev, key];
-    });
-  };
-
   const handleNext = () => {
-    if (selectedKeys.length === 0) return;
+    if (!availableKeys) return;
     navigation.navigate('WeeklyReminderSetup', {
-      selected_symptom_keys: selectedKeys,
+      selected_symptom_keys: availableKeys,
       ...(existingPlanId !== null ? { existing_plan_id: existingPlanId } : {}),
     });
   };
@@ -85,12 +73,11 @@ const WeeklySymptomSetup: React.FC = () => {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.screenTitle}>
-          {isEditing ? 'Edit your weekly check-in' : 'Set up weekly tracking'}
+          {isEditing ? 'Your weekly check-in' : 'Set up weekly tracking'}
         </Text>
         <Text style={styles.screenSubtitle}>
-          Choose up to {MAX_WEEKLY_SYMPTOMS} symptoms to check in on each week. A short
-          questionnaire for each one (about 5-6 minutes total) will be combined into a
-          single weekly session.
+          Once a week, you'll be asked a short combined questionnaire (about 5-6 minutes
+          total) covering the symptoms below.
         </Text>
 
         {loading ? (
@@ -103,51 +90,25 @@ const WeeklySymptomSetup: React.FC = () => {
             <Text style={styles.errorBannerText}>{loadError}</Text>
           </View>
         ) : (
-          <>
-            <View style={styles.optionGroup}>
-              {options.map(option => {
-                const isSelected = selectedKeys.includes(option.key);
-                const disabled = !isSelected && atCap;
-                return (
-                  <TouchableOpacity
-                    key={option.key}
-                    style={[
-                      styles.optionTile,
-                      isSelected && styles.optionTileSelected,
-                      disabled && styles.optionTileDisabled,
-                    ]}
-                    onPress={() => toggleKey(option.key)}
-                    activeOpacity={0.7}
-                    disabled={disabled}
-                  >
-                    <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                      {isSelected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-                    </View>
-                    <Text style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}>
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {atCap && (
-              <Text style={styles.capHint}>
-                You've selected the maximum of {MAX_WEEKLY_SYMPTOMS} symptoms. Unselect one to choose a different symptom.
-              </Text>
-            )}
-          </>
+          <View style={styles.optionGroup}>
+            {options.map(option => (
+              <View key={option.key} style={styles.optionRow}>
+                <Ionicons name="checkmark-circle" size={20} color="#34C759" style={{ marginRight: 12 }} />
+                <Text style={styles.optionLabel}>{option.label}</Text>
+              </View>
+            ))}
+          </View>
         )}
       </ScrollView>
 
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.nextButton, selectedKeys.length === 0 && styles.nextButtonDisabled]}
+          style={[styles.nextButton, loading && styles.nextButtonDisabled]}
           onPress={handleNext}
-          disabled={selectedKeys.length === 0}
+          disabled={loading}
         >
           <Text style={styles.nextButtonText}>
-            {`Next${selectedKeys.length > 0 ? ` (${selectedKeys.length} selected)` : ''}`}
+            {isEditing ? 'Continue to reminder settings' : 'Next'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -174,7 +135,7 @@ const styles = StyleSheet.create({
   loadingRow: { paddingVertical: 32, alignItems: 'center' },
 
   optionGroup: { gap: 10 },
-  optionTile: {
+  optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -189,23 +150,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  optionTileSelected: { backgroundColor: '#EFF6FF', borderColor: '#007AFF' },
-  optionTileDisabled: { opacity: 0.4 },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
-    marginRight: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxSelected: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
   optionLabel: { fontSize: 16, fontWeight: '500', color: '#1F2937', flex: 1 },
-  optionLabelSelected: { color: '#1D4ED8' },
-
-  capHint: { fontSize: 13, color: '#9CA3AF', marginTop: 14, lineHeight: 18, fontStyle: 'italic' },
 
   errorBanner: {
     flexDirection: 'row',

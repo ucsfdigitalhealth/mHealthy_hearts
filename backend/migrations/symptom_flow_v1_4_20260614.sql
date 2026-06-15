@@ -31,11 +31,11 @@ CREATE TABLE IF NOT EXISTS weekly_symptom_plans (
 --    Existing rows default to 'weekly_day_time' — no backfill needed.
 --    start_date/end_date: only used for schedule_type='daily_times'.
 ALTER TABLE ema_enrollments
-  ADD COLUMN IF NOT EXISTS schedule_type ENUM('weekly_day_time','daily_times') NOT NULL DEFAULT 'weekly_day_time' AFTER frequency,
-  ADD COLUMN IF NOT EXISTS start_date DATE NULL AFTER schedule_type,
-  ADD COLUMN IF NOT EXISTS end_date   DATE NULL AFTER start_date;
+  ADD COLUMN schedule_type ENUM('weekly_day_time','daily_times') NOT NULL DEFAULT 'weekly_day_time' AFTER frequency,
+  ADD COLUMN start_date DATE NULL AFTER schedule_type,
+  ADD COLUMN end_date   DATE NULL AFTER start_date;
 
 -- 3. Link instrument responses to the weekly plan/session they belong to.
 ALTER TABLE symptom_instrument_responses
-  ADD COLUMN IF NOT EXISTS weekly_plan_id INT NULL AFTER enrollment_id,
-  ADD INDEX IF NOT EXISTS idx_instrument_responses_weekly_plan (weekly_plan_id);
+  ADD COLUMN weekly_plan_id INT NULL AFTER enrollment_id,
+  ADD INDEX idx_instrument_responses_weekly_plan (weekly_plan_id);

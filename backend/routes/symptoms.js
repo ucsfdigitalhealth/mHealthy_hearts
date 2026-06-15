@@ -29,7 +29,8 @@ const ALLOWED_WEIGHT_DIRECTIONS = new Set(['gained', 'lost', 'not_sure']);
 const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
-const MAX_WEEKLY_PLAN_SYMPTOMS = 6;
+// All weekly instruments are tracked together as a single combined check-in.
+const MAX_WEEKLY_PLAN_SYMPTOMS = WEEKLY_INSTRUMENT_KEYS.size;
 
 function parseWeeklyPlanRow(row) {
   if (!row) return null;

@@ -19,6 +19,16 @@ import StressInfoModal from '../../components/symptoms/StressInfoModal';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'SymptomsLanding'>;
 
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function formatPlanSchedule(plan: WeeklyPlan): string {
+  const [hours, minutes] = plan.time.split(':').map(Number);
+  const d = new Date();
+  d.setHours(hours, minutes, 0, 0);
+  const timeStr = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `Every ${DAY_NAMES[plan.day_of_week]} at ${timeStr}`;
+}
+
 const SymptomsLanding: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const { accessToken } = useAuth();
@@ -52,6 +62,14 @@ const SymptomsLanding: React.FC = () => {
     });
   };
 
+  const handleEditWeeklyPlan = () => {
+    if (!plan) return;
+    navigation.navigate('WeeklyReminderSetup', {
+      selected_symptom_keys: plan.symptom_keys,
+      existing_plan_id: plan.id,
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -70,36 +88,52 @@ const SymptomsLanding: React.FC = () => {
             <ActivityIndicator color="#9CA3AF" />
           </View>
         ) : plan ? (
-          <TouchableOpacity style={styles.cardHighlight} onPress={handleStartWeeklyCheckIn} activeOpacity={0.7}>
-            <View style={styles.cardIconCircleHighlight}>
-              <Ionicons name="play-circle" size={28} color="#FFFFFF" />
+          <>
+            <TouchableOpacity style={styles.cardHighlight} onPress={handleStartWeeklyCheckIn} activeOpacity={0.7}>
+              <View style={styles.cardIconCircleHighlight}>
+                <Ionicons name="play-circle" size={28} color="#FFFFFF" />
+              </View>
+              <View style={styles.cardTextGroup}>
+                <Text style={styles.cardTitleHighlight}>Take this week's check-in now</Text>
+                <Text style={styles.cardSubtitleHighlight}>
+                  Complete your {plan.symptom_keys.length === 1 ? 'check-in' : `${plan.symptom_keys.length} check-ins`} for this week.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <View style={styles.card}>
+              <View style={styles.cardIconCircle}>
+                <Ionicons name="calendar-outline" size={26} color="#007AFF" />
+              </View>
+              <View style={styles.cardTextGroup}>
+                <Text style={styles.cardTitle}>Weekly check-in</Text>
+                <Text style={styles.cardSubtitle}>{formatPlanSchedule(plan)}</Text>
+              </View>
+              <TouchableOpacity style={styles.editButton} onPress={handleEditWeeklyPlan} activeOpacity={0.7}>
+                <Ionicons name="pencil" size={14} color="#007AFF" style={{ marginRight: 4 }} />
+                <Text style={styles.editButtonText}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => navigation.navigate('WeeklySymptomSetup')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.cardIconCircle}>
+              <Ionicons name="calendar-outline" size={26} color="#007AFF" />
             </View>
             <View style={styles.cardTextGroup}>
-              <Text style={styles.cardTitleHighlight}>Take this week's check-in now</Text>
-              <Text style={styles.cardSubtitleHighlight}>
-                Complete your {plan.symptom_keys.length === 1 ? 'check-in' : `${plan.symptom_keys.length} check-ins`} for this week.
+              <Text style={styles.cardTitle}>Set up weekly symptom tracking</Text>
+              <Text style={styles.cardSubtitle}>
+                Get a short combined check-in once a week, with one reminder.
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </TouchableOpacity>
-        ) : null}
-
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => navigation.navigate('WeeklySymptomSetup')}
-          activeOpacity={0.7}
-        >
-          <View style={styles.cardIconCircle}>
-            <Ionicons name="calendar-outline" size={26} color="#007AFF" />
-          </View>
-          <View style={styles.cardTextGroup}>
-            <Text style={styles.cardTitle}>Set up weekly symptom tracking</Text>
-            <Text style={styles.cardSubtitle}>
-              Choose up to 6 symptoms to check in on each week, with one reminder.
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-        </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.card}
@@ -174,6 +208,18 @@ const styles = StyleSheet.create({
   cardTextGroup: { flex: 1 },
   cardTitle: { fontSize: 17, fontWeight: '600', color: '#1F2937', marginBottom: 4 },
   cardSubtitle: { fontSize: 13, color: '#6B7280', lineHeight: 18 },
+
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#007AFF',
+    marginLeft: 10,
+  },
+  editButtonText: { fontSize: 14, fontWeight: '600', color: '#007AFF' },
 
   cardHighlight: {
     flexDirection: 'row',
