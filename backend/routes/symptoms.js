@@ -26,6 +26,29 @@ const ALLOWED_CONTEXTS = new Set(['login', 'section_entry', 'acute_symptom_modal
 
 const ALLOWED_WEIGHT_DIRECTIONS = new Set(['gained', 'lost', 'not_sure']);
 
+const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const MAX_WEEKLY_PLAN_SYMPTOMS = 6;
+
+function parseWeeklyPlanRow(row) {
+  if (!row) return null;
+  let symptomKeys = row.symptom_keys;
+  if (typeof symptomKeys === 'string') {
+    try { symptomKeys = JSON.parse(symptomKeys); } catch { symptomKeys = []; }
+  }
+  return {
+    id: row.id,
+    symptom_keys: symptomKeys,
+    day_of_week: row.day_of_week,
+    time: row.time,
+    notification_channel: row.notification_channel,
+    is_active: !!row.is_active,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 // POST /api/symptoms/event
 router.post('/event', verifyToken, async (req, res) => {
   try {
@@ -198,6 +221,121 @@ router.post('/disclaimer-log', verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/symptoms/weekly-instrument-keys
+// Returns the set of symptom_keys eligible for the combined weekly check-in,
+// driven by WEEKLY_INSTRUMENT_KEYS in backend/config/instruments.js.
+router.get('/weekly-instrument-keys', verifyToken, async (req, res) => {
+  return res.status(200).json({ keys: Array.from(WEEKLY_INSTRUMENT_KEYS) });
+});
+
+// GET /api/symptoms/weekly-plan
+// Returns the user's active combined weekly symptom-tracking plan, or { plan: null }.
+router.get('/weekly-plan', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+    const [rows] = await db.execute(
+      'SELECT * FROM weekly_symptom_plans WHERE user_id = ? AND is_active = 1 LIMIT 1',
+      [userId]
+    );
+    return res.status(200).json({ plan: parseWeeklyPlanRow(rows[0]) });
+  } catch (error) {
+    console.error('Error fetching weekly plan:', error);
+    return res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+});
+
+// POST /api/symptoms/weekly-plan
+// Creates the user's combined weekly symptom-tracking plan (first-time setup).
+// Body: { symptom_keys: string[], day_of_week: 0-6, time: "HH:MM", notification_channel: 'text'|'email' }
+router.post('/weekly-plan', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+    const { symptom_keys, day_of_week, time, notification_channel } = req.body || {};
+
+    const validationError = validateWeeklyPlanBody({ symptom_keys, day_of_week, time, notification_channel });
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const [existing] = await db.execute(
+      'SELECT id FROM weekly_symptom_plans WHERE user_id = ? AND is_active = 1 LIMIT 1',
+      [userId]
+    );
+    if (existing.length > 0) {
+      return res.status(409).json({ message: 'An active weekly plan already exists. Use PUT to update it.' });
+    }
+
+    const [result] = await db.execute(
+      `INSERT INTO weekly_symptom_plans (user_id, symptom_keys, day_of_week, time, notification_channel)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, JSON.stringify(symptom_keys), Number(day_of_week), time, notification_channel]
+    );
+
+    const [rows] = await db.execute('SELECT * FROM weekly_symptom_plans WHERE id = ?', [result.insertId]);
+    return res.status(201).json({ plan: parseWeeklyPlanRow(rows[0]) });
+  } catch (error) {
+    console.error('Error creating weekly plan:', error);
+    return res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+});
+
+// PUT /api/symptoms/weekly-plan
+// Updates the user's existing active combined weekly symptom-tracking plan.
+router.put('/weekly-plan', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || null;
+    const { symptom_keys, day_of_week, time, notification_channel } = req.body || {};
+
+    const validationError = validateWeeklyPlanBody({ symptom_keys, day_of_week, time, notification_channel });
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const [existing] = await db.execute(
+      'SELECT id FROM weekly_symptom_plans WHERE user_id = ? AND is_active = 1 LIMIT 1',
+      [userId]
+    );
+    if (existing.length === 0) {
+      return res.status(404).json({ message: 'No active weekly plan found. Use POST to create one.' });
+    }
+
+    await db.execute(
+      `UPDATE weekly_symptom_plans
+         SET symptom_keys = ?, day_of_week = ?, time = ?, notification_channel = ?
+       WHERE id = ?`,
+      [JSON.stringify(symptom_keys), Number(day_of_week), time, notification_channel, existing[0].id]
+    );
+
+    const [rows] = await db.execute('SELECT * FROM weekly_symptom_plans WHERE id = ?', [existing[0].id]);
+    return res.status(200).json({ plan: parseWeeklyPlanRow(rows[0]) });
+  } catch (error) {
+    console.error('Error updating weekly plan:', error);
+    return res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+});
+
+function validateWeeklyPlanBody({ symptom_keys, day_of_week, time, notification_channel }) {
+  if (!Array.isArray(symptom_keys) || symptom_keys.length === 0 || symptom_keys.length > MAX_WEEKLY_PLAN_SYMPTOMS) {
+    return `symptom_keys must be a non-empty array of at most ${MAX_WEEKLY_PLAN_SYMPTOMS} keys`;
+  }
+  for (const key of symptom_keys) {
+    if (!WEEKLY_INSTRUMENT_KEYS.has(key)) {
+      return `Invalid weekly symptom_key: ${key}`;
+    }
+  }
+  const dayNum = Number(day_of_week);
+  if (isNaN(dayNum) || dayNum < 0 || dayNum > 6) {
+    return 'day_of_week must be 0–6';
+  }
+  if (!time || typeof time !== 'string' || !TIME_REGEX.test(time)) {
+    return 'time must be a string matching HH:MM';
+  }
+  if (!notification_channel || !['text', 'email'].includes(notification_channel)) {
+    return 'notification_channel must be "text" or "email"';
+  }
+  return null;
+}
+
 // POST /api/symptoms/ema-enrollment
 // schedule format (for ongoing/weekly): [{day_of_week: 0-6, time: "HH:MM"}, ...]
 router.post('/ema-enrollment', verifyToken, async (req, res) => {
@@ -209,6 +347,9 @@ router.post('/ema-enrollment', verifyToken, async (req, res) => {
       symptom_key,
       frequency,
       schedule,
+      schedule_type,
+      start_date,
+      end_date,
       notification_channel,
     } = req.body || {};
 
@@ -227,9 +368,39 @@ router.post('/ema-enrollment', verifyToken, async (req, res) => {
       return res.status(400).json({ message: 'notification_channel must be "text" or "email"' });
     }
 
-    let scheduleJson = null;
+    const scheduleTypeValue = schedule_type || 'weekly_day_time';
+    if (!['weekly_day_time', 'daily_times'].includes(scheduleTypeValue)) {
+      return res.status(400).json({ message: 'schedule_type must be "weekly_day_time" or "daily_times"' });
+    }
 
-    if (frequency === 'ongoing' || frequency === 'weekly') {
+    let scheduleJson = null;
+    let startDateValue = null;
+    let endDateValue = null;
+
+    if (scheduleTypeValue === 'daily_times') {
+      if (!schedule || !Array.isArray(schedule.times) || schedule.times.length === 0) {
+        return res.status(400).json({ message: 'schedule.times must be a non-empty array for schedule_type "daily_times"' });
+      }
+      for (const t of schedule.times) {
+        if (typeof t !== 'string' || !TIME_REGEX.test(t)) {
+          return res.status(400).json({ message: 'Each schedule.times entry must be a string matching HH:MM' });
+        }
+      }
+      if (!start_date || !DATE_REGEX.test(start_date) || isNaN(new Date(start_date).getTime())) {
+        return res.status(400).json({ message: 'start_date is required and must be a valid YYYY-MM-DD date for schedule_type "daily_times"' });
+      }
+      if (end_date !== undefined && end_date !== null) {
+        if (!DATE_REGEX.test(end_date) || isNaN(new Date(end_date).getTime())) {
+          return res.status(400).json({ message: 'end_date must be a valid YYYY-MM-DD date' });
+        }
+        if (new Date(end_date) < new Date(start_date)) {
+          return res.status(400).json({ message: 'end_date must be on or after start_date' });
+        }
+        endDateValue = end_date;
+      }
+      startDateValue = start_date;
+      scheduleJson = JSON.stringify({ times: schedule.times });
+    } else if (frequency === 'ongoing' || frequency === 'weekly') {
       if (!Array.isArray(schedule) || schedule.length === 0) {
         return res.status(400).json({ message: 'schedule must be a non-empty array for ongoing/weekly frequency' });
       }
@@ -250,8 +421,8 @@ router.post('/ema-enrollment', verifyToken, async (req, res) => {
     const [result] = await db.execute(
       `INSERT INTO ema_enrollments
          (user_id, symptom_event_id, instrument_response_id, symptom_key, instrument_key,
-          schedule, frequency, notification_channel)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          schedule, frequency, schedule_type, start_date, end_date, notification_channel)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         userId,
         symptom_event_id || null,
@@ -260,6 +431,9 @@ router.post('/ema-enrollment', verifyToken, async (req, res) => {
         instrument_key,
         scheduleJson,
         frequency,
+        scheduleTypeValue,
+        startDateValue,
+        endDateValue,
         notification_channel || null,
       ]
     );
@@ -289,6 +463,7 @@ router.post('/instrument-response', verifyToken, async (req, res) => {
       t_score,
       severity_label,
       enrollment_id,
+      weekly_plan_id,
     } = req.body || {};
 
     if (!symptom_key || !ALLOWED_SYMPTOM_KEYS.has(symptom_key)) {
@@ -321,8 +496,8 @@ router.post('/instrument-response', verifyToken, async (req, res) => {
     const [result] = await db.execute(
       `INSERT INTO symptom_instrument_responses
          (patient_id, symptom_key, instrument_id, raw_responses, raw_score, t_score,
-          severity_label, enrollment_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          severity_label, enrollment_id, weekly_plan_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         userId,
         symptom_key,
@@ -332,6 +507,7 @@ router.post('/instrument-response', verifyToken, async (req, res) => {
         validatedTScore !== null ? validatedTScore : null,
         severity_label || null,
         enrollment_id || null,
+        weekly_plan_id || null,
       ]
     );
 

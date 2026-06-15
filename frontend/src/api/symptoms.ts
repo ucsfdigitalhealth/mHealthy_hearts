@@ -35,11 +35,18 @@ export interface ScheduleSlotApi {
   time: string;         // "HH:MM"
 }
 
+export interface DailyTimesScheduleApi {
+  times: string[]; // "HH:MM" entries
+}
+
 export interface EmaEnrollmentPayload {
   symptom_event_id: number;
   symptom_key: string;
   frequency: 'once' | 'ongoing';
-  schedule?: ScheduleSlotApi[] | null;
+  schedule?: ScheduleSlotApi[] | DailyTimesScheduleApi | null;
+  schedule_type?: 'weekly_day_time' | 'daily_times';
+  start_date?: string; // "YYYY-MM-DD", required when schedule_type === 'daily_times'
+  end_date?: string;   // "YYYY-MM-DD", optional
 }
 
 export async function postEmaEnrollment(
@@ -67,6 +74,7 @@ export interface InstrumentResponsePayload {
   t_score: number | null;
   severity_label?: string | null;
   enrollment_id?: number | null;
+  weekly_plan_id?: number | null;
 }
 
 export async function postInstrumentResponse(
@@ -86,19 +94,46 @@ export async function postInstrumentResponse(
   return data;
 }
 
-export interface WeeklyEnrollmentPayload {
-  instrument_response_id: number;
-  symptom_key: string;
-  frequency: 'weekly';
-  schedule: ScheduleSlotApi[];
+// ── Weekly symptom plan ──────────────────────────────────────────────────────
+
+export interface WeeklyPlan {
+  id: number;
+  symptom_keys: string[];
+  day_of_week: number; // 0=Sunday … 6=Saturday
+  time: string;        // "HH:MM"
+  notification_channel: 'text' | 'email';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WeeklyPlanPayload {
+  symptom_keys: string[];
+  day_of_week: number;
+  time: string;
   notification_channel: 'text' | 'email';
 }
 
-export async function postWeeklyEnrollment(
-  token: string,
-  payload: WeeklyEnrollmentPayload,
-): Promise<{ id: number; symptom_key: string; frequency: string; instrument_key: string }> {
-  const res = await fetch(`${API_BASE}/ema-enrollment`, {
+export async function getWeeklyInstrumentKeys(token: string): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/weekly-instrument-keys`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to load weekly instrument keys');
+  return data.keys;
+}
+
+export async function getWeeklyPlan(token: string): Promise<WeeklyPlan | null> {
+  const res = await fetch(`${API_BASE}/weekly-plan`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to load weekly plan');
+  return data.plan;
+}
+
+export async function postWeeklyPlan(token: string, payload: WeeklyPlanPayload): Promise<WeeklyPlan> {
+  const res = await fetch(`${API_BASE}/weekly-plan`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -107,12 +142,26 @@ export async function postWeeklyEnrollment(
     body: JSON.stringify(payload),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'Failed to save weekly enrollment');
-  return data;
+  if (!res.ok) throw new Error(data.message || 'Failed to save weekly plan');
+  return data.plan;
+}
+
+export async function putWeeklyPlan(token: string, payload: WeeklyPlanPayload): Promise<WeeklyPlan> {
+  const res = await fetch(`${API_BASE}/weekly-plan`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Failed to update weekly plan');
+  return data.plan;
 }
 
 // Fire-and-forget; swallows all errors so it never blocks the user flow.
-export function logDisclaimer(token: string | null, context: 'login' | 'section_entry' | 'acute_symptom_modal'): void {
+export function logDisclaimer(token: string | null, context: 'login' | 'section_entry'): void {
   if (!token) return;
   fetch(`${API_BASE}/disclaimer-log`, {
     method: 'POST',

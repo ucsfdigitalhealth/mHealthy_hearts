@@ -30,9 +30,11 @@ const SYMPTOM_INSTRUMENT_MAP = {
   stress:                     'pss4_ema',
 };
 
-// EMA symptoms that flow through the patient-initiated enrollment screen (Screen 4).
+// EMA symptoms eligible for a patient-initiated recurring reminder, set up via
+// SymptomRecurringPrompt -> DailyReminderSetup after a momentary log.
 // Stress is intentionally excluded — it uses a separate grant-required protocol.
-// hot_flashes uses the weekly instrument path (SymptomsWeeklyReminder) not Screen 4.
+// hot_flashes uses the weekly combined check-in path (WeeklySymptomSetup /
+// SymptomsInstrument queue) instead of a per-symptom recurring reminder.
 const EMA_ENROLLMENT_KEYS = new Set([
   'fatigue',
   'anxiety',

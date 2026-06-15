@@ -12,15 +12,18 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import BmiScreen from './src/screens/LeFlows/BmiScreen';
 import DietAssessmentScreen from './src/screens/LeFlows/DietAssessmentScreen';
 import SmokingAssessmentScreen from './src/screens/LeFlows/SmokingAssessmentScreen';
-import SymptomAssessmentScreen from './src/screens/SymptomsScreen';
+import SymptomsDisclaimerGate from './src/screens/SymptomsScreen';
+import SymptomsLanding from './src/screens/symptoms/SymptomsLanding';
+import SymptomsMomentaryList from './src/screens/symptoms/SymptomsMomentaryList';
 import SymptomScreen2 from './src/screens/symptoms/SymptomScreen2';
 import SymptomScreen3 from './src/screens/symptoms/SymptomScreen3';
 import SymptomConfirmation from './src/screens/symptoms/SymptomConfirmation';
-import SymptomScreen4 from './src/screens/symptoms/SymptomScreen4';
-import SymptomsBranchChoice from './src/screens/symptoms/SymptomsBranchChoice';
+import SymptomRecurringPrompt from './src/screens/symptoms/SymptomRecurringPrompt';
+import DailyReminderSetup from './src/screens/symptoms/DailyReminderSetup';
 import SymptomsIntensity from './src/screens/symptoms/SymptomsIntensity';
 import SymptomsInstrument from './src/screens/symptoms/SymptomsInstrument';
-import SymptomsWeeklyReminder from './src/screens/symptoms/SymptomsWeeklyReminder';
+import WeeklySymptomSetup from './src/screens/symptoms/WeeklySymptomSetup';
+import WeeklyReminderSetup from './src/screens/symptoms/WeeklyReminderSetup';
 import AssessmentLandingScreen from './src/screens/LeFlows/AssessmentLandingScreen';
 import BloodLipidsLandingScreen from './src/screens/LeFlows/BloodLipidsLandingScreen';
 import SmokingLandingScreen from './src/screens/LeFlows/SmokingLandingScreen';
@@ -57,6 +60,8 @@ export type RootStackParamList = {
   Smoking: undefined;
   Settings: undefined;
   Symptoms: undefined;
+  SymptomsLanding: undefined;
+  SymptomsMomentaryList: undefined;
   SymptomScreen2: {
     symptom_key: string;
     symptom_label: string;
@@ -70,19 +75,21 @@ export type RootStackParamList = {
     safety_modal_shown: boolean;
     activities: string[];
   };
-  SymptomScreen4: {
+  SymptomRecurringPrompt: {
+    symptom_event_id: number;
+    symptom_key: string;
+    symptom_label: string;
+  };
+  DailyReminderSetup: {
     symptom_event_id: number;
     symptom_key: string;
     symptom_label: string;
   };
   SymptomConfirmation: {
     enrollmentSummary?: string;
+    completedWeeklyCheckIn?: boolean;
+    weeklyPlan?: { id: number; symptom_keys: string[] };
   } | undefined;
-  SymptomsBranchChoice: {
-    symptom_key: string;
-    symptom_label: string;
-    tracking_type: string;
-  };
   SymptomsIntensity: {
     symptom_key: string;
     symptom_label: string;
@@ -93,13 +100,14 @@ export type RootStackParamList = {
     duration_bucket: string;
   };
   SymptomsInstrument: {
-    symptom_key: string;
-    symptom_label: string;
+    symptom_queue: { symptom_key: string; symptom_label: string }[];
+    current_index: number;
+    weekly_plan_id?: number;
   };
-  SymptomsWeeklyReminder: {
-    symptom_key: string;
-    symptom_label: string;
-    instrument_response_id: number;
+  WeeklySymptomSetup: undefined;
+  WeeklyReminderSetup: {
+    selected_symptom_keys: string[];
+    existing_plan_id?: number;
   };
   GoalsSetting: undefined;
   GoalStep1: undefined;
@@ -140,15 +148,18 @@ export default function App() {
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="Diet" component={DietAssessmentScreen} />
             <Stack.Screen name="Smoking" component={SmokingAssessmentScreen} />
-            <Stack.Screen name="Symptoms" component={SymptomAssessmentScreen} />
+            <Stack.Screen name="Symptoms" component={SymptomsDisclaimerGate} />
+            <Stack.Screen name="SymptomsLanding" component={SymptomsLanding} />
+            <Stack.Screen name="SymptomsMomentaryList" component={SymptomsMomentaryList} />
             <Stack.Screen name="SymptomScreen2" component={SymptomScreen2} />
             <Stack.Screen name="SymptomScreen3" component={SymptomScreen3} />
-            <Stack.Screen name="SymptomScreen4" component={SymptomScreen4} />
             <Stack.Screen name="SymptomConfirmation" component={SymptomConfirmation} />
-            <Stack.Screen name="SymptomsBranchChoice" component={SymptomsBranchChoice} />
+            <Stack.Screen name="SymptomRecurringPrompt" component={SymptomRecurringPrompt} />
+            <Stack.Screen name="DailyReminderSetup" component={DailyReminderSetup} />
             <Stack.Screen name="SymptomsIntensity" component={SymptomsIntensity} />
             <Stack.Screen name="SymptomsInstrument" component={SymptomsInstrument} />
-            <Stack.Screen name="SymptomsWeeklyReminder" component={SymptomsWeeklyReminder} />
+            <Stack.Screen name="WeeklySymptomSetup" component={WeeklySymptomSetup} />
+            <Stack.Screen name="WeeklyReminderSetup" component={WeeklyReminderSetup} />
             <Stack.Screen name="GoalStep1" component={DailyCheckInStepScreen} />
             <Stack.Screen name="GoalStep2" component={YesterdayStepsStepScreen} />
             <Stack.Screen name="GoalStep3" component={SymptomBurdenStepScreen} />

@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App';
+import { buildSymptomQueue } from './weeklySymptomOptions';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'SymptomConfirmation'>;
 type RoutePropType = RouteProp<RootStackParamList, 'SymptomConfirmation'>;
@@ -18,10 +19,21 @@ const SymptomConfirmation: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RoutePropType>();
   const enrollmentSummary = route.params?.enrollmentSummary;
+  const completedWeeklyCheckIn = route.params?.completedWeeklyCheckIn;
+  const weeklyPlan = route.params?.weeklyPlan;
   const hasSchedule = Boolean(enrollmentSummary);
 
   const handleDone = () => {
     navigation.navigate('HomeTabs');
+  };
+
+  const handleStartWeeklyCheckIn = () => {
+    if (!weeklyPlan) return;
+    navigation.navigate('SymptomsInstrument', {
+      symptom_queue: buildSymptomQueue(weeklyPlan.symptom_keys),
+      current_index: 0,
+      weekly_plan_id: weeklyPlan.id,
+    });
   };
 
   return (
@@ -31,19 +43,35 @@ const SymptomConfirmation: React.FC = () => {
           <Ionicons name="checkmark-circle" size={80} color="#34C759" />
         </View>
 
-        <Text style={styles.title}>Logged.</Text>
-
-        {hasSchedule ? (
-          <Text style={styles.subtitle}>
-            {`We'll check in with you ${enrollmentSummary}.`}
-          </Text>
+        {completedWeeklyCheckIn ? (
+          <>
+            <Text style={styles.title}>All done!</Text>
+            <Text style={styles.subtitle}>Thanks for completing this week's check-in.</Text>
+            <Text style={styles.body}>
+              Your responses have been recorded. If you are feeling unwell, please reach out to your care team.
+            </Text>
+          </>
         ) : (
-          <Text style={styles.subtitle}>Take care of yourself.</Text>
+          <>
+            <Text style={styles.title}>Logged.</Text>
+            {hasSchedule ? (
+              <Text style={styles.subtitle}>
+                {`We'll check in with you ${enrollmentSummary}.`}
+              </Text>
+            ) : (
+              <Text style={styles.subtitle}>Take care of yourself.</Text>
+            )}
+            <Text style={styles.body}>
+              Your symptom has been recorded. If you are feeling unwell, please reach out to your care team.
+            </Text>
+          </>
         )}
 
-        <Text style={styles.body}>
-          Your symptom has been recorded. If you are feeling unwell, please reach out to your care team.
-        </Text>
+        {weeklyPlan && (
+          <TouchableOpacity style={styles.secondaryButton} onPress={handleStartWeeklyCheckIn}>
+            <Text style={styles.secondaryButtonText}>Start this week's check-in now</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity style={styles.doneButton} onPress={handleDone}>
           <Text style={styles.doneButtonText}>Done</Text>
@@ -106,6 +134,20 @@ const styles = StyleSheet.create({
   doneButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#007AFF',
+    marginBottom: 16,
+  },
+  secondaryButtonText: {
+    color: '#007AFF',
+    fontSize: 17,
     fontWeight: '600',
   },
 });

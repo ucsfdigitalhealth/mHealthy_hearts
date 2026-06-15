@@ -340,15 +340,18 @@ CREATE TABLE symptom_disclaimer_log (
 
 
 -- EMA enrollment preferences. One row per enrollment.
--- schedule: JSON array of {day_of_week, time} pairs for ongoing/weekly check-ins.
---   day_of_week: 0=Sunday, 1=Monday, ..., 6=Saturday
---   time: "HH:MM" string
---   Example: [{"day_of_week": 1, "time": "09:00"}, {"day_of_week": 3, "time": "14:00"}]
+-- schedule: shape depends on schedule_type.
+--   schedule_type='weekly_day_time' (legacy): JSON array of {day_of_week, time} pairs.
+--     day_of_week: 0=Sunday, 1=Monday, ..., 6=Saturday; time: "HH:MM" string.
+--     Example: [{"day_of_week": 1, "time": "09:00"}, {"day_of_week": 3, "time": "14:00"}]
+--   schedule_type='daily_times' (momentary recurring reminders): JSON object
+--     {"times": ["08:00","20:00"]}, paired with start_date/end_date below.
 -- schedule is NULL when frequency = 'once'.
 -- symptom_event_id: references symptom_events.id — NULL for weekly instrument path.
 -- instrument_response_id: references symptom_instrument_responses.id — NULL for momentary path.
 -- notification_channel: how to deliver weekly reminders (weekly frequency only).
 -- instrument_key resolved from backend/config/instruments.js at enrollment time.
+-- start_date/end_date: only used for schedule_type='daily_times'.
 CREATE TABLE ema_enrollments (
   id                     INT AUTO_INCREMENT PRIMARY KEY,
   user_id                VARCHAR(36)           NOT NULL,
@@ -358,6 +361,9 @@ CREATE TABLE ema_enrollments (
   instrument_key         VARCHAR(60)           NOT NULL,
   schedule               JSON                  NULL,
   frequency              ENUM('once','ongoing','weekly') NOT NULL,
+  schedule_type          ENUM('weekly_day_time','daily_times') NOT NULL DEFAULT 'weekly_day_time',
+  start_date             DATE                  NULL,
+  end_date               DATE                  NULL,
   notification_channel   ENUM('text','email')  NULL,
   is_active              TINYINT(1)            NOT NULL DEFAULT 1,
   enrolled_at            TIMESTAMP             DEFAULT CURRENT_TIMESTAMP,
@@ -366,11 +372,32 @@ CREATE TABLE ema_enrollments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
+-- One combined weekly symptom-tracking plan per user (PI-requested v1.4 restructure).
+-- symptom_keys: JSON array of up to 6 keys, all in WEEKLY_INSTRUMENT_KEYS
+--   (backend/config/instruments.js), e.g. ["fatigue","anxiety","hot_flashes"].
+-- day_of_week/time/notification_channel: the single shared weekly reminder slot.
+CREATE TABLE weekly_symptom_plans (
+  id                    INT AUTO_INCREMENT PRIMARY KEY,
+  user_id               VARCHAR(36) NOT NULL,
+  symptom_keys          JSON NOT NULL,
+  day_of_week           TINYINT UNSIGNED NOT NULL,
+  time                  VARCHAR(5) NOT NULL,
+  notification_channel  ENUM('text','email') NOT NULL,
+  is_active             TINYINT(1) NOT NULL DEFAULT 1,
+  created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_weekly_plan_user (user_id),
+  INDEX idx_weekly_plan_active (user_id, is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
 -- Weekly validated instrument responses.
 -- raw_responses: JSON array of integer values (one per question, in order).
 -- t_score: null for mMRC and HFRDIS (non-PROMIS instruments).
 -- severity_label: populated for HFRDIS only ('mild'/'moderate'/'severe').
 -- enrollment_id: FK to ema_enrollments; null if patient has not enrolled in recurring reminders.
+-- weekly_plan_id: FK to weekly_symptom_plans; set when this response was submitted
+--   as part of a combined weekly check-in session.
 CREATE TABLE symptom_instrument_responses (
   id               INT AUTO_INCREMENT PRIMARY KEY,
   patient_id       VARCHAR(36)  NOT NULL,
@@ -381,9 +408,11 @@ CREATE TABLE symptom_instrument_responses (
   t_score          DECIMAL(5,2) NULL,
   severity_label   ENUM('mild','moderate','severe') NULL,
   enrollment_id    INT          NULL,
+  weekly_plan_id   INT          NULL,
   responded_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_instrument_responses_patient_symptom    (patient_id, symptom_key),
-  INDEX idx_instrument_responses_patient_instrument (patient_id, instrument_id)
+  INDEX idx_instrument_responses_patient_instrument (patient_id, instrument_id),
+  INDEX idx_instrument_responses_weekly_plan        (weekly_plan_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 

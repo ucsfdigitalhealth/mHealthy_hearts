@@ -86,7 +86,6 @@ interface InstrumentDef {
   defaultScale: ResponseOption[];
   reverseScoreTransform?: Record<number, number>;
   scoring: 'sum_then_tscore' | 'single_item_grade' | 'sum_and_average';
-  skipReminder: boolean;
 }
 
 const INSTRUMENTS: Record<string, InstrumentDef> = {
@@ -108,7 +107,6 @@ const INSTRUMENTS: Record<string, InstrumentDef> = {
       { value: 5, label: 'Very much' },
     ],
     scoring: 'sum_then_tscore',
-    skipReminder: false,
   },
   anxiety: {
     instrumentId: 'promis_anxiety_4a',
@@ -128,7 +126,6 @@ const INSTRUMENTS: Record<string, InstrumentDef> = {
       { value: 5, label: 'Always' },
     ],
     scoring: 'sum_then_tscore',
-    skipReminder: false,
   },
   depression_mood: {
     instrumentId: 'promis_depression_4a',
@@ -148,7 +145,6 @@ const INSTRUMENTS: Record<string, InstrumentDef> = {
       { value: 5, label: 'Always' },
     ],
     scoring: 'sum_then_tscore',
-    skipReminder: false,
   },
   sleep_disturbance: {
     instrumentId: 'promis_sleep_4a',
@@ -180,7 +176,6 @@ const INSTRUMENTS: Record<string, InstrumentDef> = {
     ],
     reverseScoreTransform: { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1 },
     scoring: 'sum_then_tscore',
-    skipReminder: false,
   },
   reduced_exercise_tolerance: {
     instrumentId: 'promis_physical_function_4a',
@@ -200,7 +195,6 @@ const INSTRUMENTS: Record<string, InstrumentDef> = {
       { value: 1, label: 'Unable to do' },
     ],
     scoring: 'sum_then_tscore',
-    skipReminder: false,
   },
   breathlessness_activity: {
     instrumentId: 'mmrc',
@@ -222,7 +216,6 @@ const INSTRUMENTS: Record<string, InstrumentDef> = {
     ],
     defaultScale: [],
     scoring: 'single_item_grade',
-    skipReminder: true, // mMRC skips the reminder screen
   },
   hot_flashes: {
     instrumentId: 'hfrdis',
@@ -242,7 +235,6 @@ const INSTRUMENTS: Record<string, InstrumentDef> = {
     ],
     defaultScale: [],
     scoring: 'sum_and_average',
-    skipReminder: false,
   },
 };
 
@@ -374,7 +366,10 @@ function computePromisScore(
 const SymptomsInstrument: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RoutePropType>();
-  const { symptom_key, symptom_label } = route.params;
+  const { symptom_queue, current_index, weekly_plan_id } = route.params;
+  const { symptom_key, symptom_label } = symptom_queue[current_index];
+  const totalCount = symptom_queue.length;
+  const isLast = current_index + 1 >= totalCount;
   const { accessToken } = useAuth();
 
   const def = INSTRUMENTS[symptom_key];
@@ -436,22 +431,23 @@ const SymptomsInstrument: React.FC = () => {
         tScore = ts;
       }
 
-      const result = await postInstrumentResponse(accessToken, {
+      await postInstrumentResponse(accessToken, {
         symptom_key,
         instrument_id: def.instrumentId,
         raw_responses: rawResponses,
         raw_score: rawScore,
         t_score: tScore,
         severity_label: severityLabel,
+        weekly_plan_id: weekly_plan_id ?? null,
       });
 
-      if (def.skipReminder) {
-        navigation.navigate('SymptomConfirmation');
+      if (isLast) {
+        navigation.navigate('SymptomConfirmation', { completedWeeklyCheckIn: true });
       } else {
-        navigation.navigate('SymptomsWeeklyReminder', {
-          symptom_key,
-          symptom_label,
-          instrument_response_id: result.id,
+        navigation.replace('SymptomsInstrument', {
+          symptom_queue,
+          current_index: current_index + 1,
+          weekly_plan_id,
         });
       }
     } catch (err: any) {
@@ -478,6 +474,9 @@ const SymptomsInstrument: React.FC = () => {
           <Ionicons name="chevron-back" size={24} color="#007AFF" />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
+        {totalCount > 1 && (
+          <Text style={styles.progressText}>{`${current_index + 1} of ${totalCount}`}</Text>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -584,6 +583,9 @@ const SymptomsInstrument: React.FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#F8F9FA',
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -593,6 +595,7 @@ const styles = StyleSheet.create({
   },
   backButton: { flexDirection: 'row', alignItems: 'center' },
   backText: { color: '#007AFF', fontSize: 16, fontWeight: '500', marginLeft: 4 },
+  progressText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
   content: { padding: 20, paddingBottom: 20 },
   screenTitle: { fontSize: 26, fontWeight: '700', color: '#1F2937', marginBottom: 4 },
   screenSubtitle: { fontSize: 18, fontWeight: '500', color: '#374151', marginBottom: 20 },
