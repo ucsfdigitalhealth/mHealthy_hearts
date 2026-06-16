@@ -231,6 +231,8 @@ router.get('/weekly-instrument-keys', verifyToken, async (req, res) => {
 
 // GET /api/symptoms/weekly-plan
 // Returns the user's active combined weekly symptom-tracking plan, or { plan: null }.
+// Includes completed_this_week: true if any instrument response for this plan was submitted
+// during the current calendar week (Sunday–Saturday).
 router.get('/weekly-plan', verifyToken, async (req, res) => {
   try {
     const userId = req.user?.userId || null;
@@ -238,7 +240,21 @@ router.get('/weekly-plan', verifyToken, async (req, res) => {
       'SELECT * FROM weekly_symptom_plans WHERE user_id = ? AND is_active = 1 LIMIT 1',
       [userId]
     );
-    return res.status(200).json({ plan: parseWeeklyPlanRow(rows[0]) });
+    const planRow = rows[0];
+    if (!planRow) {
+      return res.status(200).json({ plan: null });
+    }
+
+    const [completionRows] = await db.execute(
+      `SELECT id FROM symptom_instrument_responses
+         WHERE weekly_plan_id = ? AND YEARWEEK(created_at, 0) = YEARWEEK(CURDATE(), 0)
+         LIMIT 1`,
+      [planRow.id]
+    );
+
+    const plan = parseWeeklyPlanRow(planRow);
+    plan.completed_this_week = completionRows.length > 0;
+    return res.status(200).json({ plan });
   } catch (error) {
     console.error('Error fetching weekly plan:', error);
     return res.status(500).json({ message: 'Server Error', error: error.message });

@@ -103,6 +103,7 @@ export interface WeeklyPlan {
   time: string;        // "HH:MM"
   notification_channel: 'text' | 'email';
   is_active: boolean;
+  completed_this_week: boolean;
   created_at: string;
   updated_at: string;
 }

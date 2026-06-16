@@ -15,7 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App';
 import { useAuth } from '../../context/AuthContext';
 import { getWeeklyPlan, deleteWeeklyPlan, WeeklyPlan } from '../../api/symptoms';
-import { buildSymptomQueue } from './weeklySymptomOptions';
+import { buildSymptomQueue, WEEKLY_SYMPTOM_OPTIONS } from './weeklySymptomOptions';
 import StressInfoModal from '../../components/symptoms/StressInfoModal';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'SymptomsLanding'>;
@@ -58,7 +58,7 @@ const SymptomsLanding: React.FC = () => {
   const handleStartWeeklyCheckIn = () => {
     if (!plan) return;
     navigation.navigate('SymptomsInstrument', {
-      symptom_queue: buildSymptomQueue(plan.symptom_keys),
+      symptom_queue: buildSymptomQueue(WEEKLY_SYMPTOM_OPTIONS.map(o => o.key)),
       current_index: 0,
       weekly_plan_id: plan.id,
     });
@@ -117,18 +117,25 @@ const SymptomsLanding: React.FC = () => {
           </View>
         ) : plan ? (
           <>
-            <TouchableOpacity style={styles.cardHighlight} onPress={handleStartWeeklyCheckIn} activeOpacity={0.7}>
-              <View style={styles.cardIconCircleHighlight}>
-                <Ionicons name="play-circle" size={28} color="#FFFFFF" />
+            {plan.completed_this_week ? (
+              <View style={styles.completedCard}>
+                <Ionicons name="checkmark-circle" size={22} color="#34C759" style={{ marginRight: 10 }} />
+                <Text style={styles.completedCardText}>Check-in complete for this week</Text>
               </View>
-              <View style={styles.cardTextGroup}>
-                <Text style={styles.cardTitleHighlight}>Take this week's check-in now</Text>
-                <Text style={styles.cardSubtitleHighlight}>
-                  Complete your {plan.symptom_keys.length === 1 ? 'check-in' : `${plan.symptom_keys.length} check-ins`} for this week.
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.cardHighlight} onPress={handleStartWeeklyCheckIn} activeOpacity={0.7}>
+                <View style={styles.cardIconCircleHighlight}>
+                  <Ionicons name="play-circle" size={28} color="#FFFFFF" />
+                </View>
+                <View style={styles.cardTextGroup}>
+                  <Text style={styles.cardTitleHighlight}>Take this week's check-in now</Text>
+                  <Text style={styles.cardSubtitleHighlight}>
+                    Complete your {WEEKLY_SYMPTOM_OPTIONS.length} check-ins for this week.
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
 
             <View style={styles.card}>
               <View style={styles.cardIconCircle}>
@@ -248,6 +255,18 @@ const styles = StyleSheet.create({
   cardTextGroup: { flex: 1 },
   cardTitle: { fontSize: 17, fontWeight: '600', color: '#1F2937', marginBottom: 4 },
   cardSubtitle: { fontSize: 13, color: '#6B7280', lineHeight: 18 },
+
+  completedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#BBF7D0',
+    padding: 18,
+    marginBottom: 16,
+  },
+  completedCardText: { fontSize: 16, fontWeight: '600', color: '#166534' },
 
   editButton: {
     flexDirection: 'row',
