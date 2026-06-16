@@ -282,13 +282,22 @@ router.post('/weekly-plan', verifyToken, async (req, res) => {
       return res.status(409).json({ message: 'An active weekly plan already exists. Use PUT to update it.' });
     }
 
-    const [result] = await db.execute(
+    await db.execute(
       `INSERT INTO weekly_symptom_plans (user_id, symptom_keys, day_of_week, time, notification_channel)
-       VALUES (?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         symptom_keys = VALUES(symptom_keys),
+         day_of_week  = VALUES(day_of_week),
+         time         = VALUES(time),
+         notification_channel = VALUES(notification_channel),
+         is_active    = 1`,
       [userId, JSON.stringify(symptom_keys), Number(day_of_week), time, notification_channel]
     );
 
-    const [rows] = await db.execute('SELECT * FROM weekly_symptom_plans WHERE id = ?', [result.insertId]);
+    const [rows] = await db.execute(
+      'SELECT * FROM weekly_symptom_plans WHERE user_id = ? LIMIT 1',
+      [userId]
+    );
     return res.status(201).json({ plan: parseWeeklyPlanRow(rows[0]) });
   } catch (error) {
     console.error('Error creating weekly plan:', error);
@@ -345,7 +354,7 @@ router.delete('/weekly-plan', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'No active weekly plan found.' });
     }
 
-    await db.execute('UPDATE weekly_symptom_plans SET is_active = 0 WHERE id = ?', [existing[0].id]);
+    await db.execute('DELETE FROM weekly_symptom_plans WHERE id = ?', [existing[0].id]);
 
     return res.status(200).json({ message: 'Weekly plan deleted.' });
   } catch (error) {

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -36,6 +37,14 @@ const WeeklySymptomSetup: React.FC = () => {
         if (cancelled) return;
         setAvailableKeys(keys);
         if (plan) {
+          if (plan.completed_this_week) {
+            Alert.alert(
+              "You're all set for this week",
+              "You've already completed this week's check-in. Come back next week!",
+              [{ text: 'OK', onPress: () => navigation.goBack() }]
+            );
+            return;
+          }
           setExistingPlanId(plan.id);
         }
       })
