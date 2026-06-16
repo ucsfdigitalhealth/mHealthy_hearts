@@ -247,7 +247,7 @@ router.get('/weekly-plan', verifyToken, async (req, res) => {
 
     const [completionRows] = await db.execute(
       `SELECT id FROM symptom_instrument_responses
-         WHERE weekly_plan_id = ? AND YEARWEEK(created_at, 0) = YEARWEEK(CURDATE(), 0)
+         WHERE weekly_plan_id = ? AND YEARWEEK(responded_at, 0) = YEARWEEK(CURDATE(), 0)
          LIMIT 1`,
       [planRow.id]
     );
