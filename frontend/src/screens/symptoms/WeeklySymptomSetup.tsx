@@ -32,20 +32,29 @@ const WeeklySymptomSetup: React.FC = () => {
     if (!accessToken) return;
     let cancelled = false;
     setLoading(true);
-    Promise.all([getWeeklyInstrumentKeys(accessToken), getWeeklyPlan(accessToken)])
-      .then(([keys, plan]) => {
+    const keysPromise = getWeeklyInstrumentKeys(accessToken);
+    const planPromise = getWeeklyPlan(accessToken).catch(() => null);
+
+    keysPromise
+      .then(async keys => {
         if (cancelled) return;
         setAvailableKeys(keys);
-        if (plan) {
-          if (plan.completed_this_week) {
-            Alert.alert(
-              "You're all set for this week",
-              "You've already completed this week's check-in. Come back next week!",
-              [{ text: 'OK', onPress: () => navigation.goBack() }]
-            );
-            return;
+        try {
+          const plan = await planPromise;
+          if (cancelled) return;
+          if (plan) {
+            if (plan.completed_this_week) {
+              Alert.alert(
+                "You're all set for this week",
+                "You've already completed this week's check-in. Come back next week!",
+                [{ text: 'OK', onPress: () => navigation.goBack() }]
+              );
+              return;
+            }
+            setExistingPlanId(plan.id);
           }
-          setExistingPlanId(plan.id);
+        } catch {
+          // plan fetch failed — treat as no existing plan, proceed with first-time setup
         }
       })
       .catch(err => {
