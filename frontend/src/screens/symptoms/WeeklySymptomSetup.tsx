@@ -24,6 +24,7 @@ const WeeklySymptomSetup: React.FC = () => {
   const { accessToken } = useAuth();
 
   const [availableKeys, setAvailableKeys] = useState<string[] | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [existingPlanId, setExistingPlanId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -39,6 +40,7 @@ const WeeklySymptomSetup: React.FC = () => {
       .then(async keys => {
         if (cancelled) return;
         setAvailableKeys(keys);
+        setSelectedKeys(new Set(keys));
         try {
           const plan = await planPromise;
           if (cancelled) return;
@@ -52,6 +54,7 @@ const WeeklySymptomSetup: React.FC = () => {
               return;
             }
             setExistingPlanId(plan.id);
+            setSelectedKeys(new Set(plan.symptom_keys));
           }
         } catch {
           // plan fetch failed — treat as no existing plan, proceed with first-time setup
@@ -72,10 +75,23 @@ const WeeklySymptomSetup: React.FC = () => {
     ? WEEKLY_SYMPTOM_OPTIONS.filter(o => availableKeys.includes(o.key))
     : [];
 
+  const toggleOptional = (key: string) => {
+    if (key !== 'hot_flashes') return;
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
   const handleNext = () => {
     if (!availableKeys) return;
     navigation.navigate('WeeklyReminderSetup', {
-      selected_symptom_keys: availableKeys,
+      selected_symptom_keys: Array.from(selectedKeys),
       ...(existingPlanId !== null ? { existing_plan_id: existingPlanId } : {}),
     });
   };
@@ -95,7 +111,8 @@ const WeeklySymptomSetup: React.FC = () => {
         </Text>
         <Text style={styles.screenSubtitle}>
           Once a week, you'll be asked a short combined questionnaire (about 5-6 minutes
-          total) covering the symptoms below.
+          total) covering the symptoms below. All of these are mandatory except hot
+          flashes, which is optional — tap it to leave it out of your check-in.
         </Text>
 
         {loading ? (
@@ -109,12 +126,35 @@ const WeeklySymptomSetup: React.FC = () => {
           </View>
         ) : (
           <View style={styles.optionGroup}>
-            {options.map(option => (
-              <View key={option.key} style={styles.optionRow}>
-                <Ionicons name="checkmark-circle" size={20} color="#34C759" style={{ marginRight: 12 }} />
-                <Text style={styles.optionLabel}>{option.label}</Text>
-              </View>
-            ))}
+            {options.map(option => {
+              const isOptional = option.key === 'hot_flashes';
+              const isSelected = selectedKeys.has(option.key);
+              const row = (
+                <View style={styles.optionRow}>
+                  <Ionicons
+                    name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={20}
+                    color={isSelected ? '#34C759' : '#9CA3AF'}
+                    style={{ marginRight: 12 }}
+                  />
+                  <Text style={styles.optionLabel}>{option.label}</Text>
+                  {isOptional ? (
+                    <View style={styles.optionalBadge}>
+                      <Text style={styles.optionalBadgeText}>Optional</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.requiredAsterisk}>*</Text>
+                  )}
+                </View>
+              );
+              return isOptional ? (
+                <TouchableOpacity key={option.key} onPress={() => toggleOptional(option.key)} activeOpacity={0.7}>
+                  {row}
+                </TouchableOpacity>
+              ) : (
+                <View key={option.key}>{row}</View>
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -169,6 +209,15 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   optionLabel: { fontSize: 16, fontWeight: '500', color: '#1F2937', flex: 1 },
+  optionalBadge: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginLeft: 8,
+  },
+  optionalBadgeText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
+  requiredAsterisk: { fontSize: 16, fontWeight: '700', color: '#DC2626', marginLeft: 4 },
 
   errorBanner: {
     flexDirection: 'row',
