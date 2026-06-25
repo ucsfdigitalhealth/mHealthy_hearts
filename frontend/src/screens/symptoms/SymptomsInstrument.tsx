@@ -490,7 +490,9 @@ const SymptomsInstrument: React.FC = () => {
             <Text style={styles.instructionText}>{def.instructions}</Text>
           </View>
         ) : def.stem ? (
-          <Text style={styles.stemText}>{def.stem}</Text>
+          <View style={styles.stemBox}>
+            <Text style={styles.stemText}>{def.stem}</Text>
+          </View>
         ) : null}
 
         {/* ── HFRDIS (0–10 sliders per item) ── */}
@@ -610,11 +612,19 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   instructionText: { fontSize: 14, color: '#0369A1', lineHeight: 20 },
+  stemBox: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#93C5FD',
+    padding: 14,
+    marginBottom: 24,
+  },
   stemText: {
-    fontSize: 15,
-    fontStyle: 'italic',
-    color: '#6B7280',
-    marginBottom: 20,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1E3A8A',
+    lineHeight: 22,
   },
 
   questionList: { gap: 24 },
