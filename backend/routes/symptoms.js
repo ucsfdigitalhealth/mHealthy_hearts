@@ -231,8 +231,8 @@ router.get('/weekly-instrument-keys', verifyToken, async (req, res) => {
 
 // GET /api/symptoms/weekly-plan
 // Returns the user's active combined weekly symptom-tracking plan, or { plan: null }.
-// Includes completed_this_week: true if any instrument response for this plan was submitted
-// during the current calendar week (Sunday–Saturday).
+// Includes completed_this_week: true only if every instrument in the plan's symptom_keys
+// has a response submitted during the current calendar week (Sunday–Saturday).
 router.get('/weekly-plan', verifyToken, async (req, res) => {
   try {
     const userId = req.user?.userId || null;
@@ -245,15 +245,16 @@ router.get('/weekly-plan', verifyToken, async (req, res) => {
       return res.status(200).json({ plan: null });
     }
 
+    const plan = parseWeeklyPlanRow(planRow);
+
     const [completionRows] = await db.execute(
-      `SELECT id FROM symptom_instrument_responses
-         WHERE weekly_plan_id = ? AND YEARWEEK(responded_at, 0) = YEARWEEK(CURDATE(), 0)
-         LIMIT 1`,
+      `SELECT COUNT(DISTINCT symptom_key) AS completedCount
+         FROM symptom_instrument_responses
+         WHERE weekly_plan_id = ? AND YEARWEEK(responded_at, 0) = YEARWEEK(CURDATE(), 0)`,
       [planRow.id]
     );
-
-    const plan = parseWeeklyPlanRow(planRow);
-    plan.completed_this_week = completionRows.length > 0;
+    const completedCount = completionRows[0]?.completedCount || 0;
+    plan.completed_this_week = completedCount >= plan.symptom_keys.length;
     return res.status(200).json({ plan });
   } catch (error) {
     console.error('Error fetching weekly plan:', error);
