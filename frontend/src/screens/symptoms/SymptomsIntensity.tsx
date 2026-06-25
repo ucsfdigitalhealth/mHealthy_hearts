@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     width: SLIDER_WIDTH,
     marginTop: 12,
   },
-  anchorText: { fontSize: 11, color: '#9CA3AF', maxWidth: '48%' },
+  anchorText: { fontSize: 14, color: '#9CA3AF', maxWidth: '48%' },
   anchorRight: { textAlign: 'right' },
 
   // ── Weight options ──

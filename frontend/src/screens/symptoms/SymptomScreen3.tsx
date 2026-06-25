@@ -141,7 +141,7 @@ const SymptomScreen3: React.FC = () => {
 
         {/* ─── When? ─── */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>When did this happen?</Text>
+          <Text style={styles.sectionLabel}>When did it start?</Text>
           <TouchableOpacity
             style={[styles.dateTimeButton, isFuture && styles.dateTimeButtonError]}
             onPress={() => {
