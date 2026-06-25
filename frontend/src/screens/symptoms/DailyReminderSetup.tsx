@@ -9,7 +9,6 @@ import {
   Modal,
   SafeAreaView,
   ActivityIndicator,
-  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -322,25 +321,40 @@ const DailyReminderSetup: React.FC = () => {
           />
         )}
 
-        <View style={styles.endDateToggleRow}>
-          <Text style={styles.formFieldLabel}>End date</Text>
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>{hasEndDate ? 'On a date' : 'Ongoing'}</Text>
-            <Switch value={hasEndDate} onValueChange={setHasEndDate} />
-          </View>
-        </View>
+        <Text style={styles.formFieldLabel}>End date</Text>
 
-        {hasEndDate && (
+        {!hasEndDate ? (
+          <TouchableOpacity
+            style={styles.setEndDateButton}
+            onPress={() => {
+              setHasEndDate(true);
+              setShowEndDatePicker(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="calendar-outline" size={16} color="#007AFF" />
+            <Text style={styles.setEndDateButtonText}>Set end date</Text>
+          </TouchableOpacity>
+        ) : (
           <>
-            <TouchableOpacity
-              style={styles.pickerButton}
-              onPress={() => setShowEndDatePicker(true)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="calendar-outline" size={18} color="#007AFF" />
-              <Text style={styles.pickerButtonText}>{toDateDisplay(endDate)}</Text>
-              <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-            </TouchableOpacity>
+            <View style={styles.endDateRow}>
+              <TouchableOpacity
+                style={[styles.pickerButton, styles.endDatePickerButton]}
+                onPress={() => setShowEndDatePicker(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="calendar-outline" size={18} color="#007AFF" />
+                <Text style={styles.pickerButtonText}>{toDateDisplay(endDate)}</Text>
+                <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.removeEndDateButton}
+                onPress={() => setHasEndDate(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={22} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
 
             {Platform.OS === 'ios' && showEndDatePicker && (
               <Modal transparent animationType="slide" visible onRequestClose={() => setShowEndDatePicker(false)}>
@@ -498,14 +512,22 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     marginBottom: 10,
   },
-  endDateToggleRow: {
+  setEndDateButton: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 16,
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    marginBottom: 16,
   },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  toggleLabel: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
+  setEndDateButtonText: { fontSize: 13, fontWeight: '600', color: '#007AFF' },
+  endDateRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  endDatePickerButton: { flex: 1 },
+  removeEndDateButton: { marginBottom: 16 },
   fieldError: { fontSize: 13, color: '#DC2626', marginTop: -4, marginBottom: 8 },
 
   // ── Shared picker button ──
