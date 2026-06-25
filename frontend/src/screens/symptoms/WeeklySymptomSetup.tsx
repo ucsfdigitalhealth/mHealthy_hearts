@@ -113,6 +113,11 @@ const WeeklySymptomSetup: React.FC = () => {
               <View key={option.key} style={styles.optionRow}>
                 <Ionicons name="checkmark-circle" size={20} color="#34C759" style={{ marginRight: 12 }} />
                 <Text style={styles.optionLabel}>{option.label}</Text>
+                {option.key === 'hot_flashes' && (
+                  <View style={styles.optionalBadge}>
+                    <Text style={styles.optionalBadgeText}>Optional</Text>
+                  </View>
+                )}
               </View>
             ))}
           </View>
@@ -169,6 +174,14 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   optionLabel: { fontSize: 16, fontWeight: '500', color: '#1F2937', flex: 1 },
+  optionalBadge: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginLeft: 8,
+  },
+  optionalBadgeText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
 
   errorBanner: {
     flexDirection: 'row',

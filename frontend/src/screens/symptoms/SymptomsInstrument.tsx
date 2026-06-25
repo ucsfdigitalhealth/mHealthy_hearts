@@ -481,9 +481,16 @@ const SymptomsInstrument: React.FC = () => {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.screenTitle}>Weekly check-in</Text>
-        <Text style={styles.screenSubtitle}>
-          <Text style={styles.highlight}>{symptom_label}</Text>
-        </Text>
+        <View style={styles.subtitleRow}>
+          <Text style={styles.screenSubtitle}>
+            <Text style={styles.highlight}>{symptom_label}</Text>
+          </Text>
+          {isHfrdis && (
+            <View style={styles.optionalBadge}>
+              <Text style={styles.optionalBadgeText}>Optional</Text>
+            </View>
+          )}
+        </View>
 
         {def.instructions ? (
           <View style={styles.instructionBox}>
@@ -600,8 +607,17 @@ const styles = StyleSheet.create({
   progressText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
   content: { padding: 20, paddingBottom: 20 },
   screenTitle: { fontSize: 26, fontWeight: '700', color: '#1F2937', marginBottom: 4 },
-  screenSubtitle: { fontSize: 18, fontWeight: '500', color: '#374151', marginBottom: 20 },
+  subtitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' },
+  screenSubtitle: { fontSize: 18, fontWeight: '500', color: '#374151' },
   highlight: { color: '#007AFF' },
+  optionalBadge: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginLeft: 8,
+  },
+  optionalBadgeText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
 
   instructionBox: {
     backgroundColor: '#F0F9FF',
