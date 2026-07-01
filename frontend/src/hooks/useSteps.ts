@@ -10,6 +10,7 @@ const STEPS_BASE = 'http://localhost:3000/api/fitbitAuth/fitbit/steps';
 // Module-level: timer keeps running across screens so backend is called at 120s even when user navigates away.
 let stepsRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null;
 const stepsTokenRef: { current: string | null } = { current: null };
+const stepsRefreshFnRef: { current: (() => Promise<boolean>) | null } = { current: null };
 
 function scheduleStepsRefetch(cachedAt: number): void {
   if (stepsRefreshTimeoutId != null) {
@@ -36,7 +37,17 @@ async function doStepsRefetch(): Promise<void> {
   try {
     const tz = getDeviceTimezone();
     const url = tz ? `${STEPS_BASE}?timezone=${encodeURIComponent(tz)}` : STEPS_BASE;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.status === 401 && stepsRefreshFnRef.current) {
+      const refreshed = await stepsRefreshFnRef.current();
+      if (refreshed) {
+        const newToken = await AsyncStorage.getItem('accessToken');
+        if (newToken) {
+          stepsTokenRef.current = newToken;
+          res = await fetch(url, { headers: { Authorization: `Bearer ${newToken}` } });
+        }
+      }
+    }
     if (!res.ok) return;
     const data = await res.json();
     const stepsArray = data.data?.['activities-steps'];
@@ -62,7 +73,7 @@ export interface UseStepsResult {
  * (even when navigating away), so the backend is called at 120s regardless of screen.
  */
 export function useSteps(): UseStepsResult {
-  const { accessToken } = useAuth();
+  const { accessToken, refreshAccessToken } = useAuth();
   const [steps, setSteps] = useState<string>('—');
   const [stepsNumber, setStepsNumber] = useState<number>(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -83,6 +94,7 @@ export function useSteps(): UseStepsResult {
     }
 
     stepsTokenRef.current = accessToken;
+    stepsRefreshFnRef.current = refreshAccessToken;
 
     const loadSteps = async (): Promise<number | undefined> => {
       const cached = await getCachedSteps();
@@ -101,9 +113,19 @@ export function useSteps(): UseStepsResult {
         if (tz) params.set('timezone', tz);
         if (force) params.set('force', 'true');
         const url = `${STEPS_BASE}?${params.toString()}`;
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        let activeToken = accessToken;
+        let res = await fetch(url, { headers: { Authorization: `Bearer ${activeToken}` } });
+        if (res.status === 401) {
+          const refreshed = await refreshAccessToken();
+          if (refreshed) {
+            const newToken = await AsyncStorage.getItem('accessToken');
+            if (newToken) {
+              activeToken = newToken;
+              stepsTokenRef.current = newToken;
+              res = await fetch(url, { headers: { Authorization: `Bearer ${newToken}` } });
+            }
+          }
+        }
         if (!res.ok) {
           console.error('[useSteps] Failed to fetch steps. Status:', res.status);
           return undefined;
