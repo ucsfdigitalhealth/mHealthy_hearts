@@ -85,6 +85,8 @@ export interface UseSleepResult {
   error: string | null;
   /** Clears the cache and immediately re-fetches from the backend. */
   refresh: () => void;
+  /** True when the backend returns FITBIT_NOT_CONNECTED (refresh token invalid or missing). */
+  fitbitDisconnected: boolean;
 }
 
 function formatMinutesToHM(minutes: number): string {
@@ -115,6 +117,7 @@ export function useSleep(): UseSleepResult {
   const [efficiency, setEfficiency] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [fitbitDisconnected, setFitbitDisconnected] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -179,6 +182,14 @@ export function useSleep(): UseSleepResult {
           }
         }
         if (!res.ok) {
+          try {
+            const errData = await res.json();
+            if (errData.code === 'FITBIT_NOT_CONNECTED') {
+              setFitbitDisconnected(true);
+              setIsLoading(false);
+              return undefined;
+            }
+          } catch {}
           const msg = `Sleep fetch failed: ${res.status}`;
           console.error('[useSleep]', msg);
           setError(msg);
@@ -242,5 +253,6 @@ export function useSleep(): UseSleepResult {
     isLoading,
     error,
     refresh,
+    fitbitDisconnected,
   };
 }

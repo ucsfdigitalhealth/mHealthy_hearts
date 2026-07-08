@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from './AuthContext';
 import { getDeviceTimezone } from '../utils/localDate';
@@ -184,21 +183,17 @@ export const FitbitAuthProvider: React.FC<FitbitAuthProviderProps> = ({ children
     }
   }, [accessToken, checkConnectionStatus]);
 
-  // Disconnect Fitbit (clear local state, backend tokens remain until user reconnects)
   const disconnectFitbit = useCallback(async (): Promise<void> => {
-    try {
-      // Clear any local storage (if we were storing tokens locally)
-      await AsyncStorage.removeItem('fitbitAccessToken');
-      await AsyncStorage.removeItem('fitbitRefreshToken');
-      await AsyncStorage.removeItem('fitbitTokenExpires');
-      
-      setIsConnected(false);
-      console.log('Fitbit disconnected locally');
-    } catch (error) {
-      console.error('Error disconnecting Fitbit:', error);
-      throw error;
+    const response = await fetch(`${API_BASE_URL}/fitbit/disconnect`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error((data as { message?: string }).message || 'Failed to disconnect Fitbit');
     }
-  }, []);
+    setIsConnected(false);
+  }, [accessToken]);
 
   const value: FitbitAuthContextType = {
     isConnected,

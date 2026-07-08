@@ -164,7 +164,7 @@ router.post('/refresh', async (req, res) => {
     }
     
     // Generate new access token
-    const newAccessToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    const newAccessToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '60m' }); // keep in sync with login route
     
     // Optionally rotate refresh token for enhanced security
     const newRefreshToken = generateRefreshToken();

@@ -131,6 +131,11 @@ async function ensureValidAccessToken(userId) {
     
     return fitbit_access_token;
   } catch (error) {
+    const isInvalidGrant = error.response?.data?.errors?.[0]?.errorType === 'invalid_grant';
+    if (isInvalidGrant) {
+      console.error('Fitbit refresh token invalid — user must reconnect');
+      throw new Error('Fitbit not connected');
+    }
     console.error('Error ensuring valid access token:', error.message);
     throw error;
   }
@@ -467,7 +472,7 @@ router.get('/fitbit/data', verifyTokenOrRefresh, async (req, res) => {
     
     // Handle specific error cases
     if (error.message === 'Fitbit not connected') {
-      return res.status(400).json({ message: error.message });
+      return res.status(400).json({ message: error.message, code: 'FITBIT_NOT_CONNECTED' });
     }
     
     if (error.response?.status === 401) {
@@ -578,7 +583,7 @@ router.get('/fitbit/steps', verifyTokenOrRefresh, async (req, res) => {
     console.error('Steps fetch error:', error.response?.data || error.message);
     
     if (error.message === 'Fitbit not connected') {
-      return res.status(400).json({ message: error.message });
+      return res.status(400).json({ message: error.message, code: 'FITBIT_NOT_CONNECTED' });
     }
     
     if (error.response?.status === 401) {
@@ -702,7 +707,7 @@ router.get('/fitbit/sleep', verifyTokenOrRefresh, async (req, res) => {
     console.error('Sleep fetch error:', error.response?.data || error.message);
 
     if (error.message === 'Fitbit not connected') {
-      return res.status(400).json({ message: error.message });
+      return res.status(400).json({ message: error.message, code: 'FITBIT_NOT_CONNECTED' });
     }
     if (error.response?.status === 401) {
       res.status(401).json({ message: 'Token invalid - reconnect or refresh' });
@@ -789,7 +794,7 @@ return res.json({
     console.error('Activity summary fetch error:', error.response?.data || error.message);
     
     if (error.message === 'Fitbit not connected') {
-      return res.status(400).json({ message: error.message });
+      return res.status(400).json({ message: error.message, code: 'FITBIT_NOT_CONNECTED' });
     }
     
     if (error.response?.status === 401) {
@@ -847,7 +852,7 @@ router.get('/fitbit/history/activity', verifyTokenOrRefresh, async (req, res) =>
     console.error('Activity history fetch error:', error.response?.data || error.message);
 
     if (error.message === 'Fitbit not connected') {
-      return res.status(400).json({ message: error.message });
+      return res.status(400).json({ message: error.message, code: 'FITBIT_NOT_CONNECTED' });
     }
 
     if (error.response?.status === 401) {
@@ -905,7 +910,7 @@ router.get('/fitbit/history/sleep', verifyTokenOrRefresh, async (req, res) => {
     console.error('Sleep history fetch error:', error.response?.data || error.message);
 
     if (error.message === 'Fitbit not connected') {
-      return res.status(400).json({ message: error.message });
+      return res.status(400).json({ message: error.message, code: 'FITBIT_NOT_CONNECTED' });
     }
 
     if (error.response?.status === 401) {
@@ -915,6 +920,35 @@ router.get('/fitbit/history/sleep', verifyTokenOrRefresh, async (req, res) => {
     } else {
       res.status(500).json({ message: 'Server Error' });
     }
+  }
+});
+
+// MHE-16: Disconnect Fitbit — revoke token with Fitbit and clear DB columns
+router.post('/fitbit/disconnect', verifyTokenOrRefresh, async (req, res) => {
+  try {
+    const [rows] = await db.execute(
+      'SELECT fitbit_access_token FROM user_auth_testing WHERE id = ?',
+      [req.user.userId]
+    );
+    const fitbitAccessToken = rows[0]?.fitbit_access_token;
+
+    if (fitbitAccessToken) {
+      const basicAuth = Buffer.from(`${process.env.FITBIT_CLIENT_ID}:${process.env.FITBIT_CLIENT_SECRET}`).toString('base64');
+      await axios.post(
+        'https://api.fitbit.com/oauth2/revoke',
+        qs.stringify({ token: fitbitAccessToken }),
+        { headers: { Authorization: `Basic ${basicAuth}`, 'Content-Type': 'application/x-www-form-urlencoded' } }
+      ).catch(err => console.warn('[disconnect] Fitbit revoke request failed (non-fatal):', err.message));
+    }
+
+    await db.execute(
+      'UPDATE user_auth_testing SET fitbit_access_token = NULL, fitbit_refresh_token = NULL, fitbit_token_expires = NULL, fitbit_pkce_verifier = NULL, fitbit_oauth_state = NULL WHERE id = ?',
+      [req.user.userId]
+    );
+    res.json({ message: 'Fitbit disconnected' });
+  } catch (error) {
+    console.error('Fitbit disconnect error:', error.message);
+    res.status(500).json({ message: 'Failed to disconnect Fitbit' });
   }
 });
 
