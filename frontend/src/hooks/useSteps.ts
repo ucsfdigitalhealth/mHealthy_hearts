@@ -66,6 +66,7 @@ export interface UseStepsResult {
   steps: string;
   stepsNumber: number;
   refresh: () => void;
+  fitbitDisconnected: boolean;
 }
 
 /**
@@ -76,6 +77,7 @@ export function useSteps(): UseStepsResult {
   const { accessToken, refreshAccessToken } = useAuth();
   const [steps, setSteps] = useState<string>('—');
   const [stepsNumber, setStepsNumber] = useState<number>(0);
+  const [fitbitDisconnected, setFitbitDisconnected] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -127,6 +129,10 @@ export function useSteps(): UseStepsResult {
           }
         }
         if (!res.ok) {
+          try {
+            const errData = await res.json();
+            if (errData.code === 'FITBIT_NOT_CONNECTED') setFitbitDisconnected(true);
+          } catch {}
           console.error('[useSteps] Failed to fetch steps. Status:', res.status);
           return undefined;
         }
@@ -165,5 +171,5 @@ export function useSteps(): UseStepsResult {
     };
   }, [accessToken, refreshTrigger]);
 
-  return { steps, stepsNumber, refresh };
+  return { steps, stepsNumber, refresh, fitbitDisconnected };
 }

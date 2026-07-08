@@ -63,7 +63,7 @@ const SettingsScreen: React.FC = () => {
               await disconnectFitbit();
               Alert.alert('Disconnected', 'Your Fitbit has been disconnected.');
             } catch (err) {
-              // disconnectFitbit already prints errors to console
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to disconnect Fitbit. Please try again.');
             }
           },
         },

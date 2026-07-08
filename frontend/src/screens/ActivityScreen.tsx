@@ -6,6 +6,7 @@ import type { RootStackParamList } from '../../App';
 import { Ionicons } from '@expo/vector-icons';
 import Settings from '../components/Settings';
 import { useSteps } from '../hooks/useSteps';
+import { useFitbitAuth } from '../context/FitbitAuthContext';
 import { formatDateLong } from '../utils/localDate';
 import { useAuth } from '../context/AuthContext';
 import { getDeviceTimezone } from '../utils/localDate';
@@ -23,7 +24,8 @@ type TodayGoal = {
 
 const ActivityScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { steps, stepsNumber, refresh: refreshSteps } = useSteps();
+  const { connectFitbit } = useFitbitAuth();
+  const { steps, stepsNumber, fitbitDisconnected, refresh: refreshSteps } = useSteps();
   const { accessToken } = useAuth();
   const [todayGoal, setTodayGoal] = useState<TodayGoal>(null);
   const [currentStreak, setCurrentStreak] = useState(0);
@@ -74,6 +76,13 @@ const ActivityScreen: React.FC = () => {
         <Text style={styles.header}>Activity</Text>
         <Settings />
       </View>
+
+      {fitbitDisconnected && (
+        <TouchableOpacity style={styles.reconnectBanner} onPress={connectFitbit} activeOpacity={0.8}>
+          <Ionicons name="warning-outline" size={18} color="#92400E" style={{ marginRight: 8 }} />
+          <Text style={styles.reconnectText}>Fitbit connection expired. Tap to reconnect.</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Goal Setting Card */}
       <View style={styles.card}>
@@ -393,6 +402,23 @@ const styles = StyleSheet.create({
   },
   seeAllButton: { alignItems: 'center', paddingVertical: 8 },
   seeAllText: { fontSize: 15, fontWeight: '600', color: '#007AFF' },
+  reconnectBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  reconnectText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#92400E',
+    flex: 1,
+  },
 });
 
 export default ActivityScreen;
