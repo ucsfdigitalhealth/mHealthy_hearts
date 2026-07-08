@@ -184,7 +184,11 @@ export function useSleep(): UseSleepResult {
         if (!res.ok) {
           try {
             const errData = await res.json();
-            if (errData.code === 'FITBIT_NOT_CONNECTED') setFitbitDisconnected(true);
+            if (errData.code === 'FITBIT_NOT_CONNECTED') {
+              setFitbitDisconnected(true);
+              setIsLoading(false);
+              return undefined;
+            }
           } catch {}
           const msg = `Sleep fetch failed: ${res.status}`;
           console.error('[useSleep]', msg);

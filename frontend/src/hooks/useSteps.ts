@@ -131,7 +131,10 @@ export function useSteps(): UseStepsResult {
         if (!res.ok) {
           try {
             const errData = await res.json();
-            if (errData.code === 'FITBIT_NOT_CONNECTED') setFitbitDisconnected(true);
+            if (errData.code === 'FITBIT_NOT_CONNECTED') {
+              setFitbitDisconnected(true);
+              return undefined;
+            }
           } catch {}
           console.error('[useSteps] Failed to fetch steps. Status:', res.status);
           return undefined;
