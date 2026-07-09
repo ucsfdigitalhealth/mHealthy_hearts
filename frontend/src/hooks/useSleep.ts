@@ -10,6 +10,7 @@ const SLEEP_BASE = 'http://localhost:3000/api/fitbitAuth/fitbit/sleep';
 // Module-level: timer keeps running across screens so backend is called at 120s even when user navigates away.
 let sleepRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null;
 const sleepTokenRef: { current: string | null } = { current: null };
+const sleepRefreshFnRef: { current: (() => Promise<boolean>) | null } = { current: null };
 
 function scheduleSleepRefetch(cachedAt: number): void {
   if (sleepRefreshTimeoutId != null) {
@@ -36,7 +37,17 @@ async function doSleepRefetch(): Promise<void> {
   try {
     const tz = getDeviceTimezone();
     const url = tz ? `${SLEEP_BASE}?timezone=${encodeURIComponent(tz)}` : SLEEP_BASE;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.status === 401 && sleepRefreshFnRef.current) {
+      const refreshed = await sleepRefreshFnRef.current();
+      if (refreshed) {
+        const newToken = await AsyncStorage.getItem('accessToken');
+        if (newToken) {
+          sleepTokenRef.current = newToken;
+          res = await fetch(url, { headers: { Authorization: `Bearer ${newToken}` } });
+        }
+      }
+    }
     if (!res.ok) return;
     const json = await res.json();
     const summary = json.data?.summary;
@@ -74,6 +85,8 @@ export interface UseSleepResult {
   error: string | null;
   /** Clears the cache and immediately re-fetches from the backend. */
   refresh: () => void;
+  /** True when the backend returns FITBIT_NOT_CONNECTED (refresh token invalid or missing). */
+  fitbitDisconnected: boolean;
 }
 
 function formatMinutesToHM(minutes: number): string {
@@ -98,12 +111,13 @@ function calculateSleepScore(hours: number): number {
  * (even when navigating away), so the backend is called at 120s regardless of screen.
  */
 export function useSleep(): UseSleepResult {
-  const { accessToken } = useAuth();
+  const { accessToken, refreshAccessToken } = useAuth();
   const [minutesAsleep, setMinutesAsleep] = useState<number>(0);
   const [timeInBed, setTimeInBed] = useState<number>(0);
   const [efficiency, setEfficiency] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [fitbitDisconnected, setFitbitDisconnected] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -130,6 +144,7 @@ export function useSleep(): UseSleepResult {
     }
 
     sleepTokenRef.current = accessToken;
+    sleepRefreshFnRef.current = refreshAccessToken;
     setError(null);
 
     const loadSleep = async (): Promise<number | undefined> => {
@@ -153,10 +168,28 @@ export function useSleep(): UseSleepResult {
         if (tz) params.set('timezone', tz);
         if (force) params.set('force', 'true');
         const url = `${SLEEP_BASE}?${params.toString()}`;
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        let activeToken = accessToken;
+        let res = await fetch(url, { headers: { Authorization: `Bearer ${activeToken}` } });
+        if (res.status === 401) {
+          const refreshed = await refreshAccessToken();
+          if (refreshed) {
+            const newToken = await AsyncStorage.getItem('accessToken');
+            if (newToken) {
+              activeToken = newToken;
+              sleepTokenRef.current = newToken;
+              res = await fetch(url, { headers: { Authorization: `Bearer ${newToken}` } });
+            }
+          }
+        }
         if (!res.ok) {
+          try {
+            const errData = await res.json();
+            if (errData.code === 'FITBIT_NOT_CONNECTED') {
+              setFitbitDisconnected(true);
+              setIsLoading(false);
+              return undefined;
+            }
+          } catch {}
           const msg = `Sleep fetch failed: ${res.status}`;
           console.error('[useSleep]', msg);
           setError(msg);
@@ -220,5 +253,6 @@ export function useSleep(): UseSleepResult {
     isLoading,
     error,
     refresh,
+    fitbitDisconnected,
   };
 }
