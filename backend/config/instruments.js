@@ -31,6 +31,9 @@ const SYMPTOM_INSTRUMENT_MAP = {
   depression_mood:            'promis_depression_4a',
   sleep_disturbance:          'promis_sleep_4a',
   reduced_exercise_tolerance: 'promis_physical_function_4a',
+  social_roles:               'promis_social_roles_4a',
+  pain_interference:          'promis_pain_interference_4a',
+  pain_intensity:             'single_item_pain_intensity',
   breathlessness_activity:    'mmrc',
   hot_flashes:                'hfrdis',
   waking_sob_night:           'single_item_pnd',
@@ -63,6 +66,9 @@ const WEEKLY_INSTRUMENT_KEYS = new Set([
   'depression_mood',
   'sleep_disturbance',
   'reduced_exercise_tolerance',
+  'social_roles',
+  'pain_interference',
+  'pain_intensity',
   'breathlessness_activity',
   'hot_flashes',
 ]);
@@ -106,6 +112,24 @@ const PROMIS_T_SCORES = {
     9: 33.3, 10: 34.7, 11: 36.2, 12: 37.8, 13: 39.6,
     14: 41.6, 15: 43.8, 16: 46.4, 17: 49.2, 18: 52.4,
     19: 55.1, 20: 57.0,
+  },
+  // Higher T-score = BETTER social function (opposite direction from symptom domains).
+  // Source: PROMIS Adult Profile Scoring Manual (2020), Adult v1.0 Ability to
+  // Participate in Social Roles and Activities 4a. Full table 4–20, no interpolation.
+  promis_social_roles_4a: {
+    4: 27.5, 5: 31.8, 6: 34.0, 7: 35.7, 8: 37.3,
+    9: 38.8, 10: 40.5, 11: 42.3, 12: 44.2, 13: 46.2,
+    14: 48.1, 15: 50.0, 16: 51.9, 17: 53.7, 18: 55.8,
+    19: 58.3, 20: 64.2,
+  },
+  // Higher T-score = MORE pain interference.
+  // Source: PROMIS Adult Profile Scoring Manual (2020), Adult v1.0 Pain
+  // Interference 4a. Full table 4–20, no interpolation.
+  promis_pain_interference_4a: {
+    4: 41.6, 5: 49.6, 6: 52.0, 7: 53.9, 8: 55.6,
+    9: 57.1, 10: 58.5, 11: 59.9, 12: 61.2, 13: 62.5,
+    14: 63.8, 15: 65.2, 16: 66.6, 17: 68.0, 18: 69.7,
+    19: 71.6, 20: 75.6,
   },
 };
 
@@ -322,6 +346,120 @@ const INSTRUMENTS = {
       direction: 'higher_is_better',
       clinical_threshold_tscore: null,
       notes: 'Sum all 4 items (raw 4–20). Convert to T-score. Higher = BETTER physical function (opposite direction from other PROMIS domains).',
+    },
+  },
+
+  // ── PROMIS Ability to Participate in Social Roles and Activities ─────────────
+  // MIXED PROVENANCE — read before editing any string below.
+  // Item text and response labels are transcribed from the ACI "PROMIS 29+" screening
+  // guide (NSW Agency for Clinical Innovation, 9 Mar 2021), which is an *adaptation* of
+  // PROMIS-29. The raw→T-score table in PROMIS_T_SCORES comes from the official PROMIS
+  // Adult Profile Scoring Manual (2020), reproduced in that guide's page-6 appendix.
+  // The two sources differ in two places, and we deliberately follow the ACI guide:
+  //   * value 2 is labelled "Often" here; official PROMIS SF v2.0 prints "Usually".
+  //   * item 2 reads "(including work at home)"; official PROMIS reads "(include work at home)".
+  // Do NOT "correct" these to the official wording — the T-score lookup is calibrated
+  // against the scale as administered, and changing an anchor changes what a "2" means.
+  promis_social_roles_4a: {
+    instrument_key: 'promis_social_roles_4a',
+    full_name: 'PROMIS Ability to Participate in Social Roles and Activities — Short Form 4a',
+    source: 'Items: ACI PROMIS-29+ screening guide (9 Mar 2021). Scoring: PROMIS Adult Profile Scoring Manual (2020), Adult v1.0 SRPA 4a.',
+    license: 'Free, open access',
+    timeframe: 'In the past 7 days',
+    applies_to_symptom_keys: ['social_roles'],
+    question_stem: 'In the past 7 days...',
+    questions: [
+      { index: 0, text: 'I have trouble doing all of my regular leisure activities with others.', reverse_scored: false },
+      { index: 1, text: 'I have trouble doing all of the family activities that I want to do.',    reverse_scored: false },
+      { index: 2, text: 'I have trouble doing all of my usual work (including work at home).',     reverse_scored: false },
+      { index: 3, text: 'I have trouble doing all of the activities with friends that I want to do.', reverse_scored: false },
+    ],
+    // Negatively-worded items: "Never having trouble" (value 5) = BEST function, so the
+    // response values descend. Summing the raw values directly yields the 4–20 raw score
+    // used by the PROMIS lookup table — no per-item reverse transform required.
+    response_scale: [
+      { value: 5, label: 'Never' },
+      { value: 4, label: 'Rarely' },
+      { value: 3, label: 'Sometimes' },
+      { value: 2, label: 'Often' },
+      { value: 1, label: 'Always' },
+    ],
+    per_item_response_scales: null,
+    reverse_scored_indices: [],
+    scoring: {
+      method: 'sum_then_tscore',
+      raw_range: [4, 20],
+      t_score_mean: 50,
+      t_score_sd: 10,
+      direction: 'higher_is_better',
+      clinical_threshold_tscore: null,
+      notes: 'Sum all 4 items (raw 4–20). Convert to T-score. Higher = BETTER social participation (opposite direction from symptom PROMIS domains).',
+    },
+  },
+
+  // ── PROMIS Pain Interference ────────────────────────────────────────────────
+  promis_pain_interference_4a: {
+    instrument_key: 'promis_pain_interference_4a',
+    full_name: 'PROMIS Pain Interference — Short Form 4a',
+    source: 'PROMIS Item Bank v1.0, Short Form 4a',
+    license: 'Free, open access',
+    timeframe: 'In the past 7 days',
+    applies_to_symptom_keys: ['pain_interference'],
+    question_stem: 'In the past 7 days...',
+    questions: [
+      { index: 0, text: 'How much did pain interfere with your day to day activities?',                  reverse_scored: false },
+      { index: 1, text: 'How much did pain interfere with work around the home?',                         reverse_scored: false },
+      { index: 2, text: 'How much did pain interfere with your ability to participate in social activities?', reverse_scored: false },
+      { index: 3, text: 'How much did pain interfere with your household chores?',                         reverse_scored: false },
+    ],
+    response_scale: [
+      { value: 1, label: 'Not at all' },
+      { value: 2, label: 'A little bit' },
+      { value: 3, label: 'Somewhat' },
+      { value: 4, label: 'Quite a bit' },
+      { value: 5, label: 'Very much' },
+    ],
+    per_item_response_scales: null,
+    reverse_scored_indices: [],
+    scoring: {
+      method: 'sum_then_tscore',
+      raw_range: [4, 20],
+      t_score_mean: 50,
+      t_score_sd: 10,
+      direction: 'higher_is_worse',
+      clinical_threshold_tscore: 60,
+      notes: 'Sum all 4 items (raw 4–20). Convert to T-score. Higher = more pain interference. Clinical concern: T≥60.',
+    },
+  },
+
+  // ── Single-Item: Pain Intensity ─────────────────────────────────────────────
+  // PROMIS-29 item 31: a single 0–10 average pain rating. NOT a 4-item short form,
+  // so there is no raw-sum / T-score conversion — the raw value IS the score.
+  single_item_pain_intensity: {
+    instrument_key: 'single_item_pain_intensity',
+    full_name: 'PROMIS-29 Pain Intensity — Single Item (0–10 numeric rating)',
+    source: 'PROMIS-29 v2.1 Profile, Pain Intensity item',
+    license: 'Free, open access',
+    timeframe: 'In the past 7 days',
+    applies_to_symptom_keys: ['pain_intensity'],
+    question_stem: null,
+    instructions: 'Where 0 is no pain and 10 is the worst possible pain.',
+    questions: [
+      {
+        index: 0,
+        text: 'In the past 7 days, how would you rate your pain on average?',
+        type: 'numeric_scale',
+        reverse_scored: false,
+      },
+    ],
+    response_scale: { type: 'numeric_scale', min: 0, max: 10, labels: { 0: 'No pain', 10: 'Worst possible pain' } },
+    per_item_response_scales: null,
+    reverse_scored_indices: [],
+    scoring: {
+      method: 'single_item_numeric',
+      raw_range: [0, 10],
+      direction: 'higher_is_worse',
+      notes: 'Single 0–10 numeric rating. No T-score conversion — raw value (0–10) is the score. Track longitudinally.',
     },
   },
 

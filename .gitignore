@@ -90,3 +90,6 @@ jspm_packages/
 # Build outputs
 dist/
 build/
+
+# graphify skill output
+graphify-out/

@@ -373,8 +373,9 @@ CREATE TABLE ema_enrollments (
 
 
 -- One combined weekly symptom-tracking plan per user (PI-requested v1.4 restructure).
--- symptom_keys: JSON array of up to 6 keys, all in WEEKLY_INSTRUMENT_KEYS
+-- symptom_keys: JSON array of up to 10 keys, all in WEEKLY_INSTRUMENT_KEYS
 --   (backend/config/instruments.js), e.g. ["fatigue","anxiety","hot_flashes"].
+--   v1.5 added social_roles, pain_interference, pain_intensity (PROMIS-29 domains).
 -- day_of_week/time/notification_channel: the single shared weekly reminder slot.
 CREATE TABLE weekly_symptom_plans (
   id                    INT AUTO_INCREMENT PRIMARY KEY,
@@ -391,9 +392,14 @@ CREATE TABLE weekly_symptom_plans (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
--- Weekly validated instrument responses.
+-- Weekly validated instrument responses. Generic store reused by every weekly
+-- instrument (the 4-item PROMIS short forms, mMRC, HFRDIS, and the single-item
+-- self-reports) — no per-instrument columns. The v1.5 PROMIS-29 additions
+-- (social_roles, pain_interference, pain_intensity) store here with no schema change:
+--   * promis_social_roles_4a / promis_pain_interference_4a → raw_responses[4], raw_score, t_score
+--   * single_item_pain_intensity → raw_responses[1] (0–10), raw_score (0–10), t_score NULL
 -- raw_responses: JSON array of integer values (one per question, in order).
--- t_score: null for mMRC and HFRDIS (non-PROMIS instruments).
+-- t_score: null for mMRC, HFRDIS, and single_item_pain_intensity (non-PROMIS-summed instruments).
 -- severity_label: populated for HFRDIS only ('mild'/'moderate'/'severe').
 -- enrollment_id: FK to ema_enrollments; null if patient has not enrolled in recurring reminders.
 -- weekly_plan_id: FK to weekly_symptom_plans; set when this response was submitted

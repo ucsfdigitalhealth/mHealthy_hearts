@@ -15,7 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../App';
 import { useAuth } from '../../context/AuthContext';
 import { getWeeklyPlan, deleteWeeklyPlan, WeeklyPlan } from '../../api/symptoms';
-import { buildSymptomQueue, WEEKLY_SYMPTOM_OPTIONS } from './weeklySymptomOptions';
+import { buildSymptomQueue } from './weeklySymptomOptions';
 import StressInfoModal from '../../components/symptoms/StressInfoModal';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'SymptomsLanding'>;
@@ -58,7 +58,7 @@ const SymptomsLanding: React.FC = () => {
   const handleStartWeeklyCheckIn = () => {
     if (!plan) return;
     navigation.navigate('SymptomsInstrument', {
-      symptom_queue: buildSymptomQueue(WEEKLY_SYMPTOM_OPTIONS.map(o => o.key)),
+      symptom_queue: buildSymptomQueue(plan.symptom_keys),
       current_index: 0,
       weekly_plan_id: plan.id,
     });
@@ -130,7 +130,7 @@ const SymptomsLanding: React.FC = () => {
                 <View style={styles.cardTextGroup}>
                   <Text style={styles.cardTitleHighlight}>Take this week's check-in now</Text>
                   <Text style={styles.cardSubtitleHighlight}>
-                    Complete your {WEEKLY_SYMPTOM_OPTIONS.length} check-ins for this week.
+                    Complete your {plan.symptom_keys.length} check-ins for this week.
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />

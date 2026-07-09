@@ -13,6 +13,7 @@ const ALLOWED_SYMPTOM_KEYS = new Set([
   'chest_pain', 'fainted', 'irregular_heartbeat', 'racing_heart', 'light_headed',
   'fatigue', 'anxiety', 'depression_mood', 'sleep_disturbance', 'breathlessness_activity',
   'waking_sob_night', 'reduced_exercise_tolerance', 'leg_swelling', 'weight_change',
+  'social_roles', 'pain_interference', 'pain_intensity',
   'hot_flashes', 'stress',
 ]);
 

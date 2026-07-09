@@ -56,6 +56,19 @@ const T_SCORE_TABLES: Record<string, Record<number, number>> = {
     14: 41.6, 15: 43.8, 16: 46.4, 17: 49.2, 18: 52.4,
     19: 55.1, 20: 57.0,
   },
+  // Higher T-score = BETTER social function (opposite direction from symptom domains).
+  promis_social_roles_4a: {
+    4: 27.5, 5: 31.8, 6: 34.0, 7: 35.7, 8: 37.3,
+    9: 38.8, 10: 40.5, 11: 42.3, 12: 44.2, 13: 46.2,
+    14: 48.1, 15: 50.0, 16: 51.9, 17: 53.7, 18: 55.8,
+    19: 58.3, 20: 64.2,
+  },
+  promis_pain_interference_4a: {
+    4: 41.6, 5: 49.6, 6: 52.0, 7: 53.9, 8: 55.6,
+    9: 57.1, 10: 58.5, 11: 59.9, 12: 61.2, 13: 62.5,
+    14: 63.8, 15: 65.2, 16: 66.6, 17: 68.0, 18: 69.7,
+    19: 71.6, 20: 75.6,
+  },
 };
 
 function lookupTScore(instrumentId: string, rawScore: number): number | null {
@@ -85,7 +98,7 @@ interface InstrumentDef {
   questions: InstrumentQuestion[];
   defaultScale: ResponseOption[];
   reverseScoreTransform?: Record<number, number>;
-  scoring: 'sum_then_tscore' | 'single_item_grade' | 'sum_and_average';
+  scoring: 'sum_then_tscore' | 'single_item_grade' | 'sum_and_average' | 'single_item_numeric';
 }
 
 const INSTRUMENTS: Record<string, InstrumentDef> = {
@@ -196,6 +209,63 @@ const INSTRUMENTS: Record<string, InstrumentDef> = {
     ],
     scoring: 'sum_then_tscore',
   },
+  // MIXED PROVENANCE — item text and response labels follow the ACI "PROMIS 29+"
+  // screening guide (9 Mar 2021), an adaptation; the T-score table follows the official
+  // PROMIS Adult Profile Scoring Manual (2020). Where they differ we follow the guide:
+  // value 2 is "Often" (official PROMIS says "Usually") and item 2 says "(including work
+  // at home)" (official says "(include work at home)"). Do NOT "correct" to the official
+  // wording — the T-score lookup is calibrated against the scale as administered.
+  // Mirrors backend/config/instruments.js promis_social_roles_4a.
+  social_roles: {
+    instrumentId: 'promis_social_roles_4a',
+    stem: 'In the past 7 days...',
+    instructions: null,
+    questions: [
+      { index: 0, text: 'I have trouble doing all of my regular leisure activities with others.',    reverseScored: false },
+      { index: 1, text: 'I have trouble doing all of the family activities that I want to do.',       reverseScored: false },
+      { index: 2, text: 'I have trouble doing all of my usual work (including work at home).',        reverseScored: false },
+      { index: 3, text: 'I have trouble doing all of the activities with friends that I want to do.', reverseScored: false },
+    ],
+    // Descending values: "Never" (best function) = 5 … "Always" = 1, so summing the
+    // selected values directly yields the 4–20 raw score used by the lookup table.
+    defaultScale: [
+      { value: 5, label: 'Never' },
+      { value: 4, label: 'Rarely' },
+      { value: 3, label: 'Sometimes' },
+      { value: 2, label: 'Often' },
+      { value: 1, label: 'Always' },
+    ],
+    scoring: 'sum_then_tscore',
+  },
+  pain_interference: {
+    instrumentId: 'promis_pain_interference_4a',
+    stem: 'In the past 7 days...',
+    instructions: null,
+    questions: [
+      { index: 0, text: 'How much did pain interfere with your day to day activities?',                  reverseScored: false },
+      { index: 1, text: 'How much did pain interfere with work around the home?',                         reverseScored: false },
+      { index: 2, text: 'How much did pain interfere with your ability to participate in social activities?', reverseScored: false },
+      { index: 3, text: 'How much did pain interfere with your household chores?',                         reverseScored: false },
+    ],
+    defaultScale: [
+      { value: 1, label: 'Not at all' },
+      { value: 2, label: 'A little bit' },
+      { value: 3, label: 'Somewhat' },
+      { value: 4, label: 'Quite a bit' },
+      { value: 5, label: 'Very much' },
+    ],
+    scoring: 'sum_then_tscore',
+  },
+  pain_intensity: {
+    instrumentId: 'single_item_pain_intensity',
+    stem: null,
+    instructions: 'Where 0 is no pain and 10 is the worst possible pain.',
+    questions: [
+      { index: 0, text: 'In the past 7 days, how would you rate your pain on average?', reverseScored: false },
+    ],
+    defaultScale: [],
+    scoring: 'single_item_numeric',
+  },
   breathlessness_activity: {
     instrumentId: 'mmrc',
     stem: null,
@@ -247,9 +317,16 @@ const HFRDIS_SLIDER_WIDTH = Dimensions.get('window').width - 80;
 interface HfrdisSliderProps {
   value: number;
   onChange: (v: number) => void;
+  minLabel?: string;
+  maxLabel?: string;
 }
 
-const HfrdisSlider: React.FC<HfrdisSliderProps> = ({ value, onChange }) => {
+const HfrdisSlider: React.FC<HfrdisSliderProps> = ({
+  value,
+  onChange,
+  minLabel = '0 — No interference',
+  maxLabel = '10 — Complete interference',
+}) => {
   const lastX = useRef((value / 10) * HFRDIS_SLIDER_WIDTH);
   const panX = useRef(new Animated.Value(lastX.current)).current;
 
@@ -283,8 +360,8 @@ const HfrdisSlider: React.FC<HfrdisSliderProps> = ({ value, onChange }) => {
         />
       </View>
       <View style={hfrdisSliderStyles.labels}>
-        <Text style={hfrdisSliderStyles.labelText}>0 — No interference</Text>
-        <Text style={hfrdisSliderStyles.labelText}>10 — Complete interference</Text>
+        <Text style={hfrdisSliderStyles.labelText}>{minLabel}</Text>
+        <Text style={hfrdisSliderStyles.labelText}>{maxLabel}</Text>
       </View>
     </View>
   );
@@ -379,6 +456,7 @@ const SymptomsInstrument: React.FC = () => {
   const [hfrdisValues, setHfrdisValues] = useState<number[]>(
     () => new Array(10).fill(0)
   );
+  const [painIntensityValue, setPainIntensityValue] = useState<number>(0);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -395,8 +473,9 @@ const SymptomsInstrument: React.FC = () => {
 
   const isHfrdis = def.instrumentId === 'hfrdis';
   const isMmrc = def.instrumentId === 'mmrc';
+  const isPainIntensity = def.instrumentId === 'single_item_pain_intensity';
 
-  const allAnswered = isHfrdis
+  const allAnswered = isHfrdis || isPainIntensity
     ? true
     : responses.every(r => r !== null);
 
@@ -419,6 +498,9 @@ const SymptomsInstrument: React.FC = () => {
       } else if (isMmrc) {
         rawResponses = [responses[0] as number];
         rawScore = responses[0] as number;
+      } else if (isPainIntensity) {
+        rawResponses = [painIntensityValue];
+        rawScore = painIntensityValue;
       } else {
         rawResponses = responses as number[];
         const { rawScore: rs, tScore: ts } = computePromisScore(
@@ -523,6 +605,20 @@ const SymptomsInstrument: React.FC = () => {
                 />
               </View>
             ))}
+          </View>
+        ) : isPainIntensity ? (
+          /* ── Pain Intensity (single 0–10 slider) ── */
+          <View style={styles.questionList}>
+            <View style={styles.hfrdisItem}>
+              <Text style={styles.hfrdisItemLabel}>{def.questions[0].text}</Text>
+              <Text style={styles.hfrdisScore}>{painIntensityValue}</Text>
+              <HfrdisSlider
+                value={painIntensityValue}
+                onChange={setPainIntensityValue}
+                minLabel="0 — No pain"
+                maxLabel="10 — Worst possible pain"
+              />
+            </View>
           </View>
         ) : (
           /* ── PROMIS / mMRC (radio buttons) ── */
