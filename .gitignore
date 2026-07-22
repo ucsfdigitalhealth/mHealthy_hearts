@@ -93,3 +93,7 @@ build/
 
 # graphify skill output
 graphify-out/
+
+# Claude Code — per-machine local config and worktree scratch dirs
+.claude/settings.local.json
+.claude/worktrees/

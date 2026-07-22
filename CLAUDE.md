@@ -93,6 +93,6 @@ Detailed, verified reference docs — not auto-loaded, read via Grep/Read when a
 - API base URL is hardcoded as `http://localhost:3000` in frontend context files
 
 ## Current state
-- Branch `oauth2` is the active development branch
-- Goals feature (`user_goals`, `GoalsSettingScreen`) is disabled/commented out due to errors
+- `main` is the active branch — PRs merge directly into it (`oauth2` is stale, last touched before the PR-based workflow started)
+- The old goals feature (`GoalsSettingScreen.tsx`, `user_goals` table, `backend/routes/userGoals.mjs`) is dead code, not wired up anywhere. It's been replaced by a live step-goal flow: `frontend/src/screens/GoalFlow/*` (registered in `App.tsx`), backed by `backend/routes/activityGoals.js` (mounted at `/api/activity`), consumed via `frontend/src/hooks/useActivityGoal.ts`
 - Omron integration is partially implemented (auth flow works, data fetching not yet implemented)
