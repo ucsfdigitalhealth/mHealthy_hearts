@@ -6,6 +6,7 @@ import { FitbitAuthProvider } from './src/context/FitbitAuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import FitbitConnectScreen from './src/screens/FitbitConnectScreen';
 import HomeTabsScreen from './src/screens/HomeTabScreen';
+import ExploreLearnScreen from './src/screens/ExploreLearnScreen';
 import BloodSugarScreen from './src/screens/LeFlows/BloodSugarScreen';
 import BloodLipidsScreen from './src/screens/LeFlows/BloodLipidsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -116,6 +117,7 @@ export type RootStackParamList = {
   GoalStep3: { completedYesterday: boolean };
   GoalStep4: { completedYesterday: boolean; symptomRating: number };
   GoalStep5: { stepTarget: number; completedYesterday: boolean; symptomRating: number };
+  ExploreLearn: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -167,6 +169,7 @@ export default function App() {
             <Stack.Screen name="GoalStep3" component={SymptomBurdenStepScreen} />
             <Stack.Screen name="GoalStep4" component={GoalSelectionStepScreen} />
             <Stack.Screen name="GoalStep5" component={GoalConfirmStepScreen} />
+            <Stack.Screen name="ExploreLearn" component={ExploreLearnScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </FitbitAuthProvider>
