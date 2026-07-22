@@ -78,6 +78,12 @@ Client timezone sent via `?timezone=` query param or `X-Timezone` header. Backen
 ### Health scoring
 Each assessment module has a scoring function (0-100 scale). Diet uses MEPA score (0-10) mapped to 0-100. Aggregate endpoint `/api/health-scores` returns all scores for the authenticated user.
 
+## Repo notes (read on demand)
+Detailed, verified reference docs — not auto-loaded, read via Grep/Read when a ticket touches that area:
+- `docs/notes/flows.md` — LE8 assessment step-routing (blood sugar, lipids, smoking, BMI)
+- `docs/notes/scoring.md` — scoring functions, thresholds, DB tables per assessment
+- `docs/notes/caching.md` — AsyncStorage cache keys, TTLs, read/write points
+
 ## Key conventions
 - **Backend files**: camelCase filenames
 - **Frontend components/screens**: PascalCase filenames
