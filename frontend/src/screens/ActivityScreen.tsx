@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -6,64 +6,23 @@ import type { RootStackParamList } from '../../App';
 import { Ionicons } from '@expo/vector-icons';
 import Settings from '../components/Settings';
 import { useSteps } from '../hooks/useSteps';
+import { useActivityGoal } from '../hooks/useActivityGoal';
 import { useFitbitAuth } from '../context/FitbitAuthContext';
 import { formatDateLong } from '../utils/localDate';
-import { useAuth } from '../context/AuthContext';
-import { getDeviceTimezone } from '../utils/localDate';
-
-const API_BASE = 'http://localhost:3000/api/activity';
-
-type TodayGoal = {
-  id: number;
-  goalDate: string;
-  stepTarget: number;
-  symptomRating: number | null;
-  completedYesterday: boolean;
-  goalMet: boolean;
-} | null;
 
 const ActivityScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { connectFitbit } = useFitbitAuth();
   const { steps, stepsNumber, fitbitDisconnected, refresh: refreshSteps } = useSteps();
-  const { accessToken } = useAuth();
-  const [todayGoal, setTodayGoal] = useState<TodayGoal>(null);
-  const [currentStreak, setCurrentStreak] = useState(0);
-  const [longestStreak, setLongestStreak] = useState(0);
+  const { todayGoal, currentStreak, longestStreak, refresh: refreshGoal } = useActivityGoal();
   const { width } = useWindowDimensions();
   const progressSize = Math.min(width - 80, 200);
 
-  const fetchGoalAndStreak = useCallback(async () => {
-    if (!accessToken) return;
-    const tz = getDeviceTimezone();
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${accessToken}`,
-      ...(tz ? { 'X-Timezone': tz } : {}),
-    };
-    try {
-      const [goalRes, streakRes] = await Promise.all([
-        fetch(tz ? `${API_BASE}/goal-today?timezone=${encodeURIComponent(tz)}` : `${API_BASE}/goal-today`, { headers }),
-        fetch(`${API_BASE}/streak`, { headers }),
-      ]);
-      if (goalRes.ok) {
-        const data = await goalRes.json();
-        setTodayGoal(data.goal || null);
-      }
-      if (streakRes.ok) {
-        const data = await streakRes.json();
-        setCurrentStreak(data.currentStreak ?? 0);
-        setLongestStreak(data.longestStreak ?? 0);
-      }
-    } catch (e) {
-      console.error('Activity fetch error:', e);
-    }
-  }, [accessToken]);
-
   useFocusEffect(
     useCallback(() => {
-      fetchGoalAndStreak();
+      refreshGoal();
       refreshSteps();
-    }, [fetchGoalAndStreak, refreshSteps])
+    }, [refreshGoal, refreshSteps])
   );
 
   const goalSteps = todayGoal?.stepTarget ?? 6000;
