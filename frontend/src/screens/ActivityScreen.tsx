@@ -176,7 +176,11 @@ const ActivityScreen: React.FC = () => {
       </View>
 
       {/* Explore & Learn */}
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => navigation.navigate('ExploreLearn')}
+        activeOpacity={0.8}
+      >
         <View style={styles.cardRow}>
           <View style={styles.exploreIcon}>
             <Ionicons name="play" size={20} color="#FFF" />
@@ -188,8 +192,9 @@ const ActivityScreen: React.FC = () => {
               Videos and animations to support your heart health.
             </Text>
           </View>
+          <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
         </View>
-      </View>
+      </TouchableOpacity>
     </ScrollView>
   );
 };
