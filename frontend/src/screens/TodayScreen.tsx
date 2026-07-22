@@ -5,21 +5,28 @@ import Settings from '../components/Settings';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSteps } from '../hooks/useSteps';
 import { useSleep } from '../hooks/useSleep';
+import { useActivityGoal } from '../hooks/useActivityGoal';
 import { useFitbitAuth } from '../context/FitbitAuthContext';
 
 const TodayScreen: React.FC = () => {
   const navigation = useNavigation();
   const { connectFitbit } = useFitbitAuth();
-  const { steps, fitbitDisconnected: stepsFitbitDisconnected, refresh: refreshSteps } = useSteps();
+  const { steps, stepsNumber, fitbitDisconnected: stepsFitbitDisconnected, refresh: refreshSteps } = useSteps();
   const { formatted: sleepFormatted, sleepScore, isLoading: sleepLoading, error: sleepError, fitbitDisconnected: sleepFitbitDisconnected, refresh: refreshSleep } = useSleep();
+  const { todayGoal, refresh: refreshGoal } = useActivityGoal();
   const fitbitReconnectNeeded = stepsFitbitDisconnected || sleepFitbitDisconnected;
 
   useFocusEffect(
     useCallback(() => {
       refreshSteps();
       refreshSleep();
-    }, [refreshSteps, refreshSleep])
+      refreshGoal();
+    }, [refreshSteps, refreshSleep, refreshGoal])
   );
+
+  const goalSteps = todayGoal?.stepTarget ?? 0;
+  const progressPct = goalSteps > 0 ? Math.min(100, (stepsNumber / goalSteps) * 100) : 0;
+  const progressColor = progressPct < 33 ? '#DC2626' : progressPct < 66 ? '#F59E0B' : '#34C759';
 
   const handleSymptomCheckIn = () => {
     // Navigate to Symptom Assessment screen
@@ -46,8 +53,28 @@ const TodayScreen: React.FC = () => {
         <View style={styles.progressCircle}>
           <Ionicons name="walk" size={32} color="#34C759" />
           <Text style={styles.progressNumber}>{steps}</Text>
-          <Text style={styles.progressGoal}>of 6,000 steps</Text>
+          <Text style={styles.progressGoal}>
+            {todayGoal ? `of ${todayGoal.stepTarget.toLocaleString()} steps` : 'steps today'}
+          </Text>
         </View>
+        {todayGoal ? (
+          <View style={styles.progressBarTrack}>
+            <View
+              style={[
+                styles.progressBarFill,
+                { width: `${progressPct}%`, backgroundColor: progressColor },
+              ]}
+            />
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.setGoalButton}
+            onPress={() => navigation.navigate('GoalStep1' as never)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.setGoalButtonText}>Set Your Daily Goal</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Coach Message */}
@@ -188,6 +215,31 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#000',
     marginTop: 4,
+  },
+  progressBarTrack: {
+    height: 8,
+    width: '100%',
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#E5E7EB',
+    marginTop: 16,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  setGoalButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 16,
+  },
+  setGoalButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFF',
   },
   card: {
     backgroundColor: '#FFF',
