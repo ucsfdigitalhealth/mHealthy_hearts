@@ -48,8 +48,18 @@ const ActivityScreen: React.FC = () => {
         <Text style={styles.cardTitle}>Daily Goal</Text>
         {todayGoal ? (
           <View style={styles.goalStatusRow}>
-            <Ionicons name="checkmark-circle" size={24} color="#34C759" />
-            <Text style={styles.goalStatusText}>Today's goal: {todayGoal.stepTarget.toLocaleString()} steps</Text>
+            <View style={styles.goalStatusLeft}>
+              <Ionicons name="checkmark-circle" size={24} color="#34C759" />
+              <Text style={styles.goalStatusText}>Today's goal: {todayGoal.stepTarget.toLocaleString()} steps</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.editGoalButton}
+              onPress={() => navigation.navigate('GoalStep1')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="pencil" size={16} color="#007AFF" />
+              <Text style={styles.editGoalButtonText}>Edit</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity
@@ -230,9 +240,22 @@ const styles = StyleSheet.create({
   goalStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  goalStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   goalStatusText: { fontSize: 16, color: '#374151' },
+  editGoalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  editGoalButtonText: { fontSize: 15, fontWeight: '600', color: '#007AFF' },
   setGoalButton: {
     backgroundColor: '#007AFF',
     paddingVertical: 14,

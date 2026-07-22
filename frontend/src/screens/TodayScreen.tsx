@@ -58,14 +58,24 @@ const TodayScreen: React.FC = () => {
           </Text>
         </View>
         {todayGoal ? (
-          <View style={styles.progressBarTrack}>
-            <View
-              style={[
-                styles.progressBarFill,
-                { width: `${progressPct}%`, backgroundColor: progressColor },
-              ]}
-            />
-          </View>
+          <>
+            <View style={styles.progressBarTrack}>
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${progressPct}%`, backgroundColor: progressColor },
+                ]}
+              />
+            </View>
+            <TouchableOpacity
+              style={styles.editGoalButton}
+              onPress={() => navigation.navigate('GoalStep1' as never)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="pencil" size={16} color="#007AFF" />
+              <Text style={styles.editGoalButtonText}>Edit Step Goal</Text>
+            </TouchableOpacity>
+          </>
         ) : (
           <TouchableOpacity
             style={styles.setGoalButton}
@@ -240,6 +250,19 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: '#FFF',
+  },
+  editGoalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  editGoalButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#007AFF',
   },
   card: {
     backgroundColor: '#FFF',
