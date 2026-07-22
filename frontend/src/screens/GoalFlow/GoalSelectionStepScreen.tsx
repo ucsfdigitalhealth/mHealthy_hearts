@@ -50,7 +50,7 @@ const GoalSelectionStepScreen: React.FC = () => {
         }),
       });
       if (res.ok) {
-        navigation.goBack();
+        navigation.navigate('HomeTabs');
       } else {
         const data = await res.json().catch(() => ({}));
         Alert.alert('Error', data.message || 'Failed to set goal.');
