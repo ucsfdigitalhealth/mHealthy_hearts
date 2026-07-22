@@ -1,11 +1,9 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../context/AuthContext';
-import { getDeviceTimezone } from '../../utils/localDate';
 
 type GoalStep4Params = { completedYesterday: boolean; symptomRating: number };
 
@@ -15,51 +13,16 @@ const GOAL_OPTIONS = [
   { value: 6000, label: '6,000 steps' },
 ];
 
-const API_BASE = 'http://localhost:3000/api/activity';
-
 const GoalSelectionStepScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'GoalStep4'>>();
   const params = route.params as GoalStep4Params | undefined;
-  const { accessToken } = useAuth();
-  const [loading, setLoading] = useState(false);
 
   const completedYesterday = params?.completedYesterday ?? false;
   const symptomRating = params?.symptomRating ?? 5;
 
-  const handleSetGoal = async (stepTarget: number) => {
-    if (!accessToken) {
-      Alert.alert('Error', 'Please log in to set your goal.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const tz = getDeviceTimezone();
-      const url = `${API_BASE}/goal`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          ...(tz ? { 'X-Timezone': tz } : {}),
-        },
-        body: JSON.stringify({
-          stepTarget,
-          symptomRating,
-          completedYesterday,
-        }),
-      });
-      if (res.ok) {
-        navigation.goBack();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        Alert.alert('Error', data.message || 'Failed to set goal.');
-      }
-    } catch {
-      Alert.alert('Error', 'Could not connect to server.');
-    } finally {
-      setLoading(false);
-    }
+  const handleSelectGoal = (stepTarget: number) => {
+    navigation.navigate('GoalStep5', { stepTarget, completedYesterday, symptomRating });
   };
 
   return (
@@ -76,16 +39,11 @@ const GoalSelectionStepScreen: React.FC = () => {
             <View style={styles.cardContent}>
               <Text style={styles.cardLabel}>{opt.label}</Text>
               <TouchableOpacity
-                style={[styles.setGoalBtn, loading && styles.setGoalBtnDisabled]}
-                onPress={() => handleSetGoal(opt.value)}
-                disabled={loading}
+                style={styles.setGoalBtn}
+                onPress={() => handleSelectGoal(opt.value)}
                 activeOpacity={0.8}
               >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Text style={styles.setGoalBtnText}>Set Goal</Text>
-                )}
+                <Text style={styles.setGoalBtnText}>Set Goal</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -117,7 +75,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 8,
   },
-  setGoalBtnDisabled: { opacity: 0.6 },
   setGoalBtnText: { fontSize: 15, fontWeight: '600', color: '#FFF' },
   hint: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', marginTop: 16 },
 });
