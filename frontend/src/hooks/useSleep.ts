@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../config/api';
 import { useEffect, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
@@ -5,7 +6,7 @@ import { getCachedSleep, setCachedSleep, clearSleepCache, debugLogSleepCache, CA
 import { getDeviceTimezone } from '../utils/localDate';
 import { FITBIT_SLEEP_LOGIN_REFRESH_KEY } from '../context/AuthContext';
 
-const SLEEP_BASE = 'http://localhost:3000/api/fitbitAuth/fitbit/sleep';
+const SLEEP_BASE = `${API_ORIGIN}/api/fitbitAuth/fitbit/sleep`;
 
 // Module-level: timer keeps running across screens so backend is called at 120s even when user navigates away.
 let sleepRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null;

@@ -1,4 +1,5 @@
 // CardioVascularScreen.tsx
+import { API_ORIGIN } from '../../config/api';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -24,8 +25,8 @@ import { getCachedBloodLipids, setCachedBloodLipids } from '../../utils/bloodLip
 import { getCachedSmoking, setCachedSmoking } from '../../utils/smokingCache';
 import { getDeviceTimezone } from '../../utils/localDate';
 
-const HEALTH_SCORES_BASE = 'http://localhost:3000/api/health-scores';
-const FITBIT_STEPS_BASE = 'http://localhost:3000/api/fitbitAuth/fitbit/steps';
+const HEALTH_SCORES_BASE = `${API_ORIGIN}/api/health-scores`;
+const FITBIT_STEPS_BASE = `${API_ORIGIN}/api/fitbitAuth/fitbit/steps`;
 
 // Define the navigation prop type
 type CardioNavigationProp = NativeStackNavigationProp<RootStackParamList>;

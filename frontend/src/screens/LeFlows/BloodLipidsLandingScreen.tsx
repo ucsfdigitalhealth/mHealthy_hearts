@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useState } from 'react';
 import {
   View,
@@ -22,7 +23,7 @@ const SCORING_ROWS = [
   { range: '>220',    label: 'POOR',      pts: 0,   dot: '#DC2626' },
 ];
 
-const BLOOD_LIPIDS_BASE = 'http://localhost:3000/api/blood-lipids';
+const BLOOD_LIPIDS_BASE = `${API_ORIGIN}/api/blood-lipids`;
 
 const formatDate = (dateStr: string): string => {
   const d = new Date(dateStr);

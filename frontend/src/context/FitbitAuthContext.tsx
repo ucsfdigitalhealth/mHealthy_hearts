@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../config/api';
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
@@ -26,7 +27,7 @@ export const FitbitAuthProvider: React.FC<FitbitAuthProviderProps> = ({ children
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const API_BASE_URL = 'http://localhost:3000/api/fitbitAuth';
+  const API_BASE_URL = `${API_ORIGIN}/api/fitbitAuth`;
 
   // Check if Fitbit is connected by trying to fetch steps data
   const checkConnectionStatus = useCallback(async (): Promise<void> => {

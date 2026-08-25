@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../config/api';
 import { useEffect, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
@@ -5,7 +6,7 @@ import { getCachedSteps, setCachedSteps, clearStepsCache, CACHE_TTL_MS } from '.
 import { getDeviceTimezone } from '../utils/localDate';
 import { FITBIT_STEPS_LOGIN_REFRESH_KEY } from '../context/AuthContext';
 
-const STEPS_BASE = 'http://localhost:3000/api/fitbitAuth/fitbit/steps';
+const STEPS_BASE = `${API_ORIGIN}/api/fitbitAuth/fitbit/steps`;
 
 // Module-level: timer keeps running across screens so backend is called at 120s even when user navigates away.
 let stepsRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null;

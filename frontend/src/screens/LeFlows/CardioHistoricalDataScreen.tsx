@@ -1,4 +1,5 @@
 // CardioHistoricalDataScreen.tsx – historical cardiovascular data with interactive time-series charts
+import { API_ORIGIN } from '../../config/api';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -18,7 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_PADDING = 16;
 const CHART_WIDTH = SCREEN_WIDTH - 40 - CARD_PADDING * 2; // screen minus scroll padding minus card padding
-const API_BASE = 'http://localhost:3000';
+const API_BASE = `${API_ORIGIN}`;
 
 type MetricKey = 'Sleep' | 'PA' | 'BloodSugar' | 'BloodLipids' | 'BMI' | 'Diet' | 'Smoking' | 'BP';
 

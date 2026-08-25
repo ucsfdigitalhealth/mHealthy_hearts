@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../config/api';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -93,7 +94,7 @@ export const LoginScreen: React.FC = () => {
   }, [authLoading, user, accessToken, hasCheckedFitbit, fitbitConnected, fitbitLoading, isFreshLogin, navigation]);
 
   // Try this if localhost doesn't work: replace with your computer's IP address
-  const API_BASE_URL = 'http://localhost:3000/api/auth';
+  const API_BASE_URL = `${API_ORIGIN}/api/auth`;
   // Alternative: const API_BASE_URL = 'http://192.168.1.XXX:3000/api/auth';
 
   const handleInputChange = (field: string, value: string) => {

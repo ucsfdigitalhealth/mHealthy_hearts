@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -20,7 +21,7 @@ const TEAL_DARK = '#65b2ad';
 const PURPLE    = '#686d9e';
 const PURPLE_LT = '#7f7eaf';
 
-const DIET_BASE = 'http://localhost:3000/api/diet';
+const DIET_BASE = `${API_ORIGIN}/api/diet`;
 
 const FOOD_TEMPLATE = [
   { emoji: '🥦', name: 'Vegetables',               rec: 'Recommended ≥2 servings/day',   key: 'vegetables'   },

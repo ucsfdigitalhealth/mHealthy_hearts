@@ -1,4 +1,5 @@
 /**
+import { API_ORIGIN } from '../config/api';
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
 import { useAuth } from '../context/AuthContext';
@@ -35,7 +36,7 @@ const GoalsSettingScreen: React.FC = () => {
     }
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3000/api/user-goals', {
+      const response = await fetch(`${API_ORIGIN}/api/user-goals`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

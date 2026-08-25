@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -7,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { getDeviceTimezone } from '../../utils/localDate';
 
-const API_BASE = 'http://localhost:3000/api/activity';
+const API_BASE = `${API_ORIGIN}/api/activity`;
 
 const YesterdayStepsStepScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
