@@ -32,6 +32,8 @@ interface ServiceStackProps extends cdk.StackProps {
   readonly omronClientId: secretsmanager.ISecret;
   readonly omronClientSecret: secretsmanager.ISecret;
   readonly redirectUri: secretsmanager.ISecret;
+  readonly baseUrl: secretsmanager.ISecret;
+  readonly frontendUrl: secretsmanager.ISecret;
 }
 
 // ServiceStack owns the fast-moving, STATELESS infrastructure: the container
@@ -111,6 +113,8 @@ export class ServiceStack extends cdk.Stack {
         OMRON_CLIENT_ID: ecs.Secret.fromSecretsManager(props.omronClientId),
         OMRON_CLIENT_SECRET: ecs.Secret.fromSecretsManager(props.omronClientSecret),
         REDIRECT_URI: ecs.Secret.fromSecretsManager(props.redirectUri),
+        BASE_URL: ecs.Secret.fromSecretsManager(props.baseUrl),
+        FRONTEND_URL: ecs.Secret.fromSecretsManager(props.frontendUrl),
       },
     });
     container.addPortMappings({ containerPort: 3000 });

@@ -43,4 +43,6 @@ new ServiceStack(app, 'MheServiceStack', {
   omronClientId: databaseStack.omronClientId,
   omronClientSecret: databaseStack.omronClientSecret,
   redirectUri: databaseStack.redirectUri,
+  baseUrl: databaseStack.baseUrl,
+  frontendUrl: databaseStack.frontendUrl,
 });

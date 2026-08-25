@@ -31,6 +31,12 @@ export class DatabaseStack extends cdk.Stack {
   public readonly omronClientId: secretsmanager.ISecret;
   public readonly omronClientSecret: secretsmanager.ISecret;
   public readonly redirectUri: secretsmanager.ISecret;
+  // Public, non-secret URLs that are only known after the first deploy (the
+  // CloudFront domain is generated at deploy time). Stored as secrets so the
+  // value never has to be hardcoded into the CDK template/git, and so a compute
+  // pause/destroy keeps them (same vault benefit as the OAuth credentials).
+  public readonly baseUrl: secretsmanager.ISecret;
+  public readonly frontendUrl: secretsmanager.ISecret;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -141,6 +147,17 @@ export class DatabaseStack extends cdk.Stack {
     this.redirectUri = new secretsmanager.Secret(this, 'RedirectUri', {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
+    // BASE_URL: the public CloudFront URL. The Fitbit OAuth flow builds its
+    // redirect URI from this (`${BASE_URL}/api/fitbitAuth/fitbit/callback`).
+    // FRONTEND_URL: the React Native app's origin, used for CORS. Both are
+    // created EMPTY and filled in the Secrets Manager console after the first
+    // deploy, once the CloudFront domain is known.
+    this.baseUrl = new secretsmanager.Secret(this, 'BaseUrl', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    this.frontendUrl = new secretsmanager.Secret(this, 'FrontendUrl', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
 
     // cdk-nag flags every secret without automatic rotation (AwsSolutions-SMG4).
     // None of these are suitable for AWS automatic rotation:
@@ -160,6 +177,10 @@ export class DatabaseStack extends cdk.Stack {
       'Omron OAuth client secret; rotation is governed by the Omron developer portal, not AWS automatic rotation.');
     acknowledge(this.redirectUri, 'AwsSolutions-SMG4',
       'A redirect URI string, not a credential; rotation does not apply.');
+    acknowledge(this.baseUrl, 'AwsSolutions-SMG4',
+      'A public URL string (CloudFront domain), not a credential; rotation does not apply.');
+    acknowledge(this.frontendUrl, 'AwsSolutions-SMG4',
+      'A public URL string (frontend origin for CORS), not a credential; rotation does not apply.');
 
     new cdk.CfnOutput(this, 'DbEndpoint', {
       value: db.dbInstanceEndpointAddress,
