@@ -104,7 +104,7 @@ router.post('/login', async (req, res) => {
     // Set refresh token as HTTP-only cookie (for web clients)
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: false, // Use secure cookies in production
+      secure: process.env.NODE_ENV === 'production', // HTTPS-only in production
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
     });
@@ -180,7 +180,7 @@ router.post('/refresh', async (req, res) => {
     // Set new refresh token cookie (for web clients)
     res.cookie('refreshToken', newRefreshToken, {
       httpOnly: true,
-      secure: false, // Set to true in production, false for local development
+      secure: process.env.NODE_ENV === 'production', // HTTPS-only in production
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
