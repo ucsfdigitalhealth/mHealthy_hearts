@@ -1,12 +1,16 @@
 # mHealthy Hearts
 
-A cardiovascular health tracking mobile app for prostate cancer survivors, monitoring cardiac and systemic symptoms as part of a clinical research study. Built with React Native (Expo) frontend, Node.js/Express backend, and MySQL (MAMP).
+A cardiovascular health tracking mobile app for prostate cancer survivors, monitoring cardiac and systemic symptoms as part of a clinical research study. Built with React Native (Expo) frontend, Node.js/Express backend, and MySQL.
+
+The backend runs unchanged against a local MAMP MySQL for development, and is also packaged as a Docker container deployable to AWS (ECS Fargate + RDS, fronted by an Application Load Balancer and CloudFront). The AWS infrastructure is defined as code under `infra/` (AWS CDK). See [Deployment (AWS)](#deployment-aws) for the production setup.
 
 ## Prerequisites
 
-- Node.js
-- MySQL server running on **port 8889**
+- Node.js 20+ (the Docker image targets Node 20)
+- MySQL server running on **port 8889** (MAMP) for local development
 - Database named `mhearts` with table `user_auth_testing`
+- Docker (only if building the container image / deploying to AWS)
+- AWS CLI + AWS credentials (only for `cdk deploy`; `cdk synth` works without credentials)
 
 ## Setup
 
@@ -17,15 +21,36 @@ A cardiovascular health tracking mobile app for prostate cancer survivors, monit
    ```
 
 2. **Configure environment variables:**
-   Create `.env` file in backend directory:
+   Create a `.env` file in the backend directory (see `backend/env.example` for the full template). For local dev, only `JWT_SECRET` and the OAuth credentials are required — **leave `DB_HOST` unset** and `backend/db.js` falls back to the local MAMP socket automatically:
    ```
-   JWT_SECRET=your_secret_key_here
+   # ---- Auth ----
+   JWT_SECRET=replace_with_openssl_rand_hex_32   # generate with: openssl rand -hex 32
+
+   # ---- Database ----
+   # Leave DB_HOST unset to use the local MAMP socket fallback (db.js).
+   # Set all of the below when pointing at RDS / production.
+   # DB_HOST=your-rds.cluster-xxxxx.region.rds.amazonaws.com
+   # DB_PORT=3306
+   # DB_USER=app_user
+   # DB_PASSWORD=replace_with_strong_password
+   # DB_NAME=mhearts
+   # DB_SSL=true
+   # DB_SSL_CA=/app/certs/global-bundle.pem
+
+   # ---- App / runtime ----
+   NODE_ENV=production        # production enables secure refresh-token cookies
+   PORT=3000
+   # FRONTEND_URL=https://your-domain.cloudfront.net   # CORS origin
+
+   # ---- OAuth: Fitbit ----
    FITBIT_CLIENT_ID=your_fitbit_client_id
    FITBIT_CLIENT_SECRET=your_fitbit_client_secret
-   BASE_URL=http://localhost:3000
-   FRONTEND_URL=http://localhost:8081
+
+   # ---- OAuth: Omron ----
    OMRON_CLIENT_ID=your_omron_client_id_here
    OMRON_CLIENT_SECRET=your_omron_client_secret_here
+
+   # Shared OAuth redirect base (update to the production HTTPS URL in prod)
    REDIRECT_URI=http://localhost:3000/api/omronCallback
    ```
 
@@ -41,6 +66,9 @@ A cardiovascular health tracking mobile app for prostate cancer survivors, monit
    ```
 
 ## API Endpoints
+
+### Health Check
+- `GET /health` - Load balancer / container health check; returns `200 {"status":"ok"}` without touching the DB (used by the ALB target-group health check and ECS circuit breaker)
 
 ### Authentication
 - `POST /api/auth/register` - User registration
@@ -118,13 +146,18 @@ POST /api/auth/login
 
 ## Database Schema
 
-All tables are defined in a single migration file:
+All tables are defined in the migration files under `backend/migrations/`. There are two variants of the full schema:
 
-```
-backend/migrations/full_migrate.sql
-```
+- **`full_migrate.sql`** — the destructive variant for a **fresh local database**. It `DROP`s every table and recreates them. Run it in MAMP phpMyAdmin by selecting the `mhearts` database, opening the SQL tab, pasting the file contents, and clicking Go. **This drops and recreates all tables — back up any data you need first.**
+- **`full_migrate_additive.sql`** — the non-destructive, idempotent variant for **production (RDS)**. It uses `CREATE TABLE IF NOT EXISTS` and contains **no `DROP` statements**, so it is safe to re-run against a populated database: existing tables and data are left untouched and only missing tables are created. The schema (foreign keys, `NOT NULL` `user_id`s, no legacy `user_goals`) is kept in sync with `full_migrate.sql`.
 
-Run it in MAMP phpMyAdmin by selecting the `mhearts` database, opening the SQL tab, pasting the file contents, and clicking Go. **This drops and recreates all tables — back up any data you need first.**
+Both variants now enforce referential integrity: every assessment/symptom table has a `FOREIGN KEY (user_id) REFERENCES user_auth_testing(id) ON DELETE CASCADE`, `user_id` columns are `NOT NULL`, and the circular `ema_enrollments` <-> `symptom_instrument_responses` foreign key is handled with `SET NULL` deletes. `SET FOREIGN_KEY_CHECKS` stays off through the `CREATE TABLE` block for that circular FK and is re-enabled at the end of each file.
+
+### Running migrations against RDS
+
+RDS lives in an isolated subnet and is not reachable from your local machine, so the additive migration is applied as a one-off ECS task inside the VPC via the runner `backend/scripts/migrate.js`. It sends the whole `full_migrate_additive.sql` as a single multi-statement query (`multipleStatements: true`) using the same `DB_*` env vars the app uses (injected from Secrets Manager), and prints a table / foreign-key count to CloudWatch as verification. It is **not** meant to be run locally.
+
+The legacy `user_goals` table (replaced by the live `activity_goals` / `daily_goals` flow) is no longer created by either variant. `full_migrate.sql` retains a `DROP` for it to clean up pre-existing copies; the additive variant has no `DROP`s.
 
 ### Tables
 
@@ -148,7 +181,8 @@ Run it in MAMP phpMyAdmin by selecting the `mhearts` database, opening the SQL t
 | `weekly_symptom_plans` | Single combined weekly check-in plan per user: up to 6 `symptom_keys`, one `day_of_week`/`time`/`notification_channel` reminder slot (v1.4) |
 | `ema_enrollments` | Patient recurring-reminder preferences for momentary symptoms; `schedule_type` is `weekly_day_time` (multi-slot `{day_of_week, time}` schedule) or `daily_times` (`{times: [...]}` + `start_date`/`end_date`) (v1.3, extended v1.4) |
 | `symptom_instrument_responses` | Completed weekly validated instrument results (raw score, T-score, severity label); `weekly_plan_id` links a response to its combined check-in session (v1.3, extended v1.4) |
-| `user_goals` | Legacy — not currently used |
+
+> `user_goals` (legacy, replaced by the live `activity_goals` / `daily_goals` flow) is no longer created by the migration files. `full_migrate.sql` keeps a `DROP` to clean up pre-existing copies only.
 
 
 ---
@@ -290,4 +324,84 @@ Use `backend/migrations/full_migrate.sql` for a fresh database — it includes a
 - Implement `/api/fetchdata` to request real Omron device metrics
 - Add endpoints for retrieving blood pressure, activity, weight, temperature, and oxygen data
 - Add Notification system
+
+---
+
+## Frontend API Configuration
+
+The backend API origin lives in a single source of truth: `frontend/src/config/api.ts`. Every screen, hook, and context imports `API_ORIGIN` from it instead of hardcoding `http://localhost:3000`.
+
+```ts
+export const API_ORIGIN = __DEV__
+  ? 'http://localhost:3000'                       // Expo dev bundles -> local Express
+  : 'https://d1ptdtremi31ja.cloudfront.net';      // standalone/prod builds -> deployed backend
+```
+
+`__DEV__` is a React Native global: `true` in `expo start` dev bundles, `false` in published/standalone builds, so the target flips automatically per build type. To point a physical device at your dev machine's LAN IP, or to test the prod backend from a dev build, change that one line.
+
+---
+
+## Deployment (AWS)
+
+The backend is containerized and deployed to AWS using infrastructure-as-code under `infra/` (AWS CDK, TypeScript). The deployment follows a **data-vault** model: the data layer and the compute layer are split into separate CDK stacks so compute can be paused or destroyed freely without ever touching the database or secrets.
+
+### Architecture
+
+```
+Mobile app (Expo)
+   │  HTTPS
+   ▼
+CloudFront (HTTPS edge, *.cloudfront.net) ── HTTP ──► ALB (public subnet)
+                                                        │  health check: GET /health
+                                                        ▼
+                                               ECS Fargate task (arm64, public subnet)
+                                                  Express app in Docker
+                                                        │  port 3306
+                                                        ▼
+                                                  RDS MySQL (isolated subnet)
+```
+
+### CDK stacks (`infra/`)
+
+| Stack | Owns | Notes |
+|---|---|---|
+| `MheDatabaseStack` (`lib/database-stack.ts`) | VPC, RDS MySQL, all app secrets | The protected **data vault**. `terminationProtection` + RDS `deletionProtection` + `removalPolicy: SNAPSHOT` make destroying it a deliberate, multi-step act that still leaves a final snapshot. |
+| `MheServiceStack` (`lib/service-stack.ts`) | ECR image, ECS Fargate service, ALB, CloudFront, IAM | Stateless compute. Holds **no data**, so it can be destroyed/paused freely while the database vault stays alive. Every app code change redeploys through here. |
+
+**Networking** — One VPC, two AZs, no NAT gateway (cost: $0). Public subnets hold the ALB + Fargate tasks (tasks get a public IP for outbound calls to Fitbit/Omron). Private **isolated** subnets hold RDS, which has no route to the internet and is reachable only via a security-group ingress from the ECS tasks on port 3306.
+
+**Compute** — The Express app is built from `backend/Dockerfile` (multi-stage Node 20 image: native bcrypt build, RDS CA bundle baked in, non-root `node` user) and pushed to ECR by CDK. It runs as a single 0.25 vCPU / 0.5 GB Fargate task on **arm64/Graviton** (matching the arm64 image and the Graviton RDS `t4g.micro`). The ECS circuit breaker rolls back a failed deploy quickly.
+
+**Edge / HTTPS** — CloudFront terminates HTTPS on a free `*.cloudfront.net` URL (no custom domain needed) and forwards to the ALB over HTTP. Caching is disabled and all viewer headers/cookies/query are forwarded so `Authorization` + cookies reach the app. The ALB security group accepts traffic **only from the CloudFront prefix list**, so the ALB cannot be bypassed over plain HTTP.
+
+**Secrets** — The RDS credentials are auto-generated into Secrets Manager. App secrets (`JWT_SECRET`, Fitbit/Omron client credentials, `REDIRECT_URI`, `BASE_URL`, `FRONTEND_URL`) live in the **data vault** stack so they survive a compute pause/destroy. `JWT_SECRET` is auto-generated; the OAuth credentials and the deploy-time URLs (`BASE_URL`/`FRONTEND_URL`, only known after the first deploy once the CloudFront domain exists) are created empty and filled in the Secrets Manager console after the first deploy. ECS injects every secret into the container as an env var via the task definition.
+
+**Best practices** — `cdk-nag` (`AwsSolutionsChecks`) runs on every `cdk synth` and reports AWS Solutions violations as annotations. Intentional trade-offs for this 1-2 user research deployment (single-AZ RDS, no ALB/CloudFront access logging yet, no custom-domain TLS, default CloudFront certificate) are suppressed with documented, inline `acknowledge(...)` reasons; real gaps are fixed in code.
+
+### Deploy workflow
+
+```bash
+cd infra && npm install
+
+# Phase B: synthesize the CloudFormation template (works without AWS credentials)
+npm run synth
+
+# Phase C: deploy (requires AWS credentials; CDK_DEFAULT_ACCOUNT/REGION are injected by the CLI)
+npm run deploy            # or: npx cdk deploy MheDatabaseStack MheServiceStack
+```
+
+After the first deploy:
+1. Note the `CloudFrontUrl` stack output.
+2. In the Secrets Manager console, fill the empty `BASE_URL` and `FRONTEND_URL` secrets with the CloudFront URL (and the frontend origin for CORS), plus the Fitbit/Omron client credentials and `REDIRECT_URI`.
+3. Run the database migration as a one-off ECS task using `backend/scripts/migrate.js` (see [Running migrations against RDS](#running-migrations-against-rds)).
+4. Redeploy the service stack so the tasks pick up the now-populated secrets, and update the Fitbit/Omron OAuth redirect URIs to the production HTTPS URLs.
+
+### Local Docker build
+
+```bash
+cd backend && docker build -t mhe-backend .
+docker run -p 3000:3000 --env-file .env mhe-backend
+```
+
+The image bakes in the RDS CA bundle (`/app/certs/global-bundle.pem`) and runs as the non-root `node` user. `.env` and `node_modules` are excluded via `backend/.dockerignore`.
 

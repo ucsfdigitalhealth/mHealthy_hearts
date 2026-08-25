@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../config/api';
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 
@@ -10,7 +11,7 @@ const ApiTester: React.FC = () => {
       console.log('Testing API connection to localhost:3000...');
       
       // Test basic connectivity
-      const response = await fetch('http://localhost:3000/api/auth/register', {
+      const response = await fetch(`${API_ORIGIN}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

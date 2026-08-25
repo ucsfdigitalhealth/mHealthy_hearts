@@ -1,8 +1,9 @@
+import { API_ORIGIN } from '../config/api';
 import { useCallback, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getDeviceTimezone } from '../utils/localDate';
 
-const API_BASE = 'http://localhost:3000/api/activity';
+const API_BASE = `${API_ORIGIN}/api/activity`;
 
 export type TodayGoal = {
   id: number;

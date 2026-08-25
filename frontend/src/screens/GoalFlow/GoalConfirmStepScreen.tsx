@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -9,7 +10,7 @@ import { getDeviceTimezone } from '../../utils/localDate';
 
 type GoalStep5Params = { stepTarget: number; completedYesterday: boolean; symptomRating: number };
 
-const API_BASE = 'http://localhost:3000/api/activity';
+const API_BASE = `${API_ORIGIN}/api/activity`;
 
 const GoalConfirmStepScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();

@@ -1,4 +1,5 @@
 // BloodLipidsFlowScreen.tsx
+import { API_ORIGIN } from '../../config/api';
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -304,7 +305,7 @@ const BloodLipidsFlowScreen: React.FC = () => {
     const score = getNonHDLScoreLocal(numericValue);
 
     try {
-      await fetch('http://localhost:3000/api/blood-lipids', {
+      await fetch(`${API_ORIGIN}/api/blood-lipids`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

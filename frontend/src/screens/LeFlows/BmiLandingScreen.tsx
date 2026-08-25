@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -17,7 +18,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 const TEAL      = '#41a39d';
 const TEAL_DARK = '#65b2ad';
 
-const BMI_BASE = 'http://localhost:3000/api/bmi';
+const BMI_BASE = `${API_ORIGIN}/api/bmi`;
 
 const SCORING_ROWS = [
   { label: 'BMI 18.5–24.9',  sub: 'EXCELLENT (Healthy Weight)',  pts: 100, dot: '#059669' },

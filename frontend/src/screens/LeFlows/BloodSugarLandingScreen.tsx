@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useState } from 'react';
 import {
   View,
@@ -14,7 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const BLOOD_SUGAR_BASE = 'http://localhost:3000/api/blood-sugar';
+const BLOOD_SUGAR_BASE = `${API_ORIGIN}/api/blood-sugar`;
 
 // FBG scoring rows (mg/dL)
 const FBG_ROWS = [

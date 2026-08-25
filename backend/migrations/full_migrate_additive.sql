@@ -1,34 +1,19 @@
 -- =============================================================================
--- full_migrate.sql — mHealthy Hearts
+-- full_migrate_additive.sql — mHealthy Hearts
 --
--- Single file to create every table in the application from scratch.
--- Safe to re-run: drops all tables first, then recreates them in order.
+-- Additive (non-destructive) variant of full_migrate.sql for PRODUCTION.
+-- Uses CREATE TABLE IF NOT EXISTS and contains NO DROP statements, so it is
+-- safe to re-run against a populated database: existing tables and data are
+-- left untouched and only missing tables are created. This is the file the
+-- Phase D migration runner executes against RDS, so a re-run can never wipe
+-- data.
 --
--- WARNING: All existing data will be lost. Back up first.
--- Run in MAMP phpMyAdmin: paste into the SQL tab on the mhearts database.
+-- Schema (FKs, NOT NULL user_ids, no legacy user_goals) is kept in sync with
+-- full_migrate.sql. Edit the schema there and regenerate this file.
 -- =============================================================================
 
 SET FOREIGN_KEY_CHECKS = 0;
 
-DROP TABLE IF EXISTS user_goals;
-DROP TABLE IF EXISTS ema_enrollments;
-DROP TABLE IF EXISTS weekly_symptom_plans;
-DROP TABLE IF EXISTS symptom_instrument_responses;
-DROP TABLE IF EXISTS symptom_disclaimer_log;
-DROP TABLE IF EXISTS symptom_events;
-DROP TABLE IF EXISTS activity_streaks;
-DROP TABLE IF EXISTS daily_goals;
-DROP TABLE IF EXISTS composite_scores;
-DROP TABLE IF EXISTS daily_scores;
-DROP TABLE IF EXISTS le8_composite_scores;
-DROP TABLE IF EXISTS diet_assessments;
-DROP TABLE IF EXISTS blood_lipids_assessments;
-DROP TABLE IF EXISTS bmi_assessments;
-DROP TABLE IF EXISTS blood_sugar_assessments;
-DROP TABLE IF EXISTS smoking_assessments;
-DROP TABLE IF EXISTS fitbit_sleep_data;
-DROP TABLE IF EXISTS fitbit_daily_data;
-DROP TABLE IF EXISTS user_auth_testing;
 
 -- Foreign key checks stay OFF through the CREATE TABLE block as well, because
 -- ema_enrollments and symptom_instrument_responses reference each other
@@ -40,7 +25,7 @@ DROP TABLE IF EXISTS user_auth_testing;
 -- Must be created first — all other tables with user FKs reference this one.
 -- =============================================================================
 
-CREATE TABLE user_auth_testing (
+CREATE TABLE IF NOT EXISTS user_auth_testing (
   id                   VARCHAR(36)  PRIMARY KEY DEFAULT (uuid()),
   username             VARCHAR(255) NOT NULL,
   email                VARCHAR(255) UNIQUE NOT NULL,
@@ -67,7 +52,7 @@ CREATE TABLE user_auth_testing (
 
 -- Activity data cached from Fitbit API. One row per user per calendar day.
 -- physical_activity_score: LE8 component score 0–100 derived from step count.
-CREATE TABLE fitbit_daily_data (
+CREATE TABLE IF NOT EXISTS fitbit_daily_data (
   data_id                 CHAR(36)     NOT NULL,
   user_id                 VARCHAR(36)  NOT NULL,
   date                    DATE         NOT NULL,
@@ -87,7 +72,7 @@ CREATE TABLE fitbit_daily_data (
 
 -- Sleep data cached from Fitbit API. Keyed by bed date (local timezone).
 -- sleep_score: LE8 component score 0–100 derived from total_minutes_asleep.
-CREATE TABLE fitbit_sleep_data (
+CREATE TABLE IF NOT EXISTS fitbit_sleep_data (
   data_id              CHAR(36)     NOT NULL,
   user_id              VARCHAR(36)  NOT NULL,
   date                 DATE         NOT NULL COMMENT 'Bed date (local): calendar date when user went to bed',
@@ -111,7 +96,7 @@ CREATE TABLE fitbit_sleep_data (
 -- importance/confidence only stored when commitment_to_change = 1.
 -- =============================================================================
 
-CREATE TABLE smoking_assessments (
+CREATE TABLE IF NOT EXISTS smoking_assessments (
   data_id              CHAR(36)     NOT NULL,
   user_id              VARCHAR(36)  NOT NULL,
   category             VARCHAR(20)  NULL,       -- 'current' | 'former' | 'never'
@@ -132,7 +117,7 @@ CREATE TABLE smoking_assessments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
-CREATE TABLE blood_sugar_assessments (
+CREATE TABLE IF NOT EXISTS blood_sugar_assessments (
   data_id              CHAR(36)      NOT NULL,
   user_id              VARCHAR(36)   NOT NULL,
   test_type            VARCHAR(64)   NULL,       -- 'fasting' | 'HbA1c'
@@ -150,7 +135,7 @@ CREATE TABLE blood_sugar_assessments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
-CREATE TABLE bmi_assessments (
+CREATE TABLE IF NOT EXISTS bmi_assessments (
   data_id              CHAR(36)     NOT NULL,
   user_id              VARCHAR(36)  NOT NULL,
   bmi_value            DECIMAL(5,2) NULL,
@@ -169,7 +154,7 @@ CREATE TABLE bmi_assessments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
-CREATE TABLE blood_lipids_assessments (
+CREATE TABLE IF NOT EXISTS blood_lipids_assessments (
   data_id              CHAR(36)     NOT NULL,
   user_id              VARCHAR(36)  NOT NULL,
   measure_type         VARCHAR(50)  NULL,       -- e.g. 'non-hdl'
@@ -187,7 +172,7 @@ CREATE TABLE blood_lipids_assessments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
-CREATE TABLE diet_assessments (
+CREATE TABLE IF NOT EXISTS diet_assessments (
   data_id                CHAR(36)     NOT NULL,
   user_id                VARCHAR(36)  NOT NULL,
   vegetables_per_day     DECIMAL(5,2) NULL,
@@ -217,7 +202,7 @@ CREATE TABLE diet_assessments (
 -- =============================================================================
 
 -- Per-user, per-day individual component scores (lightweight lookup table).
-CREATE TABLE daily_scores (
+CREATE TABLE IF NOT EXISTS daily_scores (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   user_id     VARCHAR(36)  NOT NULL,
   score_type  VARCHAR(32)  NOT NULL,       -- e.g. 'blood_sugar', 'bmi', 'diet'
@@ -232,7 +217,7 @@ CREATE TABLE daily_scores (
 
 
 -- Per-user, per-day overall composite score.
-CREATE TABLE composite_scores (
+CREATE TABLE IF NOT EXISTS composite_scores (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   user_id         VARCHAR(36)  NOT NULL,
   composite_score DECIMAL(6,2) NOT NULL,
@@ -246,7 +231,7 @@ CREATE TABLE composite_scores (
 
 -- Full LE8 composite snapshot: one row per user per day with all 8 component
 -- scores and the aggregate. Replaces composite_scores for LE8-specific reporting.
-CREATE TABLE le8_composite_scores (
+CREATE TABLE IF NOT EXISTS le8_composite_scores (
   id                      CHAR(36)     NOT NULL,
   user_id                 VARCHAR(36)  NOT NULL,
   score_date              DATE         NOT NULL,
@@ -275,7 +260,7 @@ CREATE TABLE le8_composite_scores (
 -- =============================================================================
 
 -- One row per user per calendar day.
-CREATE TABLE daily_goals (
+CREATE TABLE IF NOT EXISTS daily_goals (
   id                  INT AUTO_INCREMENT PRIMARY KEY,
   user_id             VARCHAR(36) NOT NULL,
   goal_date           DATE        NOT NULL,
@@ -292,7 +277,7 @@ CREATE TABLE daily_goals (
 
 
 -- One row per user; updated in place as streaks grow.
-CREATE TABLE activity_streaks (
+CREATE TABLE IF NOT EXISTS activity_streaks (
   user_id            VARCHAR(36) NOT NULL PRIMARY KEY,
   current_streak     INT         NOT NULL DEFAULT 0,
   longest_streak     INT         NOT NULL DEFAULT 0,
@@ -312,7 +297,7 @@ CREATE TABLE activity_streaks (
 --                'event_log_ema'  = ongoing symptoms eligible for recurring check-ins.
 -- intensity_score: 0–10 patient-reported severity (null for weight_change events).
 -- weight_change_*: used instead of intensity_score for 'weight_change' symptom only.
-CREATE TABLE symptom_events (
+CREATE TABLE IF NOT EXISTS symptom_events (
   id                       INT AUTO_INCREMENT PRIMARY KEY,
   user_id                  VARCHAR(36)  NOT NULL,
   symptom_key              VARCHAR(60)  NOT NULL,    -- machine key e.g. 'chest_pain', 'fatigue'
@@ -334,7 +319,7 @@ CREATE TABLE symptom_events (
 
 -- IRB/audit log: records every time the safety disclaimer was displayed.
 -- context: where it appeared ('login', 'section_entry', 'acute_symptom_modal').
-CREATE TABLE symptom_disclaimer_log (
+CREATE TABLE IF NOT EXISTS symptom_disclaimer_log (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   user_id    VARCHAR(36) NOT NULL,
   context    ENUM('login', 'section_entry', 'acute_symptom_modal') NOT NULL,
@@ -357,7 +342,7 @@ CREATE TABLE symptom_disclaimer_log (
 -- notification_channel: how to deliver weekly reminders (weekly frequency only).
 -- instrument_key resolved from backend/config/instruments.js at enrollment time.
 -- start_date/end_date: only used for schedule_type='daily_times'.
-CREATE TABLE ema_enrollments (
+CREATE TABLE IF NOT EXISTS ema_enrollments (
   id                     INT AUTO_INCREMENT PRIMARY KEY,
   user_id                VARCHAR(36)           NOT NULL,
   symptom_event_id       INT                   NULL,    -- momentary path; null for weekly
@@ -387,7 +372,7 @@ CREATE TABLE ema_enrollments (
 --   (backend/config/instruments.js), e.g. ["fatigue","anxiety","hot_flashes"].
 --   v1.5 added social_roles, pain_interference, pain_intensity (PROMIS-29 domains).
 -- day_of_week/time/notification_channel: the single shared weekly reminder slot.
-CREATE TABLE weekly_symptom_plans (
+CREATE TABLE IF NOT EXISTS weekly_symptom_plans (
   id                    INT AUTO_INCREMENT PRIMARY KEY,
   user_id               VARCHAR(36) NOT NULL,
   symptom_keys          JSON NOT NULL,
@@ -415,7 +400,7 @@ CREATE TABLE weekly_symptom_plans (
 -- enrollment_id: FK to ema_enrollments; null if patient has not enrolled in recurring reminders.
 -- weekly_plan_id: FK to weekly_symptom_plans; set when this response was submitted
 --   as part of a combined weekly check-in session.
-CREATE TABLE symptom_instrument_responses (
+CREATE TABLE IF NOT EXISTS symptom_instrument_responses (
   id               INT AUTO_INCREMENT PRIMARY KEY,
   patient_id       VARCHAR(36)  NOT NULL,
   symptom_key      VARCHAR(60)  NOT NULL,

@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useState } from 'react';
 import {
   View,
@@ -14,7 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const SMOKING_BASE = 'http://localhost:3000/api/smoking';
+const SMOKING_BASE = `${API_ORIGIN}/api/smoking`;
 
 const SCORING_ROWS = [
   { label: 'Never Smoked',          sub: 'OPTIMAL',       pts: 100, dot: '#059669' },

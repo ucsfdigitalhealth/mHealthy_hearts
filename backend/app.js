@@ -23,10 +23,15 @@ const app = express();
 app.use(bodyParser.json());
 app.use(cookieParser());
 app.use(cors({
-    origin: 'http://localhost:3000', 
-    methods: ['GET', 'POST'],       
-    credentials: false                
+    origin: process.env.FRONTEND_URL || 'http://localhost:8081',
+    methods: ['GET', 'POST'],
+    credentials: false
   }));
+
+// Health check for the load balancer / container orchestration (App Runner, ALB).
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
 
 // Routes
 app.use('/api/auth', authRoutes);

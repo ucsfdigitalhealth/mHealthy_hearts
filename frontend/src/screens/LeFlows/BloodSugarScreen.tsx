@@ -1,4 +1,5 @@
 // BloodSugarFlowScreen.tsx
+import { API_ORIGIN } from '../../config/api';
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -296,7 +297,7 @@ const BloodSugarFlowScreen: React.FC = () => {
     const score = getBloodGlucoseScore(testType, numValue, hasDiabetes);
 
     try {
-      await fetch('http://localhost:3000/api/blood-sugar', {
+      await fetch(`${API_ORIGIN}/api/blood-sugar`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

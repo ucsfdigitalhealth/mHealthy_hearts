@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
@@ -247,7 +248,7 @@ const BMIFlowScreen: React.FC = () => {
         body.height = height;
       }
 
-      const response = await fetch('http://localhost:3000/api/bmi', {
+      const response = await fetch(`${API_ORIGIN}/api/bmi`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

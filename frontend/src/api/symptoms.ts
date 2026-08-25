@@ -1,4 +1,5 @@
-const API_BASE = 'http://localhost:3000/api/symptoms';
+import { API_ORIGIN } from '../config/api';
+const API_BASE = `${API_ORIGIN}/api/symptoms`;
 
 export interface SymptomEventPayload {
   symptom_key: string;

@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../config/api';
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearStepsCache } from '../utils/stepsCache';
@@ -26,7 +27,7 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-const API_BASE_URL = 'http://localhost:3000/api/auth';
+const API_BASE_URL = `${API_ORIGIN}/api/auth`;
 
 export const FITBIT_STEPS_LOGIN_REFRESH_KEY = 'fitbit_steps_login_refresh';
 export const FITBIT_SLEEP_LOGIN_REFRESH_KEY = 'fitbit_sleep_login_refresh';

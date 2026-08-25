@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -320,7 +321,7 @@ const DietAssessmentScreen: React.FC = () => {
     const { displayScore, mepaScore } = calcDietScoreLocal(answers);
 
     try {
-      await fetch('http://localhost:3000/api/diet', {
+      await fetch(`${API_ORIGIN}/api/diet`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

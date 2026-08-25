@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -18,7 +19,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 const TEAL      = '#41a39d';
 const TEAL_DARK = '#65b2ad';
 
-const BASE = 'http://localhost:3000/api/health-scores';
+const BASE = `${API_ORIGIN}/api/health-scores`;
 
 const CHART_H = 130;
 const Y_TICKS = [100, 75, 50, 25, 0];

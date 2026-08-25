@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../config/api';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -208,7 +209,7 @@ const SmokingAssessmentScreen: React.FC = () => {
       const cached = await getCachedSmoking();
       if (cached === null && accessToken) {
         try {
-          const resp = await fetch('http://localhost:3000/api/smoking/score', {
+          const resp = await fetch(`${API_ORIGIN}/api/smoking/score`, {
             headers: { Authorization: `Bearer ${accessToken}` },
           });
           if (resp.ok) {
@@ -316,7 +317,7 @@ const SmokingAssessmentScreen: React.FC = () => {
   const handleDone = async () => {
     setSubmitting(true);
     try {
-      const response = await fetch('http://localhost:3000/api/smoking', {
+      const response = await fetch(`${API_ORIGIN}/api/smoking`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
