@@ -23,13 +23,24 @@ const env = {
   region: process.env.CDK_DEFAULT_REGION,
 };
 
-// DatabaseStack creates the VPC + RDS first; ServiceStack runs tasks inside that
-// VPC and reaches the RDS, so it consumes the resources DatabaseStack exposes.
-const databaseStack = new DatabaseStack(app, 'MheDatabaseStack', { env });
+// DatabaseStack is the protected "data vault": VPC + RDS + app secrets.
+// terminationProtection makes the whole stack undeletable without an intentional
+// un-protect step, so the data layer survives any casual `cdk destroy` of the
+// compute stack (and even an accidental destroy attempt of this stack itself).
+const databaseStack = new DatabaseStack(app, 'MheDatabaseStack', {
+  env,
+  terminationProtection: true,
+});
 
 new ServiceStack(app, 'MheServiceStack', {
   env,
   vpc: databaseStack.vpc,
   dbSecurityGroup: databaseStack.dbSecurityGroup,
   dbSecret: databaseStack.dbSecret,
+  jwtSecret: databaseStack.jwtSecret,
+  fitbitClientId: databaseStack.fitbitClientId,
+  fitbitClientSecret: databaseStack.fitbitClientSecret,
+  omronClientId: databaseStack.omronClientId,
+  omronClientSecret: databaseStack.omronClientSecret,
+  redirectUri: databaseStack.redirectUri,
 });

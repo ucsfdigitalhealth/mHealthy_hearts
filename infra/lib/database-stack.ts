@@ -13,13 +13,24 @@ function acknowledge(scope: Construct, id: string, reason: string) {
   cdk.Validations.of(scope).acknowledge({ id, reason });
 }
 
-// DatabaseStack owns the slow-moving infrastructure: the network (VPC) and the
-// database (RDS). Isolating it from ServiceStack means iterating on the app
-// does NOT rebuild the database (RDS takes ~5-10 min to create/destroy).
+// DatabaseStack is the protected "data vault": the network (VPC), the database
+// (RDS), and the app secrets. It is intentionally separated from ServiceStack
+// (the compute) so you can pause/destroy the compute anytime WITHOUT touching
+// the data or the secrets. terminationProtection (set in bin/mhe-infra.ts) +
+// RDS deletionProtection + removalPolicy SNAPSHOT make destroying this vault a
+// deliberate, multi-step act that still leaves a final snapshot.
 export class DatabaseStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc;
   public readonly dbSecurityGroup: ec2.SecurityGroup;
   public readonly dbSecret: secretsmanager.ISecret;
+  // App secrets live in the vault so destroying compute (ServiceStack) keeps
+  // them - no re-entering Fitbit/Omron credentials every time you pause.
+  public readonly jwtSecret: secretsmanager.ISecret;
+  public readonly fitbitClientId: secretsmanager.ISecret;
+  public readonly fitbitClientSecret: secretsmanager.ISecret;
+  public readonly omronClientId: secretsmanager.ISecret;
+  public readonly omronClientSecret: secretsmanager.ISecret;
+  public readonly redirectUri: secretsmanager.ISecret;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -71,10 +82,18 @@ export class DatabaseStack extends cdk.Stack {
       credentials: rds.Credentials.fromGeneratedSecret('app_user'), // secret -> Secrets Manager
       databaseName: 'mhearts',
       securityGroups: [this.dbSecurityGroup],
-      deletionProtection: false,
-      // DEV ONLY: `cdk destroy` will delete the database AND all its data.
-      // Change to RemovalPolicy.SNAPSHOT (or RETAIN) before this is real.
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      // Data-vault protections: the DB cannot be deleted by accident.
+      //  - deletionProtection: CloudFormation refuses to destroy it until you
+      //    explicitly flip this to false. Combined with stack
+      //    terminationProtection (set in bin/mhe-infra.ts), destroying the data
+      //    layer is a deliberate, multi-step act.
+      //  - removalPolicy SNAPSHOT: when you DO intentionally destroy it, AWS
+      //    takes a final snapshot first, so the data survives in a snapshot.
+      //  - backupRetention: 7 days of automated backups + point-in-time restore
+      //    for in-window recovery (e.g. an accidentally deleted row).
+      deletionProtection: true,
+      removalPolicy: cdk.RemovalPolicy.SNAPSHOT,
+      backupRetention: cdk.Duration.days(7),
     });
 
     // The generated secret holds username/password/host/port as JSON in Secrets
@@ -90,16 +109,57 @@ export class DatabaseStack extends cdk.Stack {
     // Single-AZ: intentional cost tradeoff. Multi-AZ roughly doubles DB cost.
     acknowledge(db, 'AwsSolutions-RDS3',
       'Single-AZ is an intentional cost tradeoff for a 1-2 user research app. Enable Multi-AZ as a reliability follow-up before production.');
-    // Deletion protection off + DESTROY removal policy: DEV SANDBOX ONLY, so
-    // `cdk destroy` can tear the stack down. Flip both (and add stack
-    // terminationProtection) before this is real production.
-    acknowledge(db, 'AwsSolutions-RDS10',
-      'DEV ONLY: deletion protection intentionally off so cdk destroy can tear down the sandbox. Re-enable deletionProtection, switch removalPolicy to SNAPSHOT, and set stack terminationProtection before production.');
     // Default port 3306: the DB is private (isolated subnet, not publicly
     // reachable) and gated by a SG ingress from the ECS tasks only, so changing
     // the port would be security-through-obscurity with no real benefit.
     acknowledge(db, 'AwsSolutions-RDS11',
       'RDS is private (isolated subnet, not publicly accessible) and reachable only via a security-group ingress from the ECS tasks. A non-default port would be security-through-obscurity only; access is already network-restricted.');
+
+    // ---- App secrets (in the vault, so destroying compute keeps them) ----
+    // These live HERE, not in ServiceStack, so `cdk destroy` of the compute stack
+    // leaves them intact - you don't re-enter the Fitbit/Omron credentials every
+    // time you pause. JWT_SECRET is auto-generated; the OAuth credentials and
+    // REDIRECT_URI are created EMPTY and filled in the Secrets Manager console
+    // after the first deploy. removalPolicy DESTROY means a FULL teardown
+    // (destroying THIS vault stack) loses them and you re-enter on restore.
+    this.jwtSecret = new secretsmanager.Secret(this, 'JwtSecret', {
+      generateSecretString: { excludePunctuation: true, passwordLength: 64 },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    this.fitbitClientId = new secretsmanager.Secret(this, 'FitbitClientId', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    this.fitbitClientSecret = new secretsmanager.Secret(this, 'FitbitClientSecret', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    this.omronClientId = new secretsmanager.Secret(this, 'OmronClientId', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    this.omronClientSecret = new secretsmanager.Secret(this, 'OmronClientSecret', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    this.redirectUri = new secretsmanager.Secret(this, 'RedirectUri', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // cdk-nag flags every secret without automatic rotation (AwsSolutions-SMG4).
+    // None of these are suitable for AWS automatic rotation:
+    //   - JWT_SECRET: rotating it would invalidate every outstanding token.
+    //   - OAuth client id: a public identifier, not a secret.
+    //   - OAuth client secrets: rotation is governed by Fitbit/Omron, not AWS.
+    //   - REDIRECT_URI: a URI string, not a credential.
+    acknowledge(this.jwtSecret, 'AwsSolutions-SMG4',
+      'JWT signing secret; automatic rotation would invalidate all outstanding tokens. Rotated manually on demand.');
+    acknowledge(this.fitbitClientId, 'AwsSolutions-SMG4',
+      'Fitbit OAuth client identifier (public, non-secret). Not an automatic-rotation candidate.');
+    acknowledge(this.fitbitClientSecret, 'AwsSolutions-SMG4',
+      'Fitbit OAuth client secret; rotation is governed by the Fitbit developer portal, not AWS automatic rotation.');
+    acknowledge(this.omronClientId, 'AwsSolutions-SMG4',
+      'Omron OAuth client identifier (public, non-secret). Not an automatic-rotation candidate.');
+    acknowledge(this.omronClientSecret, 'AwsSolutions-SMG4',
+      'Omron OAuth client secret; rotation is governed by the Omron developer portal, not AWS automatic rotation.');
+    acknowledge(this.redirectUri, 'AwsSolutions-SMG4',
+      'A redirect URI string, not a credential; rotation does not apply.');
 
     new cdk.CfnOutput(this, 'DbEndpoint', {
       value: db.dbInstanceEndpointAddress,

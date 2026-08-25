@@ -24,11 +24,21 @@ interface ServiceStackProps extends cdk.StackProps {
   readonly dbSecurityGroup: ec2.ISecurityGroup;
   /** RDS generated secret (username/password/host/port) from DatabaseStack. */
   readonly dbSecret: secretsmanager.ISecret;
+  // App secrets are owned by DatabaseStack (the data vault) so they survive
+  // destroy/pause of this compute stack. ServiceStack only reads them.
+  readonly jwtSecret: secretsmanager.ISecret;
+  readonly fitbitClientId: secretsmanager.ISecret;
+  readonly fitbitClientSecret: secretsmanager.ISecret;
+  readonly omronClientId: secretsmanager.ISecret;
+  readonly omronClientSecret: secretsmanager.ISecret;
+  readonly redirectUri: secretsmanager.ISecret;
 }
 
-// ServiceStack owns the fast-moving infrastructure: the container image, the
-// compute that runs it, the load balancer, the HTTPS edge, the app secrets, and
-// the IAM wiring. Every code change to the Express app redeploys through here.
+// ServiceStack owns the fast-moving, STATELESS infrastructure: the container
+// image, the compute that runs it, the load balancer, the HTTPS edge, and the
+// IAM wiring. It holds NO data - so it can be destroyed/paused freely while the
+// DatabaseStack (data + secrets) stays alive. Every code change to the Express
+// app redeploys through here.
 export class ServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ServiceStackProps) {
     super(scope, id, props);
@@ -68,49 +78,10 @@ export class ServiceStack extends cdk.Stack {
       sourceSecurityGroupId: taskSg.securityGroupId,
     });
 
-    // ---- B7 (part 1): app secrets in Secrets Manager ----
-    // JWT_SECRET is auto-generated (random 64-char string). The OAuth credentials
-    // and REDIRECT_URI are created EMPTY here and must be filled in the Secrets
-    // Manager console after the first deploy (their values are not known to CDK).
-    const jwtSecret = new secretsmanager.Secret(this, 'JwtSecret', {
-      generateSecretString: { excludePunctuation: true, passwordLength: 64 },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-    const fitbitClientId = new secretsmanager.Secret(this, 'FitbitClientId', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-    const fitbitClientSecret = new secretsmanager.Secret(this, 'FitbitClientSecret', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-    const omronClientId = new secretsmanager.Secret(this, 'OmronClientId', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-    const omronClientSecret = new secretsmanager.Secret(this, 'OmronClientSecret', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-    const redirectUri = new secretsmanager.Secret(this, 'RedirectUri', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-
-    // cdk-nag flags every secret without automatic rotation (AwsSolutions-SMG4).
-    // None of these are suitable for AWS automatic rotation:
-    //   - JWT_SECRET: rotating it would invalidate every outstanding token.
-    //   - OAuth client id: a public identifier, not a secret.
-    //   - OAuth client secrets: rotation is governed by Fitbit/Omron, not AWS.
-    //   - REDIRECT_URI: a URI string, not a credential.
-    // Each is acknowledged with its specific reason below.
-    acknowledge(jwtSecret, 'AwsSolutions-SMG4',
-      'JWT signing secret; automatic rotation would invalidate all outstanding tokens. Rotated manually on demand.');
-    acknowledge(fitbitClientId, 'AwsSolutions-SMG4',
-      'Fitbit OAuth client identifier (public, non-secret). Not an automatic-rotation candidate.');
-    acknowledge(fitbitClientSecret, 'AwsSolutions-SMG4',
-      'Fitbit OAuth client secret; rotation is governed by the Fitbit developer portal, not AWS automatic rotation.');
-    acknowledge(omronClientId, 'AwsSolutions-SMG4',
-      'Omron OAuth client identifier (public, non-secret). Not an automatic-rotation candidate.');
-    acknowledge(omronClientSecret, 'AwsSolutions-SMG4',
-      'Omron OAuth client secret; rotation is governed by the Omron developer portal, not AWS automatic rotation.');
-    acknowledge(redirectUri, 'AwsSolutions-SMG4',
-      'A redirect URI string, not a credential; rotation does not apply.');
+    // ---- App secrets come from DatabaseStack (the data vault) ----
+    // They are created in DatabaseStack so destroying THIS compute stack keeps
+    // them (no re-entering OAuth credentials on pause/resume). See the container
+    // `secrets:` mapping below for how they're injected into the task.
 
     // Smallest Fargate task: 0.25 vCPU / 0.5 GB. Fine for 1-2 users.
     const taskDef = new ecs.FargateTaskDefinition(this, 'TaskDef', {
@@ -134,12 +105,12 @@ export class ServiceStack extends cdk.Stack {
         DB_USER: ecs.Secret.fromSecretsManager(props.dbSecret, 'username'),
         DB_HOST: ecs.Secret.fromSecretsManager(props.dbSecret, 'host'),
         DB_PORT: ecs.Secret.fromSecretsManager(props.dbSecret, 'port'),
-        JWT_SECRET: ecs.Secret.fromSecretsManager(jwtSecret),
-        FITBIT_CLIENT_ID: ecs.Secret.fromSecretsManager(fitbitClientId),
-        FITBIT_CLIENT_SECRET: ecs.Secret.fromSecretsManager(fitbitClientSecret),
-        OMRON_CLIENT_ID: ecs.Secret.fromSecretsManager(omronClientId),
-        OMRON_CLIENT_SECRET: ecs.Secret.fromSecretsManager(omronClientSecret),
-        REDIRECT_URI: ecs.Secret.fromSecretsManager(redirectUri),
+        JWT_SECRET: ecs.Secret.fromSecretsManager(props.jwtSecret),
+        FITBIT_CLIENT_ID: ecs.Secret.fromSecretsManager(props.fitbitClientId),
+        FITBIT_CLIENT_SECRET: ecs.Secret.fromSecretsManager(props.fitbitClientSecret),
+        OMRON_CLIENT_ID: ecs.Secret.fromSecretsManager(props.omronClientId),
+        OMRON_CLIENT_SECRET: ecs.Secret.fromSecretsManager(props.omronClientSecret),
+        REDIRECT_URI: ecs.Secret.fromSecretsManager(props.redirectUri),
       },
     });
     container.addPortMappings({ containerPort: 3000 });
