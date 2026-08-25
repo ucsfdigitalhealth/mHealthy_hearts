@@ -5,6 +5,7 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as ecrAssets from 'aws-cdk-lib/aws-ecr-assets';
 import * as path from 'path';
 import { Construct } from 'constructs';
 
@@ -48,8 +49,16 @@ export class ServiceStack extends cdk.Stack {
     // ---- B4: ECR + ECS + Fargate (compute) ----
     // fromAsset builds the Dockerfile at <repo>/backend and pushes the image to
     // an ECR repo that CDK manages. No manual `docker build`/`push` required.
+    // Pin the Docker build to linux/arm64. Without this, `docker build` on an
+    // Apple Silicon dev machine produces an arm64 image while Fargate's default
+    // runtime is amd64 -> "exec format error" at task start (the container
+    // crashes before port 3000 opens, the ALB /health check fails, and the ECS
+    // circuit breaker rolls the deployment back). Pinning both the build
+    // platform (here) and the Fargate runtime platform (on the task definition
+    // below) to arm64 guarantees they match, whatever machine runs the build.
     const appImage = ecs.ContainerImage.fromAsset(
-      path.resolve(__dirname, '../../backend')
+      path.resolve(__dirname, '../../backend'),
+      { platform: ecrAssets.Platform.LINUX_ARM64 },
     );
 
     const cluster = new ecs.Cluster(this, 'Cluster', {
@@ -86,9 +95,17 @@ export class ServiceStack extends cdk.Stack {
     // `secrets:` mapping below for how they're injected into the task.
 
     // Smallest Fargate task: 0.25 vCPU / 0.5 GB. Fine for 1-2 users.
+    // Run on Graviton (arm64) to match the arm64 image built above. Native
+    // execution (no QEMU emulation), slightly cheaper than amd64, and
+    // consistent with the Graviton RDS (t4g). Requires Fargate platform
+    // version 1.4.0+ (the default), which CDK uses automatically.
     const taskDef = new ecs.FargateTaskDefinition(this, 'TaskDef', {
       cpu: 256,
       memoryLimitMiB: 512,
+      runtimePlatform: {
+        cpuArchitecture: ecs.CpuArchitecture.ARM64,
+        operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+      },
     });
 
     // Plain env vars + secrets injected from Secrets Manager. CDK automatically
